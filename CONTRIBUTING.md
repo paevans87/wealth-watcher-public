@@ -22,6 +22,15 @@ docker compose config
 
 If you change a migration, verify it against a disposable PostgreSQL database and explain the upgrade and rollback considerations in the pull request. If you change an integration, update its documentation and tests without using live credentials.
 
+## Branch naming
+
+Human-created branches must use one of these prefixes followed by a short, lowercase, kebab-case description:
+
+- `feature/<description>` for new functionality, documentation, UI, or site work.
+- `bug/<description>` for defect fixes and regressions.
+
+Examples: `feature/migrate-github-pages-site` and `bug/fix-forecast-rounding`. Automated branches created by GitHub services, such as Dependabot, are exempt from this naming convention.
+
 ## Pull requests
 
 - Describe the problem, the approach, and how you verified it.
