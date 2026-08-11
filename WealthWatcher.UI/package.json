@@ -1,0 +1,21 @@
+{
+  "name": "WealthWatcher.UI",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test \"src/**/*.test.js\""
+  },
+  "devDependencies": {
+    "chart.js": "4.5.1",
+    "chartjs-plugin-datalabels": "2.2.0",
+    "flatpickr": "4.6.13",
+    "vite": "^8.2.1"
+  },
+  "dependencies": {
+    "pluralize": "^8.0.0"
+  }
+}

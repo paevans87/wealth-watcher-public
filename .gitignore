@@ -1,0 +1,43 @@
+# .NET
+bin/
+obj/
+*.user
+appsettings.Development.json
+
+# Node
+node_modules/
+dist/
+.env
+
+# Local runtime configuration and ASP.NET Core data-protection keys
+/config/
+/config/keys/
+
+# MacOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.suo
+
+# Archives
+*.tar
+*.tar.gz
+*.zip
+*.rar
+
+# Local Data Backups
+/data/
+
+# Local audit exports
+/DatabaseSchemaAudit.html
+/ForecastCalculationsSummary.html
+# Legacy tracked audit exports; omit from a fresh public export by default
+/DatabaseSchemaDefinitions.html
+/UIInputAudit.html
+
+# Owner-only release and deployment material; omit from a fresh public export
+/OPEN_SOURCE_READINESS.md
+/OPEN_SOURCE_DEPLOYMENT.md
+/.github/workflows/deploy.yml

@@ -1,0 +1,1224 @@
+import { store } from '../store/store.js';
+import { fetchCached, fetchFresh, API_BASE_URL } from '../api/apiClient.js';
+import { formatter } from '../utils/formatters.js';
+import { renderFireView } from './FireTracker.js';
+import { requestConfirmation, requestNotification } from '../components/ConfirmationModal.js';
+import { showToast } from '../components/Toast.js';
+import { setPageLoading } from '../components/PageLoading.js';
+import pluralize from 'pluralize';
+
+let charts = {};
+let xrayChartInstance = null;
+let dashboardLoadPromise = null;
+let dashboardLoadPeriod = null;
+let dashboardReloadPending = false;
+let hourlyRefreshInterval = null;
+let hourlyBoundaryTimeout = null;
+let hourlyRefreshLifecycleSetup = false;
+let dashboardActionsSetup = false;
+let refreshDashboardData = async () => {};
+
+export function setupDashboardActions({ refresh } = {}) {
+    if (refresh) refreshDashboardData = refresh;
+    if (dashboardActionsSetup) return;
+    dashboardActionsSetup = true;
+
+    document.addEventListener('click', async event => {
+        const action = event.target?.closest?.('[data-dashboard-action]');
+        if (!action) return;
+
+        const actionName = action.dataset.dashboardAction;
+        if (actionName === 'entry') {
+            event.preventDefault();
+            if (action.dataset.categoryId === 'property') {
+                const propertyName = action.dataset.entryName || '';
+                const property = propertyName
+                    ? {
+                        Id: action.dataset.entryId,
+                        Name: propertyName,
+                        Value: Number(action.dataset.entryValue),
+                        Mortgage: Number(action.dataset.entryMortgage)
+                    }
+                    : null;
+                window.openPropertyEntry?.(property);
+                return;
+            }
+            window.openQuickAdd?.(
+                action.dataset.categoryId,
+                action.dataset.entryName || '',
+                action.dataset.entryValue === '' ? null : Number(action.dataset.entryValue),
+                null);
+            return;
+        }
+
+        if (actionName === 'archive-child') {
+            event.preventDefault();
+            event.stopPropagation();
+            await archiveDashboardChild(
+                action.dataset.assetId,
+                action.dataset.assetName,
+                action.dataset.categoryId);
+            return;
+        }
+
+        if (actionName === 'archive-property') {
+            event.preventDefault();
+            event.stopPropagation();
+            await archiveDashboardProperty(action.dataset.propertyId, action.dataset.propertyName);
+            return;
+        }
+
+        if (actionName !== 'archive') return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        await archiveDashboardAsset(action.dataset.classificationValueId, action.dataset.assetName);
+    });
+}
+
+async function archiveDashboardAsset(valueId, name) {
+    if (!valueId) return;
+    await archiveDashboardResource({
+        url: `${API_BASE_URL}/classification-values/${encodeURIComponent(valueId)}`,
+        method: 'DELETE',
+        name,
+        errorTitle: 'Unable to archive asset'
+    });
+}
+
+async function archiveDashboardChild(assetId, name, categoryId) {
+    const resolvedAssetId = assetId || await resolveDashboardAssetId(categoryId, name);
+    if (!resolvedAssetId) {
+        await requestNotification({
+            title: 'Unable to archive asset',
+            message: `No active asset was found for ${name || 'this entry'}.`
+        });
+        return;
+    }
+
+    await archiveDashboardResource({
+        url: `${API_BASE_URL}/assets/${encodeURIComponent(resolvedAssetId)}`,
+        method: 'PATCH',
+        body: { Archived: true },
+        name,
+        errorTitle: 'Unable to archive asset'
+    });
+}
+
+async function archiveDashboardProperty(propertyId, name) {
+    if (!propertyId) {
+        await requestNotification({
+            title: 'Unable to archive property',
+            message: 'This property does not have an active definition to archive.'
+        });
+        return;
+    }
+
+    await archiveDashboardResource({
+        url: `${API_BASE_URL}/properties/${encodeURIComponent(propertyId)}`,
+        method: 'PATCH',
+        body: { Archived: true },
+        name,
+        errorTitle: 'Unable to archive property'
+    });
+}
+
+async function archiveDashboardResource({ url, method, body, name, errorTitle }) {
+    if (!await requestConfirmation({
+        title: `Archive ${name || 'asset'}?`,
+        message: `Archive ${name || 'this asset'}? Existing history will be retained and the asset can be restored later.`,
+        confirmLabel: 'Archive asset'
+    })) return;
+
+    try {
+        const options = { method };
+        if (body) {
+            options.headers = { 'Content-Type': 'application/json' };
+            options.body = JSON.stringify(body);
+        }
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            await requestNotification({
+                title: errorTitle,
+                message: await readApiError(response, 'The asset could not be archived.')
+            });
+            return;
+        }
+
+        store.clearCache();
+        await refreshDashboardData();
+        showToast({
+            title: 'Asset archived',
+            message: `${name || 'The asset'} was archived successfully.`,
+            type: 'success',
+            key: 'dashboard-archive'
+        });
+    } catch (error) {
+        console.error(error);
+        await requestNotification({
+            title: errorTitle,
+            message: 'There was a problem communicating with the API.'
+        });
+    }
+}
+
+async function readApiError(response, fallback) {
+    const responseText = await response.text();
+    if (!responseText) return fallback;
+    try {
+        const body = JSON.parse(responseText);
+        return body?.Error || body?.error || fallback;
+    } catch {
+        return responseText.slice(0, 300) || fallback;
+    }
+}
+
+export function setupPeriodListeners() {
+    document.querySelectorAll('#period-picker .period-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const selectedButton = e.currentTarget || e.target;
+            const activeButton = document.querySelector('#period-picker .period-btn.active');
+            if (activeButton && activeButton !== selectedButton) activeButton.classList.remove('active');
+            selectedButton.classList.add('active');
+            store.state.currentPeriod = selectedButton.getAttribute('data-period');
+            store.state.isDashboardLoaded = false;
+            if (store.state.currentPeriod === '1H') {
+                updateHourlyRefreshLifecycle({ immediate: true });
+            } else {
+                await loadDashboard({ force: true });
+                store.state.isDashboardLoaded = true;
+                updateHourlyRefreshLifecycle();
+            }
+        });
+    });
+}
+
+export async function forceSync() {
+    const btn = document.getElementById('btn-force-sync');
+    if (!btn) return;
+    
+    const svg = btn.querySelector('svg');
+    if (svg) svg.style.animation = 'spin 1s linear infinite';
+    btn.disabled = true;
+    
+    try {
+        const res = await fetch(`${API_BASE_URL}/sync`, { method: 'POST' });
+        if (res.ok) {
+            store.clearCache();
+            if (store.state.currentPeriod === '1H') {
+                await refreshHourlyDashboard();
+                updateHourlyRefreshLifecycle();
+            } else {
+                await loadDashboard();
+                store.state.isDashboardLoaded = true;
+            }
+            showToast({
+                title: 'Sync complete',
+                message: 'The dashboard has been refreshed with the latest data.',
+                type: 'success',
+                key: 'dashboard-sync'
+            });
+        } else {
+            await requestNotification({
+                title: 'Sync failed',
+                message: 'The latest data could not be synced.'
+            });
+        }
+    } catch (e) {
+        console.error(e);
+        await requestNotification({
+            title: 'Sync error',
+            message: 'There was a problem communicating with the API.'
+        });
+    } finally {
+        if (svg) svg.style.animation = '';
+        btn.disabled = false;
+    }
+}
+
+export function loadDashboard({ force = false } = {}) {
+    if (dashboardLoadPromise) {
+        if (force || dashboardLoadPeriod !== store.state.currentPeriod) {
+            dashboardReloadPending = true;
+        }
+        return dashboardLoadPromise;
+    }
+
+    setPageLoading('dashboard-view', true);
+    dashboardLoadPromise = (async () => {
+        do {
+            dashboardReloadPending = false;
+            dashboardLoadPeriod = store.state.currentPeriod;
+            await loadDashboardInternal();
+        } while (dashboardReloadPending || dashboardLoadPeriod !== store.state.currentPeriod);
+    })().finally(() => {
+        setPageLoading('dashboard-view', false);
+        dashboardLoadPromise = null;
+        dashboardLoadPeriod = null;
+    });
+
+    return dashboardLoadPromise;
+}
+
+async function loadDashboardInternal() {
+    const selectedPeriod = store.state.currentPeriod;
+    const timeZone = selectedPeriod === '1H'
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : null;
+
+    destroyDashboardCharts();
+    store.state.categories = {};
+    const assetGroupDescriptors = getAssetGroupDescriptors();
+
+    const dashboardUrl = `${API_BASE_URL}/dashboard?period=${encodeURIComponent(selectedPeriod)}${
+        timeZone ? `&timeZone=${encodeURIComponent(timeZone)}` : ''}`;
+    const dashboardResponse = await fetchFresh(dashboardUrl);
+    const results = (dashboardResponse?.Categories || []).map(category => ({
+        cat: {
+            Id: category.Id,
+            Label: category.Label,
+            Color: category.Color,
+            DisplayOrder: category.DisplayOrder,
+            AssetGroupId: category.AssetGroupId,
+            AssetGroupCode: category.AssetGroupCode,
+            ClassificationValueId: category.ClassificationValueId
+        },
+        data: category.Aggregate || category
+    }));
+    let globalTotal = 0;
+    let globalPast = 0;
+    let contributors = [];
+    const visibleResults = results.filter(({ cat, data }) => !shouldHideDashboardCategory(cat, data));
+    const visibleAssetGroupDescriptors = getVisibleAssetGroupDescriptors(
+        assetGroupDescriptors,
+        visibleResults.map(result => result.cat));
+    renderAssetGroupSections(visibleAssetGroupDescriptors);
+    renderUnclassifiedAssetBanner(getActiveUnclassifiedAssetCount());
+    // The banner may rewrite lane-sections, so resolve the live grids before rendering cards.
+    const assetGroupTargets = new Map(visibleAssetGroupDescriptors.map(descriptor => [
+        descriptor.key,
+        document.getElementById(descriptor.gridId)
+    ]));
+    const assetGroupTotals = new Map(visibleAssetGroupDescriptors.map(descriptor => [descriptor.key, 0]));
+
+    const globalTimeline = new Map();
+    visibleResults.forEach(({data}) => {
+        const history = data?.Data || [];
+        history.forEach(h => {
+            const current = globalTimeline.get(h.Time) || 0;
+            globalTimeline.set(h.Time, current + h.Value);
+        });
+    });
+
+    const sortedTimeline = Array.from(globalTimeline.entries()).sort((a,b) => a[0].localeCompare(b[0]));
+    
+    let firstValidDate = null;
+    for (let [date, val] of sortedTimeline) {
+        if (val > 0) {
+            firstValidDate = date;
+            globalPast = val;
+            break;
+        }
+    }
+    
+    if (!firstValidDate && sortedTimeline.length > 0) {
+        firstValidDate = sortedTimeline[0][0];
+        globalPast = sortedTimeline[0][1];
+    }
+
+    visibleResults.forEach(({cat, data}) => {
+        const history = data?.Data || [];
+        const isManual = data?.IsManual;
+        const lastSync = data?.LastSyncDateTime ? new Date(data.LastSyncDateTime) : null;
+        const latestBreakdown = data?.LatestBreakdown || {};
+
+        let currentVal = 0;
+        let pastVal = 0;
+        let currentInvested = 0;
+        let pastInvested = 0;
+
+        if (history.length > 0) {
+            currentVal = history[history.length - 1].Value;
+            currentInvested = history[history.length - 1].Invested || 0;
+            if (firstValidDate) {
+                const pastEntry = history.find(h => h.Time === firstValidDate);
+                if (pastEntry) {
+                    pastVal = pastEntry.Value;
+                    pastInvested = pastEntry.Invested || 0;
+                } else {
+                    pastVal = history[0].Value;
+                    pastInvested = history[0].Invested || 0;
+                }
+            } else {
+                pastVal = history[0].Value;
+                pastInvested = history[0].Invested || 0;
+            }
+        }
+
+        globalTotal += currentVal;
+        
+        const catId = cat.Id.toLowerCase();
+        store.state.categories[catId] = (store.state.categories[catId] || 0) + currentVal;
+
+        const assetGroup = resolveAssetGroupDescriptor(cat, assetGroupDescriptors);
+        assetGroupTotals.set(assetGroup.key, (assetGroupTotals.get(assetGroup.key) || 0) + currentVal);
+        
+        const delta = currentVal - pastVal;
+        const deltaInvested = currentInvested - pastInvested;
+        contributors.push({ name: cat.Label, delta: delta, deltaInvested: deltaInvested, currentVal: currentVal, color: cat.Color });
+
+        renderCard(cat, currentVal, pastVal, delta, history, latestBreakdown, lastSync, isManual, data?.PropertyDetails, data?.InvestmentDetails, selectedPeriod, timeZone, assetGroupTargets.get(assetGroup.key));
+    });
+
+    const ytdResults = (dashboardResponse?.YtdCategories || [])
+        .filter(category => visibleResults.some(result =>
+            String(result.cat.Id).toLowerCase() === String(category.Id).toLowerCase()))
+        .map(category => category.Aggregate || category);
+    let ytdStartVal = Number(dashboardResponse?.YtdStartTotal);
+    if (!Number.isFinite(ytdStartVal)) {
+        ytdStartVal = 0;
+        ytdResults.forEach(data => {
+            if (data?.Data && data.Data.length > 0) ytdStartVal += Number(data.Data[0].Value) || 0;
+        });
+    }
+
+    assetGroupDescriptors.forEach(descriptor => {
+        const totalElement = document.getElementById(descriptor.totalId);
+        if (totalElement) totalElement.innerText = formatter.format(assetGroupTotals.get(descriptor.key) || 0);
+    });
+
+    const ytdDelta = globalTotal - (ytdStartVal || 0);
+    const ytdScorecard = document.getElementById('ytd-scorecard');
+    if (ytdStartVal !== null) {
+        const sign = ytdDelta >= 0 ? '+' : '';
+        const perc = ytdStartVal > 0 ? (ytdDelta / ytdStartVal) * 100 : 0;
+        ytdScorecard.innerHTML = `YTD: <span style="color: ${ytdDelta < 0 ? '#ef4444' : '#10b981'}">${sign}${formatter.format(ytdDelta)} (${perc.toFixed(2)}%)</span>`;
+    } else {
+        ytdScorecard.innerHTML = '';
+    }
+
+    updateGlobalHeader(globalTotal, globalPast, contributors);
+    renderXrayChart();
+    
+    if (window.location.hash === '#fire') {
+        renderFireView();
+    }
+}
+
+function shouldHideDashboardCategory(category, data) {
+    if (store.state.assetsLoaded === true && !findAssetForCategory(category)) return true;
+    return store.state.generalSettings?.showZeroValuesOnDashboard !== true && getCurrentAggregateValue(data) === 0;
+}
+
+function getCurrentAggregateValue(data) {
+    const history = data?.Data;
+    if (!Array.isArray(history) || history.length === 0) return 0;
+    return Number(history[history.length - 1]?.Value) || 0;
+}
+
+function findAssetForCategory(category) {
+    const kindId = getRecordValue(category, 'ClassificationValueId') || getRecordValue(category, 'AssetKindId');
+    const kindCode = normalizeCode(getRecordValue(category, 'Id') || getRecordValue(category, 'AssetKindCode'));
+    return (store.state.assets || []).find(asset => {
+        if (kindId && String(getRecordValue(asset, 'AssetKindId')) === String(kindId)) return true;
+        if (kindCode && normalizeCode(getRecordValue(asset, 'AssetKindCode')) === kindCode) return true;
+        const classifications = getRecordValue(asset, 'Classifications');
+        return kindId && Array.isArray(classifications) && classifications.some(classification =>
+            String(getRecordValue(classification, 'Id')) === String(kindId));
+    }) || null;
+}
+
+function getAssetGroupDescriptors() {
+    const assetGroup = (store.state.classificationGroups || [])
+        .find(group => normalizeCode(getRecordValue(group, 'Key')) === 'asset-group');
+    const assetGroupValues = assetGroup
+        ? (Array.isArray(getRecordValue(assetGroup, 'Values')) ? getRecordValue(assetGroup, 'Values') : [])
+            .sort((left, right) => (getRecordValue(left, 'DisplayOrder') || 0) - (getRecordValue(right, 'DisplayOrder') || 0))
+            .map(value => ({
+                key: `value:${getRecordValue(value, 'Id')}`,
+                valueId: String(getRecordValue(value, 'Id')),
+                valueKey: normalizeCode(getRecordValue(value, 'Key') || getRecordValue(value, 'Code')),
+                title: getRecordValue(value, 'DisplayName') || getRecordValue(value, 'Key'),
+                color: getRecordValue(value, 'Color') || '#64748b'
+            }))
+        : [];
+
+    if (assetGroupValues.length === 0) {
+        return [
+            { key: 'unassigned', valueId: null, title: '', groupName: '', gridId: 'liquid-grid', totalId: 'liquid-total' }
+        ];
+    }
+
+    const descriptors = assetGroupValues.map((value, index) => ({
+        ...value,
+        gridId: value.valueKey === 'liquid' ? 'liquid-grid' : value.valueKey === 'illiquid' ? 'illiquid-grid' : `lane-grid-${index}`,
+        totalId: value.valueKey === 'liquid' ? 'liquid-total' : value.valueKey === 'illiquid' ? 'illiquid-total' : `lane-total-${index}`
+    }));
+    descriptors.push({
+        key: 'unassigned',
+        valueId: null,
+        title: 'No asset group',
+        groupName: '',
+        gridId: `lane-grid-unassigned`,
+        totalId: `lane-total-unassigned`
+    });
+    return descriptors;
+}
+
+function getVisibleAssetGroupDescriptors(descriptors, categories) {
+    const visibleKeys = new Set((Array.isArray(categories) ? categories : [])
+        .map(category => resolveAssetGroupDescriptor(category, descriptors).key));
+    return descriptors.filter(descriptor => visibleKeys.has(descriptor.key));
+}
+
+export function getActiveUnclassifiedAssetCount() {
+    return (Array.isArray(store.state.assets) ? store.state.assets : [])
+        .filter(asset => !asset?.ArchivedAt && isUnclassifiedAsset(asset))
+        .length;
+}
+
+function isUnclassifiedAsset(asset) {
+    if (normalizeCode(getRecordValue(asset, 'AssetKindCode')) === 'unclassified') return true;
+
+    const kindId = getRecordValue(asset, 'AssetKindId');
+    const kindGroup = (store.state.classificationGroups || [])
+        .find(group => normalizeCode(getRecordValue(group, 'Key')) === 'asset-kind');
+    const kind = (getRecordValue(kindGroup, 'Values') || []).find(value =>
+        (kindId && String(getRecordValue(value, 'Id')) === String(kindId)) ||
+        normalizeCode(getRecordValue(value, 'Key') || getRecordValue(value, 'Code')) === 'unclassified');
+    if (normalizeCode(getRecordValue(kind, 'Key') || getRecordValue(kind, 'Code')) === 'unclassified') return true;
+
+    const classifications = getRecordValue(asset, 'Classifications');
+    return Array.isArray(classifications) && classifications.some(value =>
+        normalizeCode(getRecordValue(value, 'Key') || getRecordValue(value, 'Code')) === 'unclassified');
+}
+
+export function renderUnclassifiedAssetBanner(count) {
+    const laneSections = document.getElementById('lane-sections');
+    if (!laneSections) return;
+
+    if (count <= 1) {
+        laneSections.innerHTML = laneSections.innerHTML
+            .replace(/<aside id="unclassified-assets-banner"[\s\S]*?<\/aside>/, '');
+        return;
+    }
+    const banner = `<aside id="unclassified-assets-banner" class="dashboard-alert unclassified-assets-banner" role="alert" aria-labelledby="unclassified-assets-banner-title">
+        <strong id="unclassified-assets-banner-title">${count} assets are Unclassified</strong>
+        <span>Assign each asset an Asset Kind so your dashboard stays organised.</span>
+        <a href="#settings">Review Asset Kinds in Settings</a>
+    </aside>`;
+    laneSections.innerHTML = banner + laneSections.innerHTML;
+}
+
+function renderAssetGroupSections(descriptors) {
+    const assetGroupSections = document.getElementById('lane-sections');
+    if (!assetGroupSections) {
+        return new Map(descriptors.map(descriptor => [descriptor.key, document.getElementById(descriptor.gridId)]));
+    }
+
+    assetGroupSections.innerHTML = descriptors.map(descriptor => {
+        const heading = descriptor.title
+            ? `<h4 class="section-title">
+                    <span>${escapeHtml(descriptor.title)}</span>
+                    <span id="${escapeHtml(descriptor.totalId)}" class="obfuscate-val lane-total"></span>
+                </h4>`
+            : '';
+        return `<section class="asset-group-section lane-section">
+            ${heading}
+            <div class="grid-container" id="${escapeHtml(descriptor.gridId)}"></div>
+        </section>`;
+    }).join('');
+
+    return new Map(descriptors.map(descriptor => [descriptor.key, document.getElementById(descriptor.gridId)]));
+}
+
+function resolveAssetGroupDescriptor(category, descriptors) {
+    const asset = findAssetForCategory(category);
+    const hasExplicitAssetGroup = asset && (
+        getRecordValue(asset, 'AssetGroupAssignmentSet') === true ||
+        (getRecordValue(asset, 'AssetGroupAssignmentSet') === undefined &&
+            Object.prototype.hasOwnProperty.call(asset, 'AssetGroupId')));
+    if (hasExplicitAssetGroup) {
+        const assetGroupValueId = getRecordValue(asset, 'AssetGroupId');
+        if (assetGroupValueId) {
+            const mapped = descriptors.find(descriptor => descriptor.valueId === String(assetGroupValueId));
+            if (mapped) return mapped;
+        }
+        return descriptors.find(descriptor => descriptor.key === 'unassigned') || descriptors[descriptors.length - 1];
+    }
+
+    const assetGroupValueId = getRecordValue(category, 'AssetGroupId') || getRecordValue(category, 'AssetClassValueId');
+    if (assetGroupValueId) {
+        const mapped = descriptors.find(descriptor => descriptor.valueId === String(assetGroupValueId));
+        if (mapped) return mapped;
+    }
+
+    const assetGroupValueKey = normalizeCode(
+        getRecordValue(category, 'AssetGroupCode') || getRecordValue(category, 'AssetClassValueKey'));
+    if (assetGroupValueKey) {
+        const mapped = descriptors.find(descriptor => descriptor.valueKey === assetGroupValueKey);
+        if (mapped) return mapped;
+    }
+
+    const kindId = getRecordValue(category, 'ClassificationValueId') || getRecordValue(category, 'AssetKindId');
+    const kindCode = normalizeCode(getRecordValue(category, 'Id') || getRecordValue(category, 'AssetKindCode'));
+    const assetKindGroup = (store.state.classificationGroups || [])
+        .find(group => normalizeCode(getRecordValue(group, 'Key')) === 'asset-kind');
+    const assetKind = (getRecordValue(assetKindGroup, 'Values') || []).find(value =>
+        (kindId && String(getRecordValue(value, 'Id')) === String(kindId)) ||
+        (kindCode && normalizeCode(getRecordValue(value, 'Key') || getRecordValue(value, 'Code')) === kindCode));
+    const mappedKindGroupId = getRecordValue(assetKind, 'AssetGroupId');
+    const mappedKindGroupCode = normalizeCode(getRecordValue(assetKind, 'AssetGroupCode'));
+    const mapped = descriptors.find(descriptor =>
+        (mappedKindGroupId && descriptor.valueId === String(mappedKindGroupId)) ||
+        (mappedKindGroupCode && descriptor.valueKey === mappedKindGroupCode));
+    if (mapped) return mapped;
+
+    const assetGroupCode = normalizeCode(getRecordValue(asset, 'AssetGroupCode'));
+    if (assetGroupCode) {
+        const assetMapped = descriptors.find(descriptor => descriptor.valueKey === assetGroupCode);
+        if (assetMapped) return assetMapped;
+    }
+
+    if (assetKind) {
+        const parentValueId = getRecordValue(assetKind, 'ParentValueId');
+        const parentMapped = descriptors.find(descriptor => descriptor.valueId === String(parentValueId));
+        if (parentMapped) return parentMapped;
+    }
+
+    if (kindId) {
+        const assetClassification = getRecordValue(asset, 'Classifications');
+        const groupClassification = Array.isArray(assetClassification)
+            ? assetClassification.find(value => normalizeCode(getRecordValue(value, 'GroupKey')) === 'asset-group')
+            : null;
+        const classificationMapped = descriptors.find(descriptor =>
+            descriptor.valueId === String(getRecordValue(groupClassification, 'Id')) ||
+            descriptor.valueKey === normalizeCode(getRecordValue(groupClassification, 'Key')));
+        if (classificationMapped) return classificationMapped;
+    }
+
+    const unassigned = descriptors.find(descriptor => descriptor.key === 'unassigned');
+    if (unassigned) return unassigned;
+    return descriptors[descriptors.length - 1];
+}
+
+function normalizeCode(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function getRecordValue(record, propertyName) {
+    if (!record) return undefined;
+    return record[propertyName];
+}
+
+function isHourlyRefreshEligible() {
+    const isDashboardRoute = !window.location.hash || window.location.hash === '#dashboard';
+    return store.state.currentPeriod === '1H'
+        && isDashboardRoute
+        && document.visibilityState !== 'hidden';
+}
+
+function stopHourlyRefreshTimers() {
+    if (hourlyRefreshInterval !== null) {
+        clearInterval(hourlyRefreshInterval);
+        hourlyRefreshInterval = null;
+    }
+    if (hourlyBoundaryTimeout !== null) {
+        clearTimeout(hourlyBoundaryTimeout);
+        hourlyBoundaryTimeout = null;
+    }
+}
+
+function scheduleHourlyBoundaryRefresh() {
+    if (!isHourlyRefreshEligible()) return;
+
+    if (hourlyBoundaryTimeout !== null) {
+        clearTimeout(hourlyBoundaryTimeout);
+    }
+
+    const now = new Date();
+    const millisecondsUntilNextHour = (60 - now.getMinutes()) * 60 * 1000
+        - now.getSeconds() * 1000
+        - now.getMilliseconds();
+    hourlyBoundaryTimeout = setTimeout(async () => {
+        hourlyBoundaryTimeout = null;
+        if (isHourlyRefreshEligible()) {
+            await refreshHourlyDashboard();
+            scheduleHourlyBoundaryRefresh();
+        }
+    }, millisecondsUntilNextHour);
+    hourlyBoundaryTimeout?.unref?.();
+}
+
+export async function refreshHourlyDashboard() {
+    store.clearHourlyAggregateCache();
+    await loadDashboard({ force: true });
+    store.state.isDashboardLoaded = true;
+}
+
+export function updateHourlyRefreshLifecycle({ immediate = false } = {}) {
+    if (!isHourlyRefreshEligible()) {
+        stopHourlyRefreshTimers();
+        return;
+    }
+
+    if (hourlyRefreshInterval === null) {
+        hourlyRefreshInterval = setInterval(() => {
+            if (isHourlyRefreshEligible()) {
+                refreshHourlyDashboard();
+            }
+        }, 60 * 1000);
+        hourlyRefreshInterval?.unref?.();
+    }
+    scheduleHourlyBoundaryRefresh();
+
+    if (immediate) {
+        refreshHourlyDashboard();
+    }
+}
+
+export function setupHourlyRefreshLifecycle() {
+    if (hourlyRefreshLifecycleSetup) return;
+    hourlyRefreshLifecycleSetup = true;
+    document.addEventListener('visibilitychange', () => {
+        updateHourlyRefreshLifecycle({ immediate: document.visibilityState !== 'hidden' });
+    });
+    updateHourlyRefreshLifecycle();
+}
+
+function updateGlobalHeader(total, past, contributors) {
+    document.getElementById('global-total').innerText = formatter.format(total);
+    const diff = total - past;
+    const perc = past !== 0 ? (diff / past) * 100 : 0;
+    
+    const deltaEl = document.getElementById('global-delta');
+    deltaEl.innerText = `${diff>=0?'+':''}${formatter.format(diff)} (${perc.toFixed(2)}%)`;
+    deltaEl.className = `global-delta ${diff < 0 ? 'neg' : ''} obfuscate-val`;
+
+    const explainerEl = document.getElementById('delta-explainer');
+    if (Math.abs(diff) < 1) {
+        explainerEl.innerHTML = '';
+    } else {
+        const positives = contributors.filter(c => c.delta > 0).sort((a,b) => b.delta - a.delta);
+        const negatives = contributors.filter(c => c.delta < 0).sort((a,b) => a.delta - b.delta);
+        
+        const totalPos = positives.reduce((sum, c) => sum + c.delta, 0);
+        const totalNeg = negatives.reduce((sum, c) => sum + Math.abs(c.delta), 0);
+        
+        const renderDriver = (c) => {
+            const sign = c.delta > 0 ? '+' : '';
+            let tooltip = '';
+            if (c.deltaInvested !== 0) {
+                const organicDelta = c.delta - c.deltaInvested;
+                tooltip = ` title="Deposits: ${formatter.format(c.deltaInvested)} | Market: ${organicDelta >= 0 ? '+' : ''}${formatter.format(organicDelta)}"`;
+            }
+            return `<span class="insight-pill" style="color: ${c.color}; border: 1px solid ${c.color}30; background-color: ${c.color}15;"${tooltip}>
+                        ${c.name}
+                        <span class="obfuscate-val" style="opacity: 0.8; margin-left: 6px; font-weight: 400;">${sign}${formatter.format(c.delta)}</span>
+                    </span>`;
+        };
+
+        let html = '';
+        if (diff > 0 && positives.length > 0) {
+            if (positives.length > 2 && positives[0].delta < totalPos * 0.4) {
+                html = `Growth broadly distributed across your portfolio.`;
+            } else {
+                html = `Growth driven by ${renderDriver(positives[0])}`;
+                if (positives.length > 1 && positives[1].delta > positives[0].delta * 0.6) {
+                    html += ` & ${renderDriver(positives[1])}`;
+                }
+                if (negatives.length > 0 && Math.abs(negatives[0].delta) > totalPos * 0.15) {
+                    html += `, offset by ${renderDriver(negatives[0])}`;
+                }
+            }
+        } else if (diff < 0 && negatives.length > 0) {
+            if (negatives.length > 2 && Math.abs(negatives[0].delta) < totalNeg * 0.4) {
+                html = `Losses broadly distributed across your portfolio.`;
+            } else {
+                html = `Drop driven by ${renderDriver(negatives[0])}`;
+                if (negatives.length > 1 && Math.abs(negatives[1].delta) > Math.abs(negatives[0].delta) * 0.6) {
+                    html += ` & ${renderDriver(negatives[1])}`;
+                }
+                if (positives.length > 0 && positives[0].delta > totalNeg * 0.15) {
+                    html += `, offset by ${renderDriver(positives[0])}`;
+                }
+            }
+        }
+        explainerEl.innerHTML = html;
+    }
+
+    const propBar = document.getElementById('proportion-bar');
+    propBar.innerHTML = '';
+    
+    if (total > 0) {
+        const sorted = [...contributors].sort((a,b) => b.currentVal - a.currentVal);
+        sorted.forEach(c => {
+            if (c.currentVal > 0) {
+                const width = (c.currentVal / total) * 100;
+                const segment = document.createElement('div');
+                segment.className = 'prop-segment';
+                segment.style.width = `${width}%`;
+                segment.style.backgroundColor = c.color;
+                segment.title = `${c.name}: ${formatter.format(c.currentVal)}`;
+                propBar.appendChild(segment);
+            }
+        });
+    }
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[character]));
+}
+
+function escapeText(value) {
+    return String(value ?? '').replace(/[<>]/g, character => ({
+        '<': '&lt;',
+        '>': '&gt;'
+    }[character]));
+}
+
+function getPropertyField(property, name, fallback = 0) {
+    return property?.[name] ?? property?.[name.charAt(0).toLowerCase() + name.slice(1)] ?? fallback;
+}
+
+function getPropertyEntries(propertyDetails) {
+    const rawProperties = Array.isArray(propertyDetails?.Properties)
+        ? propertyDetails.Properties
+        : propertyDetails?.Name
+            ? [propertyDetails]
+            : [];
+    return rawProperties.slice().sort((a, b) =>
+        String(getPropertyField(a, 'Name', 'Property')).localeCompare(String(getPropertyField(b, 'Name', 'Property'))));
+}
+
+function renderDashboardEntryAction({ categoryId, name = '', value = null, mortgage = null, entryId = '' }) {
+    const hasValue = value !== null && value !== undefined;
+    const hasMortgage = mortgage !== null && mortgage !== undefined;
+    const entryLabel = name ? `Add entry for ${name}` : 'Add entry';
+    return `<button type="button" class="property-action-btn asset-entry-action" data-dashboard-action="entry" data-category-id="${escapeHtml(categoryId)}" data-entry-name="${escapeHtml(name)}" data-entry-id="${escapeHtml(entryId)}" data-entry-value="${hasValue ? Number(value) : ''}"${hasMortgage ? ` data-entry-mortgage="${Number(mortgage)}"` : ''} aria-label="${escapeHtml(entryLabel)}" title="Add entry">Add entry</button>`;
+}
+
+function renderDashboardArchiveAction({ action, name, idAttribute, id, categoryId = '', propertyName = '', icon = false, className = '' }) {
+    const identifier = idAttribute
+        ? ` ${idAttribute}="${escapeHtml(id || '')}"`
+        : '';
+    const category = categoryId
+        ? ` data-category-id="${escapeHtml(categoryId)}"`
+        : '';
+    const property = propertyName
+        ? ` data-property-name="${escapeHtml(propertyName)}"`
+        : '';
+    const label = `Archive ${name || 'asset'}`;
+    return `<button type="button" class="property-action-btn asset-archive-action${icon ? ' icon-only' : ''}${className ? ` ${className}` : ''}" data-dashboard-action="${escapeHtml(action)}"${identifier}${category}${property} data-asset-name="${escapeHtml(name || '')}" aria-label="${escapeHtml(label)}" title="Archive asset">${icon ? '&times;' : 'Archive'}</button>`;
+}
+
+function renderPropertyPanel(propertyDetails) {
+    const properties = getPropertyEntries(propertyDetails);
+
+    if (properties.length === 0) {
+        return '<div class="property-empty-state">No properties added yet.</div>';
+    }
+
+    let html = `
+        <div class="property-table" role="table" aria-label="Properties">
+            <div class="property-table-row property-table-header" role="row">
+                <span role="columnheader">Name</span>
+                <span role="columnheader">Value</span>
+                <span role="columnheader">Mortgage</span>
+                <span role="columnheader">Equity</span>
+                <span role="columnheader">Actions</span>
+            </div>`;
+
+    for (const property of properties) {
+        const id = getPropertyField(property, 'Id', '');
+        const name = getPropertyField(property, 'Name', 'Property');
+        const value = Number(getPropertyField(property, 'Value', 0));
+        const mortgage = Number(getPropertyField(property, 'Mortgage', 0));
+        const equity = Number(getPropertyField(property, 'Equity', value - mortgage));
+
+        html += `
+            <div class="property-table-row" role="row">
+                <span class="property-name" role="cell" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                <span class="property-number obfuscate-val" role="cell">${formatter.format(value)}</span>
+                <span class="property-number text-red obfuscate-val" role="cell">${formatter.format(mortgage)}</span>
+                <span class="property-number text-green obfuscate-val" role="cell">${formatter.format(equity)}</span>
+                <span class="property-actions" role="cell">
+                    ${renderDashboardEntryAction({ categoryId: 'property', name, value, mortgage, entryId: id })}
+                    ${renderDashboardArchiveAction({ action: 'archive-property', name, idAttribute: 'data-property-id', id, propertyName: name, icon: true, className: 'property-archive-btn' })}
+                </span>
+            </div>`;
+    }
+
+    html += `
+        </div>`;
+
+    return html;
+}
+
+function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSync, isManual, propertyDetails, investmentDetails, selectedPeriod, timeZone, container) {
+    if (!container) return;
+    const cardId = `card-${cat.Id}`;
+    
+    let freshClass = 'fresh-good';
+    if (lastSync) {
+        const hoursAgo = (new Date() - lastSync) / (1000 * 60 * 60);
+        if (isManual) {
+            if (hoursAgo > 24 * 30) freshClass = 'fresh-bad';
+            else if (hoursAgo > 24 * 14) freshClass = 'fresh-warn';
+        } else {
+            if (hoursAgo > 72) freshClass = 'fresh-bad';
+            else if (hoursAgo > 24) freshClass = 'fresh-warn';
+        }
+    } else {
+        freshClass = 'fresh-bad';
+    }
+
+    const breakdownEntries = breakdown && typeof breakdown === 'object' ? breakdown : {};
+    const propertyEntries = getPropertyEntries(propertyDetails);
+    const showSparklines = store.state.generalSettings?.showSparklines !== false;
+
+    let breakdownHtml = '<div class="breakdown-list">';
+    
+    let undeployedFunds = 0;
+    if (breakdownEntries) {
+        Object.keys(breakdownEntries).forEach(name => {
+            if (name.toLowerCase().includes('(undeployed)') && breakdownEntries[name] > 0) {
+                undeployedFunds += breakdownEntries[name];
+            }
+        });
+    }
+
+    if (undeployedFunds > 0) {
+        breakdownHtml += `
+            <div style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 10px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 8px;">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="#f59e0b" stroke-width="2" fill="none" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <div style="font-size: 0.8rem; color: #fcd34d; line-height: 1.4;">
+                    <strong style="color: #f59e0b;">Action Required</strong><br>
+                    You have <span class="obfuscate-val">${formatter.format(undeployedFunds)}</span> sitting as undeployed cash. Consider investing it!
+                </div>
+            </div>`;
+    }
+
+    if (cat.Id === 'property') {
+        breakdownHtml += renderPropertyPanel(propertyDetails);
+    } else {
+        Object.keys(breakdownEntries).forEach(name => {
+            const val = breakdownEntries[name];
+            if (store.state.generalSettings?.showZeroValuesOnDashboard !== true && Number(val) === 0) {
+                return;
+            }
+            const assetHistory = getBreakdownHistory(history, name);
+            const sparkline = showSparklines
+                ? renderSparkline(assetHistory, cat.Color, `${name} trend`)
+                : '';
+            const childAssetId = findDashboardAssetId(cat, name);
+            const archiveChild = renderDashboardArchiveAction({
+                action: 'archive-child',
+                name,
+                idAttribute: 'data-asset-id',
+                id: childAssetId,
+                categoryId: cat.Id,
+                icon: true,
+                className: 'breakdown-archive-btn'
+            });
+            breakdownHtml += `
+                <div class="breakdown-item${showSparklines ? '' : ' no-sparkline'}">
+                    <span class="breakdown-name" title="${escapeHtml(name)}">${escapeText(name)}</span>
+                    <span class="breakdown-val obfuscate-val">${formatter.format(val)}</span>
+                    ${sparkline}
+                    ${renderDashboardEntryAction({ categoryId: cat.Id, name, value: val })}
+                    ${archiveChild}
+                </div>`;
+        });
+        
+        if (cat.Id === 'investments' && investmentDetails) {
+            let allPositions = {};
+            Object.values(investmentDetails).forEach(accPositions => {
+                accPositions.forEach(p => {
+                    const name = p.name || p.Name || p.ticker || p.Ticker;
+                    const v = p.currentValue || p.CurrentValue;
+                    if (!allPositions[name]) allPositions[name] = { ticker: name, value: 0 };
+                    allPositions[name].value += v;
+                });
+            });
+            window.investmentXrayData = Object.values(allPositions).sort((a,b) => b.value - a.value);
+            
+            breakdownHtml += `
+                <div class="xray-container" style="margin-top: 15px; border-top: 1px solid #ffffff15; padding-top: 10px;">
+                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #a1a1aa; margin-bottom: 10px; font-weight: 600; letter-spacing: 0.05em;">Portfolio X-Ray</div>
+                    <div style="display: flex; align-items: center; gap: 20px;">
+                        <div style="position: relative; height: 120px; width: 120px; flex-shrink: 0;">
+                            <canvas id="xray-chart"></canvas>
+                        </div>
+                        <div id="xray-legend" style="flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">
+                        </div>
+                    </div>
+                </div>`;
+        }
+    }
+    breakdownHtml += '</div>';
+
+    const safeDelta = Number.isFinite(delta) ? delta : 0;
+    const safePastVal = Number.isFinite(pastVal) ? pastVal : 0;
+    const calculatedPercentage = safePastVal !== 0 ? (safeDelta / safePastVal) * 100 : 0;
+    const deltaPercentage = Number.isFinite(calculatedPercentage) ? calculatedPercentage : 0;
+    const deltaSign = safeDelta >= 0 ? '+' : '';
+    const displayLabel = cat.Id === 'property' ? 'Properties' : cat.Label;
+    const addLabel = `Add ${getDashboardAssetName(cat)}`;
+    const cardActions = `
+        <div class="card-header-actions dashboard-card-actions" data-dashboard-card-actions>
+            <button type="button" class="property-action-btn asset-entry-action card-entry-btn" data-dashboard-action="entry" data-category-id="${escapeHtml(cat.Id)}" data-entry-name="" data-entry-value="" aria-label="${escapeHtml(addLabel)}" title="${escapeHtml(addLabel)}">${escapeText(addLabel)}</button>
+        </div>`;
+    const headerLayout = `grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'heading actions'${showSparklines ? " 'chart chart'" : ''};`;
+
+    const cardHtml = `
+        <div class="card glass-panel" data-cat="${cat.Id}">
+            <div class="card-header dashboard-card-header${showSparklines ? '' : ' no-sparkline'}" data-dashboard-card-header style="${headerLayout}">
+                <div class="card-heading">
+                    <span class="card-label">
+                        ${displayLabel}
+                        <div class="freshness-badge ${freshClass}" onmouseenter="window.showTooltip(event, 'Last Synced: ${lastSync ? lastSync.toLocaleString() : 'Never'}')" onmouseleave="window.hideTooltip()"></div>
+                    </span>
+                    <div class="card-delta ${safeDelta < 0 ? 'neg' : ''} obfuscate-val">${deltaSign}${formatter.format(safeDelta)} (${deltaPercentage.toFixed(2)}%)</div>
+                </div>
+                ${cardActions}
+                ${showSparklines ? `<div class="mini-chart-container" aria-label="${escapeHtml(displayLabel)} trend"><canvas id="chart-${cat.Id}"></canvas></div>` : ''}
+            </div>
+            <div class="card-value obfuscate-val">${formatter.format(currentVal)}</div>
+            ${breakdownHtml}
+        </div>
+    `;
+    
+    container.innerHTML += cardHtml;
+
+    setTimeout(() => {
+        const ctx = document.getElementById(`chart-${cat.Id}`);
+        if (!ctx || store.state.generalSettings?.showSparklines === false) return;
+        if(charts[cat.Id]) charts[cat.Id].destroy();
+        charts[cat.Id] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: history.map(h => h.Time),
+                datasets: [{
+                    data: history.map(h => h.Value),
+                    borderColor: cat.Color, borderWidth: 2, backgroundColor: 'transparent',
+                    pointRadius: 0, pointHoverRadius: 4, tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: { 
+                        enabled: true, backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f8fafc', displayColors: false,
+                        callbacks: {
+                            ...(selectedPeriod === '1H' ? {
+                                title: function(context) {
+                                    const dataPoint = history[context[0]?.dataIndex];
+                                    return formatHourlyInterval(dataPoint?.Time, timeZone);
+                                }
+                            } : {}),
+                            label: function(context) {
+                                if (window.isObfuscated) return 'Total: £***';
+                                const dataPoint = history[context.dataIndex];
+                                let lines = [`Total: ${formatter.format(context.raw)}`];
+                                if (dataPoint && dataPoint.Breakdown) {
+                                    lines.push('------------------------');
+                                    Object.keys(dataPoint.Breakdown).forEach(k => {
+                                        lines.push(`${k}: ${formatter.format(dataPoint.Breakdown[k])}`);
+                                    });
+                                }
+                                return lines;
+                            }
+                        }
+                    } 
+                },
+                scales: { x: { display: false }, y: { display: false } }
+            }
+        });
+    }, 0);
+}
+
+export function getDashboardAssetName(category) {
+    const categoryId = String(getRecordValue(category, 'Id') || '').toLowerCase();
+    const configuredName = String(
+        getRecordValue(category, 'SingularName') ||
+        getRecordValue(category, 'ActionName') ||
+        '').trim();
+    if (configuredName) return configuredName;
+
+    const label = String(getRecordValue(category, 'Label') || categoryId || 'Asset').trim();
+    return pluralize.singular(label) || label;
+}
+
+function findDashboardAssetId(category, name) {
+    const categoryValueId = getRecordValue(category, 'ClassificationValueId');
+    const normalizedName = String(name || '').trim().toLowerCase();
+    if (!normalizedName) return '';
+
+    const matchingAsset = (store.state.assets || []).find(asset => {
+        const assetName = String(getRecordValue(asset, 'DisplayName') || getRecordValue(asset, 'Name') || '').trim().toLowerCase();
+        if (assetName !== normalizedName) return false;
+
+        if (!categoryValueId) return true;
+        const classifications = getRecordValue(asset, 'Classifications');
+        return Array.isArray(classifications) && classifications.some(classification =>
+            String(getRecordValue(classification, 'Id')) === String(categoryValueId));
+    });
+
+    return String(getRecordValue(matchingAsset, 'Id') || '');
+}
+
+async function resolveDashboardAssetId(categoryId, name) {
+    if (!categoryId || !name) return '';
+
+    const category = (store.state.CATEGORIES || []).find(candidate =>
+        String(getRecordValue(candidate, 'Id') || '').toLowerCase() === String(categoryId).toLowerCase());
+    const categoryValueId = getRecordValue(category, 'ClassificationValueId');
+    const url = categoryValueId
+        ? `${API_BASE_URL}/assets?classificationValueId=${encodeURIComponent(categoryValueId)}`
+        : `${API_BASE_URL}/wealth/${encodeURIComponent(categoryId)}/names`;
+    const assets = await fetchCached(url, null, { ttlMs: 30 * 60 * 1000, tags: ['catalogue'] });
+    if (!Array.isArray(assets)) return '';
+
+    const normalizedName = String(name).trim().toLowerCase();
+    const matchingAsset = assets.find(asset =>
+        String(getRecordValue(asset, 'DisplayName') || getRecordValue(asset, 'Name') || '').trim().toLowerCase() === normalizedName);
+    return String(getRecordValue(matchingAsset, 'Id') || '');
+}
+
+function destroyDashboardCharts() {
+    Object.values(charts).forEach(chart => chart?.destroy?.());
+    charts = {};
+    if (xrayChartInstance) {
+        xrayChartInstance.destroy();
+        xrayChartInstance = null;
+    }
+}
+
+function getBreakdownHistory(history, name) {
+    return (Array.isArray(history) ? history : [])
+        .map(point => {
+            const pointBreakdown = point?.Breakdown || point?.breakdown || {};
+            const value = pointBreakdown[name] ?? pointBreakdown[String(name)];
+            return Number.isFinite(Number(value)) ? Number(value) : 0;
+        });
+}
+
+function renderSparkline(values, color, label) {
+    if (!Array.isArray(values) || values.length < 2) return '';
+    const width = 72;
+    const height = 24;
+    const padding = 2;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const points = values.map((value, index) => {
+        const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * (width - padding * 2) + padding;
+        const y = height - padding - ((value - min) / range) * (height - padding * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<svg class="breakdown-sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)}" preserveAspectRatio="none"><polyline points="${points}" fill="none" stroke="${escapeHtml(color || '#06b6d4')}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>`;
+}
+
+function formatHourlyInterval(bucketStart, timeZone) {
+    const start = new Date(bucketStart);
+    if (Number.isNaN(start.getTime())) return bucketStart || '';
+
+    const formatOptions = {
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+        timeZone
+    };
+    const timeFormatter = new Intl.DateTimeFormat(undefined, formatOptions);
+    const startLabel = timeFormatter.format(start);
+    const endLabel = timeFormatter.format(new Date(start.getTime() + 60 * 60 * 1000));
+
+    if (startLabel !== endLabel) return `${startLabel}\u2013${endLabel}`;
+
+    const zoneFormatter = new Intl.DateTimeFormat(undefined, {
+        ...formatOptions,
+        timeZoneName: 'short'
+    });
+    return `${zoneFormatter.format(start)}\u2013${zoneFormatter.format(new Date(start.getTime() + 60 * 60 * 1000))}`;
+}
+
+function renderXrayChart() {
+    if (!window.investmentXrayData || window.investmentXrayData.length === 0) return;
+    
+    const ctx = document.getElementById('xray-chart');
+    if (!ctx) return;
+
+    if (xrayChartInstance) {
+        xrayChartInstance.destroy();
+    }
+
+    const data = window.investmentXrayData.slice(0, 7);
+    const otherVal = window.investmentXrayData.slice(7).reduce((sum, p) => sum + p.value, 0);
+    
+    const fullLabels = data.map(d => d.ticker);
+    const values = data.map(d => d.value);
+    
+    if (otherVal > 0) {
+        fullLabels.push('Other');
+        values.push(otherVal);
+    }
+    
+    const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#14b8a6', '#f43f5e', '#64748b'];
+
+    xrayChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: fullLabels,
+            datasets: [{
+                data: values,
+                backgroundColor: colors.slice(0, fullLabels.length),
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '75%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            if (window.isObfuscated) return ` ${context.label}: £***`;
+                            return ` ${context.label}: ${formatter.format(context.raw)}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    const legendContainer = document.getElementById('xray-legend');
+    if (legendContainer) {
+        let legendHtml = '';
+        fullLabels.forEach((label, i) => {
+            const color = colors[i % colors.length];
+            const value = values[i];
+            legendHtml += `
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: #a1a1aa; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" title="${label}: ${formatter.format(value)}">
+                    <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background-color: ${color}; flex-shrink: 0;"></span>
+                    <span style="overflow: hidden; text-overflow: ellipsis;">${label}</span>
+                </div>
+            `;
+        });
+        legendContainer.innerHTML = legendHtml;
+    }
+}
+
+// Make accessible to inline handlers
+window.forceSync = forceSync;

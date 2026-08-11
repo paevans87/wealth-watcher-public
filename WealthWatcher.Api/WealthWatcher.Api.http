@@ -1,0 +1,11 @@
+@WealthWatcher.Api_HostAddress = http://localhost:5200
+
+GET {{WealthWatcher.Api_HostAddress}}/api/categories
+Accept: application/json
+
+###
+
+GET {{WealthWatcher.Api_HostAddress}}/api/wealth/cash/aggregate?period=1M
+Accept: application/json
+
+###

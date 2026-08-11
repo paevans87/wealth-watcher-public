@@ -1,0 +1,552 @@
+import { Chart } from 'chart.js/auto';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+import flatpickr from 'flatpickr';
+import { store } from './store/store.js';
+import { fetchCached, API_BASE_URL } from './api/apiClient.js';
+import { setupRouter, handleRouting } from './router/router.js';
+import { loadDashboard, setupPeriodListeners, setupHourlyRefreshLifecycle, setupDashboardActions } from './pages/Dashboard.js';
+import { setupModals } from './components/Modals.js';
+import { setupForecast } from './pages/ForecastV2.js';
+import { setupCurrencyInputs } from './utils/formatters.js';
+import { initAllCollapsiblePanes } from './components/CollapsiblePane.js';
+import { setupBudgetSettings } from './pages/Budget.js';
+import { loadIntegrations, setupIntegrations } from './components/Integrations.js';
+import { setupFireFeatureSettings } from './components/FireSettings.js';
+import { setupPropertyPanel, getPropertyFormState, resetPropertyFormState } from './components/Properties.js';
+import { FEATURE_SETTINGS_KEY, normalizeFeatureSettings, applyFeatureVisibility } from './utils/featureFlags.js';
+import { setupPwa } from './pwa.js';
+import { setupAssetCatalog } from './components/AssetCatalog.js';
+import { requestNotification } from './components/ConfirmationModal.js';
+import { showToast } from './components/Toast.js';
+import { normalizeAuditResponse } from './components/AuditLog.js';
+import {
+    getAssetTypeaheadState,
+    renderAssetTypeahead,
+    setupAssetTypeahead
+} from './components/AssetTypeahead.js';
+
+// Keep the existing page modules' browser-facing globals while resolving all
+// runtime assets through the package lock instead of third-party CDNs.
+globalThis.Chart = Chart;
+globalThis.ChartDataLabels = ChartDataLabels;
+globalThis.flatpickr = flatpickr;
+
+// --- BOOT ANIMATION ---
+function runBootSequence() {
+    const log = document.getElementById('boot-log');
+    const bar = document.getElementById('boot-bar');
+    const messages = ["Establishing secure uplink...", "Parsing asset vectors...", "Decrypting simulations...", "Syncing with orbital ledger...", "ACCESS GRANTED."];
+    let step = 0;
+    const interval = setInterval(() => {
+        if(step >= messages.length) {
+            clearInterval(interval);
+            setTimeout(() => {
+                const boot = document.getElementById('system-boot');
+                boot.style.opacity = '0';
+                setTimeout(() => boot.style.display = 'none', 800);
+            }, 500);
+            return;
+        }
+        log.innerHTML += `> ${messages[step]}<br>`;
+        log.scrollTop = log.scrollHeight;
+        bar.style.width = `${((step + 1) / messages.length) * 100}%`;
+        step++;
+    }, 200);
+}
+
+// --- INIT ---
+async function init() {
+    runBootSequence();
+    try {
+        // Keep the integration panel usable even if another optional dashboard
+        // bootstrap step fails. The shared asset catalogue is loaded separately
+        // below, so this initial integration load does not fetch assets twice.
+        setupIntegrations();
+        loadIntegrations({ includeAssets: false });
+
+        const setRes = await fetch(`${API_BASE_URL}/settings`);
+        const dbSettings = await setRes.json();
+        
+        if (dbSettings['wealthWatcherGeneralSettings']) {
+            store.state.generalSettings = JSON.parse(dbSettings['wealthWatcherGeneralSettings']);
+        }
+        if (dbSettings[FEATURE_SETTINGS_KEY]) {
+            store.state.featureSettings = normalizeFeatureSettings(JSON.parse(dbSettings[FEATURE_SETTINGS_KEY]));
+        } else {
+            store.state.featureSettings = normalizeFeatureSettings();
+        }
+        applyFeatureVisibility();
+        if (dbSettings['wealthWatcherForecastSettings']) {
+            const forecastSettings = JSON.parse(dbSettings['wealthWatcherForecastSettings']);
+            store.state.forecastSettings = {
+                dateOfBirth: forecastSettings.dateOfBirth || '',
+                annualReturn: forecastSettings.annualReturn ?? 4,
+                monthlyContribution: forecastSettings.monthlyContribution ?? 1500,
+                forecastStrategy: forecastSettings.forecastStrategy || 'fire-default'
+            };
+        }
+        if (dbSettings['wealthWatcherFireSettings']) {
+            store.state.fireSettings = JSON.parse(dbSettings['wealthWatcherFireSettings']);
+        }
+        if (dbSettings['wealthWatcherBudgetSettings']) {
+            let budget = JSON.parse(dbSettings['wealthWatcherBudgetSettings']);
+            if (!budget.bills) budget.bills = [];
+            if (!budget.savings) budget.savings = [];
+            if (!budget.spend) budget.spend = [];
+            if (!budget.income) budget.income = [];
+            budget.savings = budget.savings.map(item => ({
+                ...item,
+                id: item.id || globalThis.crypto?.randomUUID?.() || `saving-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                cadence: item.cadence || 'monthly',
+                assetId: item.assetId || null
+            }));
+            store.state.budgetSettings = budget;
+        } else {
+            store.state.budgetSettings = { income: [], bills: [], savings: [], spend: [] };
+        }
+
+        await refreshAssetCatalog();
+        setupEntryAssetTypeahead();
+        
+        setupPeriodListeners();
+        setupModals();
+        const refreshDashboardData = async () => {
+            store.invalidateCacheTag('catalogue');
+            await refreshAssetCatalog();
+            await loadDashboard({ force: true });
+            store.state.isDashboardLoaded = true;
+        };
+        setupAssetCatalog({ refresh: refreshDashboardData });
+        setupDashboardActions({ refresh: refreshDashboardData });
+        setupPropertyPanel({ refresh: loadDashboard });
+        setupForecast();
+        setupIntegrations({ refresh: refreshDashboardData });
+        setupFireFeatureSettings();
+        setupBudgetSettings();
+        setupRouter();
+        setupHourlyRefreshLifecycle();
+        setupCurrencyInputs();
+        initAllCollapsiblePanes();
+        
+        if (!store.state.isDashboardLoaded) {
+            await loadDashboard();
+            store.state.isDashboardLoaded = true;
+        }
+        
+        handleRouting();
+    } catch (e) {
+        console.error("Init Error", e);
+    }
+}
+
+// --- TOOLTIPS ---
+window.showTooltip = function(e, text) {
+    const tooltip = document.getElementById('custom-tooltip');
+    tooltip.innerText = text;
+    tooltip.classList.add('visible');
+    
+    const rect = e.target.getBoundingClientRect();
+    tooltip.style.left = rect.left + 'px';
+    tooltip.style.top = (rect.top - 35) + 'px';
+};
+
+window.hideTooltip = function() {
+    document.getElementById('custom-tooltip').classList.remove('visible');
+};
+
+// --- OBFUSCATION ---
+window.toggleObfuscate = function() {
+    document.body.classList.toggle('obfuscated');
+    const btn = document.getElementById('obfuscate-btn');
+    window.isObfuscated = document.body.classList.contains('obfuscated');
+    const status = document.getElementById('obfuscation-status');
+
+    if (status) status.hidden = !window.isObfuscated;
+    if (btn) {
+        const privacyLabel = window.isObfuscated ? 'Disable privacy mode' : 'Enable privacy mode';
+        btn.title = privacyLabel;
+        btn.setAttribute('aria-label', privacyLabel);
+        btn.setAttribute('aria-pressed', String(window.isObfuscated));
+    }
+    
+    // Force all charts to redraw to respect obfuscation on axes and tooltips
+    if (typeof Chart !== 'undefined' && Chart.instances) {
+        Object.values(Chart.instances).forEach(chart => chart.update());
+    }
+    if (window.isObfuscated) {
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>`;
+    } else {
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
+    }
+};
+
+// --- AUDIT LOG ---
+window.openAuditModal = async function() {
+    store.state.auditPage = 1;
+    await loadAudits(0);
+    window.openModal('audit-modal');
+};
+
+window.loadAudits = async function(pageDelta) {
+    store.state.auditPage += pageDelta;
+    if (store.state.auditPage < 1) store.state.auditPage = 1;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/audits?page=${store.state.auditPage}&pageSize=10`);
+        const data = normalizeAuditResponse(await res.json());
+        
+        const tbody = document.getElementById('audit-tbody');
+        tbody.innerHTML = '';
+        
+        data.rows.forEach(a => {
+            const parsedTime = a.startTime ? new Date(a.startTime) : null;
+            const time = parsedTime && !Number.isNaN(parsedTime.getTime())
+                ? parsedTime.toLocaleString()
+                : '—';
+            tbody.innerHTML += `
+                <tr>
+                    <td>${time}</td>
+                    <td>${a.providerName}</td>
+                    <td class="status-${a.statusClass}">${a.status}</td>
+                    <td>${a.recordsAdded}</td>
+                    <td>${a.logMessage}</td>
+                </tr>
+            `;
+        });
+
+        const pageCount = Math.max(1, Math.ceil(data.total / data.pageSize));
+        document.getElementById('audit-page-info').innerText = `Page ${store.state.auditPage} of ${pageCount}`;
+        document.getElementById('audit-prev').disabled = store.state.auditPage === 1;
+        document.getElementById('audit-next').disabled = store.state.auditPage >= pageCount;
+        
+    } catch (e) {
+        console.error("Error loading audits", e);
+    }
+}
+
+// --- ADD ENTRY AND CATEGORY LOGIC ---
+// Category selection is a native select. Keep these globals as small
+// compatibility shims for existing dashboard actions while the actual field
+// remains accessible without a bespoke dropdown implementation.
+window.toggleCategoryDropdown = function() {
+    document.getElementById('entry-category')?.focus?.();
+};
+
+window.hideCategoryDropdown = function() {};
+
+window.selectCategory = function(val) {
+    const category = document.getElementById('entry-category');
+    if (category) category.value = val || '';
+    const assetIdInput = document.getElementById('entry-asset-id');
+    if (assetIdInput) assetIdInput.value = '';
+    window.selectedEntryAssetId = '';
+    window.onCategoryChange?.();
+};
+
+function isUnclassifiedCategory(category) {
+    return [category?.Id, category?.Key, category?.Code]
+        .some(value => String(value ?? '').trim().toLowerCase() === 'unclassified');
+}
+
+export function getInteractiveCategoryOptions(categories) {
+    const seenIds = new Set();
+    return (Array.isArray(categories) ? categories : [])
+        .filter(category => category && String(category.Id || '').trim())
+        .filter(category => !isUnclassifiedCategory(category))
+        .filter(category => {
+            const id = String(category.Id).toLowerCase();
+            if (seenIds.has(id)) return false;
+            seenIds.add(id);
+            return true;
+        });
+}
+
+export function populateCategoryOptions(categories) {
+    const container = document.getElementById('entry-category');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const availableAssets = getInteractiveCategoryOptions(categories);
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = availableAssets.length === 0 ? 'No assets have been added yet.' : 'Select Asset...';
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    container.appendChild(placeholder);
+
+    availableAssets.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category.Id;
+        option.textContent = category.Label || category.DisplayName || category.Id;
+        container.appendChild(option);
+    });
+
+    if (container.dataset.categorySelectInit !== 'true') {
+        container.dataset.categorySelectInit = 'true';
+        container.addEventListener('change', () => window.onCategoryChange?.());
+    }
+}
+
+async function refreshAssetCatalog() {
+    const [groupRes, assetRes, catRes] = await Promise.all([
+        fetchCached(`${API_BASE_URL}/classification-groups`, null, { ttlMs: 30 * 60 * 1000, tags: ['catalogue'] }),
+        fetchCached(`${API_BASE_URL}/assets`, null, { ttlMs: 30 * 60 * 1000, tags: ['catalogue'] }),
+        fetchCached(`${API_BASE_URL}/categories`, null, { ttlMs: 30 * 60 * 1000, tags: ['catalogue'] })
+    ]);
+
+    store.state.classificationGroups = Array.isArray(groupRes) ? groupRes : [];
+    store.state.assets = Array.isArray(assetRes) ? assetRes : [];
+    store.state.assetsLoaded = Array.isArray(assetRes);
+    store.state.CATEGORIES = Array.isArray(catRes) ? catRes : [];
+    populateCategoryOptions(store.state.CATEGORIES);
+}
+
+window.onCategoryChange = async function() {
+    const cat = document.getElementById('entry-category').value.toLowerCase();
+    const selectedAssetId = document.getElementById('entry-asset-id')?.value;
+    const selectedAsset = (store.state.assets || []).find(asset => String(asset.Id) === String(selectedAssetId));
+    const entryKind = selectedAsset?.EntryKind?.toLowerCase()
+        || (cat === 'property' ? 'property' : (cat === 'investments' || cat === 'pensions' ? 'investment' : 'cash'));
+    const mortgageGroup = document.getElementById('mortgage-group');
+    const investedGroup = document.getElementById('invested-group');
+    
+    mortgageGroup.style.display = 'none';
+    investedGroup.style.display = 'none';
+
+    if (entryKind === 'property') {
+        mortgageGroup.style.display = 'block';
+    } else if (entryKind === 'investment') {
+        investedGroup.style.display = 'block';
+    }
+
+    window.currentCategoryNames = [];
+    if (cat) {
+        try {
+            window.currentCategoryNames = await fetchCached(
+                `${API_BASE_URL}/wealth/${cat}/names`,
+                null,
+                { ttlMs: 30 * 60 * 1000, tags: ['catalogue'] });
+        } catch (e) { console.error("Error loading names", e); }
+    }
+}
+
+function chooseEntryAsset(picker, assetId) {
+    const state = getAssetTypeaheadState(picker);
+    const selected = (window.currentCategoryNames || []).find(asset =>
+        String(asset?.Id || '') === String(assetId || ''));
+    if (state.value) state.value.value = assetId || '';
+    if (state.search) state.search.value = selected?.DisplayName || selected?.Name || '';
+    window.selectedEntryAssetId = assetId || '';
+    window.onCategoryChange?.();
+}
+
+function setupEntryAssetTypeahead() {
+    const target = document.getElementById('entry-asset-picker-control');
+    if (!target || target.dataset.assetTypeaheadReady === 'true') return;
+
+    target.innerHTML = renderAssetTypeahead({
+        id: 'entry',
+        ariaLabel: 'Search existing assets or enter a new asset name',
+        placeholder: 'Search existing assets or enter a new asset name',
+        pickerClass: 'entry-asset-typeahead',
+        valueAttributes: { id: 'entry-asset-id' },
+        searchAttributes: { id: 'entry-name' },
+        optionsAttributes: { id: 'entry-asset-options' },
+        emptyChoiceLabel: 'Create a new asset…'
+    });
+    setupAssetTypeahead(target, {
+        emptyChoiceLabel: 'Create a new asset…',
+        getAssets: () => window.currentCategoryNames || [],
+        onClear: () => {
+            window.selectedEntryAssetId = '';
+        },
+        onChoose: chooseEntryAsset
+    });
+    target.dataset.assetTypeaheadReady = 'true';
+}
+
+// Quick Add
+window.openQuickAdd = function(catId, itemName, currentValue, currentMortgage) {
+    const modal = document.getElementById('entry-modal');
+
+    resetPropertyFormState();
+    
+    document.getElementById('entry-category').value = catId;
+    const category = (store.state.CATEGORIES || []).find(item => item.Id === catId);
+    window.selectCategory(catId);
+    
+    document.getElementById('entry-name').value = itemName;
+    window.selectedEntryAssetId = '';
+    const categoryValueId = category?.ClassificationValueId;
+    const matchingAsset = (store.state.assets || []).find(asset => {
+        const sameName = (asset.Name || asset.DisplayName || '').toLowerCase() === itemName.toLowerCase();
+        const sameCategory = !categoryValueId || (asset.Classifications || []).some(value =>
+            String(value.Id) === String(categoryValueId));
+        return sameName && sameCategory;
+    });
+    const assetIdInput = document.getElementById('entry-asset-id');
+    if (assetIdInput) assetIdInput.value = matchingAsset?.Id || '';
+    window.selectedEntryAssetId = matchingAsset?.Id || '';
+    window.onCategoryChange();
+    document.getElementById('entry-value').value = currentValue;
+    if (catId === 'property' && currentMortgage !== null) {
+        document.getElementById('entry-mortgage').value = currentMortgage;
+    }
+    
+    document.getElementById('entry-date').value = new Date().toISOString().split('T')[0];
+    modal.classList.add('active');
+};
+
+document.getElementById('add-entry-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('entry-submit-btn');
+    btn.innerText = 'Saving...';
+    btn.disabled = true;
+
+    const cat = document.getElementById('entry-category').value.toLowerCase();
+    const val = document.getElementById('entry-value').value;
+    const mortgage = document.getElementById('entry-mortgage').value;
+    const invested = document.getElementById('entry-invested').value;
+    const dt = document.getElementById('entry-date').value;
+    const propertyFormState = getPropertyFormState();
+    const wasAddingProperty = cat === 'property' && propertyFormState.mode === 'add';
+    const numericValue = parseFloat(val);
+    const numericMortgage = mortgage === '' ? 0 : parseFloat(mortgage);
+
+    const assetKindGroup = (store.state.classificationGroups || []).find(group =>
+        (group.Key || '').toLowerCase() === 'asset-kind');
+    const selectedAssetKind = assetKindGroup?.Values?.find(value =>
+        (value.Key || '').toLowerCase() === cat);
+    if (!selectedAssetKind?.Id || (selectedAssetKind.Key || selectedAssetKind.Code || '').toLowerCase() === 'unclassified') {
+        await requestNotification({
+            title: 'Select an asset',
+            message: 'Please select a classified asset before saving the entry.'
+        });
+        btn.innerText = 'Save Entry';
+        btn.disabled = false;
+        return;
+    }
+
+    if (cat === 'property' && (!Number.isFinite(numericValue) || !Number.isFinite(numericMortgage))) {
+        await requestNotification({
+            title: 'Invalid property details',
+            message: 'Please provide a valid property value and mortgage.'
+        });
+        btn.innerText = propertyFormState.mode === 'add' ? 'Add Property' : 'Add Entry';
+        btn.disabled = false;
+        return;
+    }
+
+    const payload = {
+        Type: document.getElementById('entry-category').value,
+        Name: document.getElementById('entry-name').value,
+        Value: parseFloat(val).toFixed(2),
+        Date: dt,
+        // WealthEntry timestamps are stored as UTC date/time pairs. Using the
+        // browser's local clock here can make a new entry look like it is in
+        // the future to the 1H aggregate endpoint.
+        Time: new Date().toISOString().slice(11, 19),
+        Source: 'Manual'
+    };
+
+    const assetId = document.getElementById('entry-asset-id')?.value;
+    if (assetId) payload.AssetId = assetId;
+    if (!assetId) {
+        payload.ClassificationValueIds = [selectedAssetKind.Id];
+    }
+
+    if (cat === 'property' && mortgage) {
+        payload.Mortgage = parseFloat(mortgage).toFixed(2);
+    }
+    
+    if ((cat === 'pensions' || cat === 'investments') && invested) {
+        payload.InvestedCapital = parseFloat(invested).toFixed(2);
+    }
+
+    try {
+        let endpoint = `${API_BASE_URL}/wealth`;
+        let requestPayload = payload;
+
+        if (cat === 'property' && propertyFormState.mode === 'add') {
+            endpoint = `${API_BASE_URL}/properties`;
+            requestPayload = {
+                Name: payload.Name,
+                Value: numericValue,
+                Mortgage: numericMortgage,
+                Date: dt,
+                Time: payload.Time
+            };
+        } else if (cat === 'property' && propertyFormState.mode === 'entry' && propertyFormState.propertyId) {
+            endpoint = `${API_BASE_URL}/properties/${encodeURIComponent(propertyFormState.propertyId)}/entries`;
+            requestPayload = {
+                Value: numericValue,
+                Mortgage: numericMortgage,
+                Date: dt,
+                Time: payload.Time
+            };
+        }
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload)
+        });
+
+        if (res.ok) {
+            window.closeModal('entry-modal');
+            e.target.reset();
+            resetPropertyFormState();
+            window.onCategoryChange(); 
+            const todayUtc = new Date().toISOString().slice(0, 10);
+            store.clearCache({
+                preserveTags: dt === todayUtc ? ['wealth-historical'] : []
+            });
+            await refreshAssetCatalog();
+            await loadDashboard(); 
+            showToast({
+                title: wasAddingProperty ? 'Property added' : 'Entry saved',
+                message: `${payload.Name} was saved successfully.`,
+                type: 'success',
+                key: 'manual-entry-save'
+            });
+        } else {
+            await requestNotification({
+                title: 'Unable to save entry',
+                message: 'The entry could not be saved.'
+            });
+        }
+    } catch (err) {
+        console.error(err);
+        await requestNotification({
+            title: 'Unable to save entry',
+            message: 'There was a problem communicating with the API.'
+        });
+    } finally {
+        btn.innerText = 'Save Entry';
+        btn.disabled = false;
+    }
+});
+
+// The production document always contains the boot screen. Keeping bootstrap
+// behind that marker also lets the entry-point's pure helpers be tested without
+// starting the application lifecycle in Node.
+if (document.getElementById('system-boot')) {
+    void import('./styles/toast.css');
+    void import('flatpickr/dist/flatpickr.min.css');
+    void import('flatpickr/dist/themes/dark.css');
+    setupPwa();
+    init();
+}
+
+window.showToast = showToast;
+
+
+
+// --- INIT FLATPICKR ---
+if (typeof flatpickr !== 'undefined') {
+    flatpickr('.flatpickr-input', {
+        dateFormat: 'Y-m-d',
+        disableMobile: true
+    });
+}

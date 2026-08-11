@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Wealth Watcher</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="stylesheet" href="style.css?v=9">
+</head>
+<body>
+
+    <div id="system-boot">
+        <div class="boot-title">WEALTH WATCHER</div>
+        <div class="loader-content">
+            <div class="progress-frame"><div class="progress-fill" id="boot-bar"></div></div>
+            <div class="boot-log" id="boot-log">> System init...<br></div>
+        </div>
+    </div>
+
+    <div id="custom-tooltip" class="custom-tooltip"></div>
+
+    <nav class="top-nav">
+        <div class="nav-brand">
+            <a href="#dashboard" style="display: flex; align-items: center; color: inherit; text-decoration: none;">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 8px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                Wealth Watcher
+            </a>
+            <button class="action-btn icon-only brand-obfuscate" onclick="toggleObfuscate()" id="obfuscate-btn" type="button" title="Enable privacy mode" aria-label="Enable privacy mode" aria-pressed="false">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+            <span id="obfuscation-status" class="obfuscation-status" role="status" aria-live="polite" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="10" width="14" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+                <span>Privacy mode enabled</span>
+            </span>
+            <button class="action-btn install-app-btn" id="install-app-btn" type="button" hidden title="Install Wealth Watcher">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+                <span>Install</span>
+            </button>
+        </div>
+        <div class="nav-links">
+            <a href="#dashboard" class="nav-link active" id="nav-dashboard">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                <span class="nav-text">Dashboard</span>
+            </a>
+            <a href="#history" class="nav-link" id="nav-history">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span class="nav-text">History</span>
+            </a>
+            <a href="#calendar" class="nav-link" id="nav-calendar">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                <span class="nav-text">Calendar</span>
+            </a>
+            <a href="#forecast" class="nav-link" id="nav-forecast">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                <span class="nav-text">Forecast</span>
+            </a>
+            <a href="#fire" class="nav-link" id="nav-fire">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 7c0-5.333-8-5.333-8 0"></path><path d="M10 7v14"></path><path d="M6 21h12"></path><path d="M6 13h10"></path></svg>
+                <span class="nav-text">Tracker</span>
+            </a>
+            <a href="#budget" class="nav-link" id="nav-budget">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+                <span class="nav-text">Budget</span>
+            </a>
+            <a href="#settings" class="nav-link" id="nav-settings">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <span class="nav-text">Settings</span>
+            </a>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div id="dashboard-view" class="view active">
+            <header>
+        <div class="header-left">
+            <h4>Wealth Watcher</h4>
+            <h3>Holistic Net Worth</h3>
+            <div id="dashboard-header-skeleton" class="dashboard-header-skeleton" data-page-skeleton hidden aria-hidden="true">
+                <span class="skeleton skeleton-header-total"></span>
+                <span class="skeleton skeleton-header-delta"></span>
+                <span class="skeleton skeleton-header-line skeleton-header-line-wide"></span>
+                <span class="skeleton skeleton-header-line"></span>
+            </div>
+            <div id="dashboard-header-content" data-page-content>
+                <h1>
+                    <span id="global-total" class="obfuscate-val">£--</span>
+                    <span id="global-delta" class="global-delta obfuscate-val">--</span>
+                </h1>
+                <div id="ytd-scorecard" class="ytd-scorecard obfuscate-val"></div>
+                <div id="proportion-bar" class="proportion-bar"></div>
+                <div id="delta-explainer" class="delta-explainer"></div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <div class="period-picker" id="period-picker">
+                <button class="period-btn" data-period="1H">1H</button>
+                <button class="period-btn" data-period="1D">1D</button>
+                <button class="period-btn" data-period="1W">1W</button>
+                <button class="period-btn active" data-period="1M">1M</button>
+                <button class="period-btn" data-period="3M">3M</button>
+                <button class="period-btn" data-period="1Y">1Y</button>
+                <button class="period-btn" data-period="MAX">MAX</button>
+            </div>
+            <div class="action-group">
+                <button class="action-btn icon-only" onclick="forceSync()" id="btn-force-sync" title="Force Sync">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                </button>
+                <button class="action-btn icon-only" onclick="openAuditModal()" title="Audit Log">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="dashboard-skeleton" class="dashboard-skeleton" data-page-skeleton hidden aria-hidden="true">
+        <section class="asset-group-section lane-section">
+            <span class="skeleton skeleton-section-title"></span>
+            <div class="grid-container dashboard-skeleton-grid">
+                <article class="skeleton-card dashboard-skeleton-card">
+                    <span class="skeleton skeleton-card-label"></span>
+                    <span class="skeleton skeleton-card-value"></span>
+                    <span class="skeleton skeleton-chart-line"></span>
+                    <span class="skeleton skeleton-card-footer"></span>
+                </article>
+                <article class="skeleton-card dashboard-skeleton-card">
+                    <span class="skeleton skeleton-card-label"></span>
+                    <span class="skeleton skeleton-card-value skeleton-card-value-short"></span>
+                    <span class="skeleton skeleton-chart-line"></span>
+                    <span class="skeleton skeleton-card-footer"></span>
+                </article>
+                <article class="skeleton-card dashboard-skeleton-card">
+                    <span class="skeleton skeleton-card-label"></span>
+                    <span class="skeleton skeleton-card-value"></span>
+                    <span class="skeleton skeleton-chart-line"></span>
+                    <span class="skeleton skeleton-card-footer"></span>
+                </article>
+            </div>
+        </section>
+    </div>
+
+    <div id="lane-sections" class="lane-sections" data-page-content>
+        <section class="asset-group-section lane-section" data-lane-slot="0">
+            <div class="grid-container" id="liquid-grid"></div>
+        </section>
+    </div>
+        </div>
+
+        <div id="fire-view" class="view">
+            <header>
+                <div class="header-left">
+                    <h4>Financial Independence</h4>
+                    <h3>FIRE Tracker</h3>
+                    <h1>
+                        <span id="fire-target-display">£--</span>
+                        <span class="fire-target-label">TARGET NUMBER</span>
+                    </h1>
+                </div>
+                <div class="header-actions">
+                </div>
+            </header>
+
+            <div class="fire-dashboard">
+                <div class="card glass-panel fire-progress-card">
+                    <h4 class="section-title">Progress to FIRE</h4>
+                    <div class="fire-progress-container">
+                        <div class="fire-progress-bar-bg">
+                            <div class="fire-progress-bar-fill" id="fire-progress-fill"></div>
+                        </div>
+                        <div class="fire-progress-stats">
+                            <div class="fire-stat">
+                                <span class="fire-stat-label">Investable Assets</span>
+                                <span class="fire-stat-val obfuscate-val" id="fire-current-assets">£0</span>
+                            </div>
+                            <div class="fire-stat">
+                                <span class="fire-stat-label">Remaining</span>
+                                <span class="fire-stat-val obfuscate-val" id="fire-remaining">£0</span>
+                            </div>
+                            <div class="fire-stat text-right">
+                                <span class="fire-stat-label">Completion</span>
+                                <span class="fire-stat-val text-green" id="fire-percent">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-container" style="margin-top: 1.5rem;">
+                    <div class="card glass-panel">
+                        <h4 class="section-title">Safe Withdrawal Rate (SWR)</h4>
+                        <div class="card-value" id="fire-swr-display">4.0%</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted);">The percentage of your portfolio you can safely withdraw each year.</div>
+                    </div>
+                    <div class="card glass-panel">
+                        <h4 class="section-title">Target Monthly Income</h4>
+                        <div class="card-value obfuscate-val" id="fire-target-income">£4,000</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted);">Your desired passive income after retiring.</div>
+                    </div>
+                    <div class="card glass-panel">
+                        <h4 class="section-title" id="fire-current-income-title">Estimated Monthly Income</h4>
+                        <div class="card-value obfuscate-val text-green" id="fire-current-income">£0</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted);" id="fire-current-income-desc">If you retired today using your current investable assets.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Budget View -->
+        <div id="budget-view" class="view">
+            <header>
+                <div class="header-left">
+                    <h4>Monthly Allocation</h4>
+                    <h3>Budget Overview</h3>
+                </div>
+                <div class="header-actions">
+                </div>
+            </header>
+
+            <div id="budget-overview-content">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
+                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Total Income</span>
+                    <h2 class="obfuscate-val" style="color: var(--cyan); margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-income">£0</h2>
+                </div>
+                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
+                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Bills (Needs)</span>
+                    <h2 class="obfuscate-val" style="color: #ef4444; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-bills">£0</h2>
+                </div>
+                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
+                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Savings (Future)</span>
+                    <h2 class="obfuscate-val" style="color: #10b981; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-savings">£0</h2>
+                </div>
+                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
+                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Spend (Wants)</span>
+                    <h2 class="obfuscate-val" style="color: #8b5cf6; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-spend">£0</h2>
+                </div>
+                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
+                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Remaining</span>
+                    <h2 class="obfuscate-val" style="color: #ffffff; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-unallocated">£0</h2>
+                </div>
+            </div>
+
+                <div class="card glass-panel full-width-col">
+                    <h4 class="section-title" style="margin: 0 0 1.5rem 0;">Budget Breakdown</h4>
+                    <div style="height: 50vh; position: relative;">
+                        <button id="budget-chart-back-btn" onclick="window.loadBudgetOverview()" style="display: none; position: absolute; top: 0; left: 0; background: rgba(255,255,255,0.1); border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; color: #fff; font-size: 0.85rem; z-index: 10; font-weight: bold;">&larr; Back to Overview</button>
+                        <canvas id="budgetChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- History View -->
+        <div id="history-view" class="view">
+            <header class="history-page-header">
+                <div class="header-left">
+                    <h4>Portfolio Evolution</h4>
+                    <h3>Wealth Journey</h3>
+                </div>
+                <div class="history-header-note">
+                    <span class="history-live-dot" aria-hidden="true"></span>
+                    <span id="history-last-updated">Awaiting first sync</span>
+                </div>
+            </header>
+
+            <div id="history-skeleton" class="history-loading-skeleton" data-page-skeleton hidden aria-hidden="true">
+                <div class="skeleton-summary-grid">
+                    <article class="skeleton-card skeleton-summary-card">
+                        <span class="skeleton skeleton-card-label"></span>
+                        <span class="skeleton skeleton-summary-value"></span>
+                        <span class="skeleton skeleton-card-footer"></span>
+                    </article>
+                    <article class="skeleton-card skeleton-summary-card">
+                        <span class="skeleton skeleton-card-label"></span>
+                        <span class="skeleton skeleton-summary-value skeleton-summary-value-short"></span>
+                        <span class="skeleton skeleton-card-footer"></span>
+                    </article>
+                    <article class="skeleton-card skeleton-summary-card">
+                        <span class="skeleton skeleton-card-label"></span>
+                        <span class="skeleton skeleton-summary-value"></span>
+                        <span class="skeleton skeleton-card-footer"></span>
+                    </article>
+                </div>
+                <div class="skeleton-card skeleton-chart-panel">
+                    <span class="skeleton skeleton-chart-heading"></span>
+                    <span class="skeleton skeleton-chart-large"></span>
+                </div>
+                <div class="skeleton-breakdown-grid">
+                    <div class="skeleton-card skeleton-breakdown-card"><span class="skeleton skeleton-card-label"></span><span class="skeleton skeleton-chart-line"></span><span class="skeleton skeleton-card-footer"></span></div>
+                    <div class="skeleton-card skeleton-breakdown-card"><span class="skeleton skeleton-card-label"></span><span class="skeleton skeleton-chart-line"></span><span class="skeleton skeleton-card-footer"></span></div>
+                    <div class="skeleton-card skeleton-breakdown-card"><span class="skeleton skeleton-card-label"></span><span class="skeleton skeleton-chart-line"></span><span class="skeleton skeleton-card-footer"></span></div>
+                </div>
+            </div>
+
+            <div id="history-content" data-page-content>
+            <div class="history-summary-grid" aria-label="History summary">
+                <article class="glass-panel history-summary-card">
+                    <span class="history-summary-label">Current net worth</span>
+                    <strong id="history-current-value" class="history-summary-value obfuscate-val">—</strong>
+                    <span class="history-summary-detail">Latest recorded value</span>
+                </article>
+                <article class="glass-panel history-summary-card">
+                    <span class="history-summary-label">Change over range</span>
+                    <strong id="history-period-change" class="history-summary-value obfuscate-val">—</strong>
+                    <span id="history-range-caption" class="history-summary-detail">No data available</span>
+                </article>
+                <article class="glass-panel history-summary-card">
+                    <span class="history-summary-label">Peak value</span>
+                    <strong id="history-peak-value" class="history-summary-value obfuscate-val">—</strong>
+                    <span class="history-summary-detail">Within selected range</span>
+                </article>
+            </div>
+
+            <div class="dashboard-section history-section">
+                <div class="history-section-heading">
+                    <div>
+                        <h4 class="section-title">Net worth over time</h4>
+                        <p class="history-section-caption">Follow the long-term shape, then zoom in when a change needs explaining.</p>
+                    </div>
+                    <div class="history-controls">
+                        <div class="period-picker" id="history-range-picker" role="group" aria-label="History range">
+                            <button class="period-btn" id="history-range-1h" data-period="1H" type="button" aria-pressed="false">1H</button>
+                            <button class="period-btn" id="history-range-1d" data-period="1D" type="button" aria-pressed="false">1D</button>
+                            <button class="period-btn" id="history-range-1w" data-period="1W" type="button" aria-pressed="false">1W</button>
+                            <button class="period-btn active" id="history-range-1m" data-period="1M" type="button" aria-pressed="true">1M</button>
+                            <button class="period-btn" id="history-range-3m" data-period="3M" type="button" aria-pressed="false">3M</button>
+                            <button class="period-btn" id="history-range-1y" data-period="1Y" type="button" aria-pressed="false">1Y</button>
+                            <button class="period-btn" id="history-range-max" data-period="MAX" type="button" aria-pressed="false">MAX</button>
+                        </div>
+                        <button class="action-btn history-trend-toggle" id="history-trend-toggle" type="button" aria-pressed="false">Show trend</button>
+                    </div>
+                </div>
+                <div class="glass-panel history-main-chart">
+                    <div class="history-chart-key" aria-hidden="true">
+                        <span><i class="history-key-line history-key-line-value"></i>Net worth</span>
+                        <span><i class="history-key-line history-key-line-trend"></i>Start to latest trend</span>
+                    </div>
+                    <canvas id="netWorthChart"></canvas>
+                </div>
+            </div>
+
+            <div class="dashboard-section history-section history-breakdown-section">
+                <h4 class="section-title">Asset Breakdown</h4>
+                <p class="history-section-caption">Latest value, range change, and portfolio share for each Asset Group.</p>
+                <div class="grid-container" id="history-grid">
+                    <!-- Category charts dynamically injected here -->
+                </div>
+            </div>
+            </div>
+        </div>
+        <!-- Calendar View -->
+        <div id="calendar-view" class="view">
+            <header>
+                <div class="header-left">
+                    <h4>Portfolio Movement</h4>
+                    <h3 id="calendar-month-label" aria-live="polite">Calendar</h3>
+                </div>
+                <div class="header-actions" id="calendar-controls">
+                    <div class="calendar-month-controls" role="group" aria-label="Calendar month navigation">
+                        <button class="action-btn" id="calendar-prev-month" type="button" aria-label="Previous month">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                            <span>Previous Month</span>
+                        </button>
+                        <button class="action-btn" id="calendar-next-month" type="button" aria-label="Next month">
+                            <span>Next Month</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <section class="glass-panel calendar-panel" aria-labelledby="calendar-month-label">
+                <div class="calendar-panel-toolbar">
+                    <p id="calendar-status" class="calendar-status" aria-live="polite">Loading daily portfolio history…</p>
+                    <p id="calendar-month-comparison" class="calendar-month-comparison" aria-live="polite" hidden></p>
+                </div>
+                <div id="calendar-grid"></div>
+            </section>
+        </div>
+        <!-- Forecast View -->
+        <div id="forecast-view" class="view">
+            <header>
+                <div class="header-left">
+                    <h4>Future Projections</h4>
+                    <h3>Wealth Forecast</h3>
+                </div>
+                <div class="header-actions">
+                </div>
+            </header>
+
+            <div id="forecast-screen-calculation-controls" class="card glass-panel forecast-strategy-controls">
+                <div class="forecast-control-heading">
+                    <div class="forecast-control-copy">
+                        <h4 class="section-title">Forecast strategy</h4>
+                        <span>Choose the projection method to experiment with; the selection is saved with Forecast settings.</span>
+                    </div>
+                    <div class="forecast-control-actions">
+                        <div class="form-group forecast-strategy-field">
+                            <label for="forecast-screen-calculation-strategy-search">Projection strategy</label>
+                            <div id="forecast-screen-calculation-strategy-picker" data-forecast-strategy-picker-host></div>
+                            <small>Search the configured strategies or choose one from the list.</small>
+                        </div>
+                        <div id="forecast-calculations-toggle"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="fire-dashboard forecast-results">
+                <div id="forecast-skeleton" class="forecast-loading-skeleton" data-page-skeleton hidden aria-hidden="true">
+                    <div class="skeleton-summary-grid">
+                        <article class="skeleton-card skeleton-summary-card">
+                            <span class="skeleton skeleton-card-label"></span>
+                            <span class="skeleton skeleton-summary-value"></span>
+                            <span class="skeleton skeleton-card-footer"></span>
+                        </article>
+                        <article class="skeleton-card skeleton-summary-card">
+                            <span class="skeleton skeleton-card-label"></span>
+                            <span class="skeleton skeleton-summary-value skeleton-summary-value-short"></span>
+                            <span class="skeleton skeleton-card-footer"></span>
+                        </article>
+                        <article class="skeleton-card skeleton-summary-card">
+                            <span class="skeleton skeleton-card-label"></span>
+                            <span class="skeleton skeleton-summary-value"></span>
+                            <span class="skeleton skeleton-card-footer"></span>
+                        </article>
+                    </div>
+                    <div class="skeleton-card skeleton-chart-panel skeleton-forecast-chart-panel">
+                        <span class="skeleton skeleton-chart-heading"></span>
+                        <span class="skeleton skeleton-chart-large"></span>
+                    </div>
+                </div>
+                <div id="forecast-result-content" data-page-content>
+                <div class="forecast-summary-grid">
+                    <div class="card glass-panel forecast-summary-card">
+                        <span class="forecast-summary-label">Target hit date</span>
+                        <strong class="forecast-summary-value" id="forecast-fire-date">--</strong>
+                        <span class="forecast-summary-detail">Based on the selected projection strategy</span>
+                    </div>
+                    <div class="card glass-panel forecast-summary-card">
+                        <span class="forecast-summary-label">Time remaining</span>
+                        <strong class="forecast-summary-value" id="forecast-time-remaining">--</strong>
+                        <span class="forecast-summary-detail">Until the FIRE target is reached</span>
+                    </div>
+                    <div class="card glass-panel forecast-summary-card">
+                        <span class="forecast-summary-label">Age at target</span>
+                        <strong class="forecast-summary-value" id="forecast-age">--</strong>
+                        <span class="forecast-summary-detail">Calculated from your date of birth</span>
+                    </div>
+                </div>
+
+                <div class="card glass-panel forecast-chart-card forecast-main-chart">
+                    <div class="forecast-chart-heading">
+                        <div>
+                            <h4 class="section-title">Projection</h4>
+                            <span id="forecast-historical-trend"></span>
+                        </div>
+                    </div>
+                    <div id="forecast-rate-sources" class="forecast-rate-sources"></div>
+                    <div class="forecast-chart-canvas">
+                        <canvas id="forecastExpectedChart"></canvas>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- Add Entry Modal -->
+    <div class="modal-overlay" id="entry-modal">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h2 id="entry-modal-title">Add Wealth Entry</h2>
+                <button class="close-btn" onclick="closeModal('entry-modal')">&times;</button>
+            </div>
+            <form id="add-entry-form">
+                <div class="form-group">
+                    <label for="entry-category">Asset</label>
+                    <select id="entry-category" class="integration-select" required aria-label="Asset">
+                        <option value="" selected disabled>Select Asset...</option>
+                    </select>
+                </div>
+                <div class="form-group typeahead-container" id="entry-asset-picker">
+                    <label>Name</label>
+                    <div id="entry-asset-picker-control"></div>
+                </div>
+                <div class="form-group">
+                    <label>Value (£)</label>
+                    <input type="number" id="entry-value" step="0.01" required placeholder="0.00">
+                </div>
+                <div class="form-group" id="mortgage-group" style="display:none;">
+                    <label>Mortgage Amount Remaining (£)</label>
+                    <input type="number" id="entry-mortgage" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group" id="invested-group" style="display:none;">
+                    <label>Total Deposits / Invested Capital (£)</label>
+                    <input type="number" id="entry-invested" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="text" id="entry-date" class="flatpickr-input" placeholder="Select Date" required>
+                </div>
+                <button type="submit" class="submit-btn" id="entry-submit-btn">Save Entry</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Remove Property Confirmation Modal -->
+    <div class="modal-overlay" id="property-delete-modal">
+        <div class="modal-content glass-panel confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="property-delete-title">
+            <div class="modal-header">
+                <h2 id="property-delete-title">Remove Property?</h2>
+                <button type="button" class="close-btn" id="property-delete-close" aria-label="Close">&times;</button>
+            </div>
+            <p class="confirmation-message">Remove <strong id="property-delete-name"></strong> from the dashboard? Its history will be retained.</p>
+            <div class="modal-actions">
+                <button type="button" class="action-btn" id="property-delete-cancel">Cancel</button>
+                <button type="button" class="danger-btn" id="property-delete-confirm">Remove Property</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic Confirmation Modal -->
+    <div class="modal-overlay" id="confirmation-modal">
+        <div class="modal-content glass-panel confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-modal-title" aria-describedby="confirmation-modal-message">
+            <div class="modal-header">
+                <h2 id="confirmation-modal-title">Confirm action</h2>
+                <button type="button" class="close-btn" id="confirmation-modal-close" aria-label="Close">&times;</button>
+            </div>
+            <p class="confirmation-message" id="confirmation-modal-message">Are you sure?</p>
+            <div class="modal-actions">
+                <button type="button" class="action-btn" id="confirmation-modal-cancel">Cancel</button>
+                <button type="button" class="danger-btn" id="confirmation-modal-confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Classification Editor Modal -->
+    <div class="modal-overlay" id="classification-edit-modal">
+        <div class="modal-content glass-panel classification-edit-modal" role="dialog" aria-modal="true" aria-labelledby="classification-edit-title" aria-describedby="classification-edit-description">
+            <div class="modal-header">
+                <h2 id="classification-edit-title">Edit classification</h2>
+                <button type="button" class="close-btn" id="classification-edit-close" aria-label="Close">&times;</button>
+            </div>
+            <p class="confirmation-message" id="classification-edit-description">Update this classification record.</p>
+            <form id="classification-edit-form" class="classification-edit-form">
+                <div class="classification-edit-fields" id="classification-edit-fields"></div>
+                <div class="modal-actions catalog-modal-actions">
+                    <button type="button" class="catalog-archive-button" id="classification-edit-archive" hidden>Archive</button>
+                    <span class="catalog-modal-spacer"></span>
+                    <button type="button" class="action-btn" id="classification-edit-cancel">Cancel</button>
+                    <button type="submit" class="action-btn catalog-add-button" id="classification-edit-save">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Audit Log Modal -->
+    <div class="modal-overlay" id="audit-modal">
+        <div class="modal-content glass-panel audit-panel">
+            <div class="modal-header">
+                <h2>Sync Audit Log</h2>
+                <button class="close-btn" onclick="closeModal('audit-modal')">&times;</button>
+            </div>
+            <div class="audit-table-container">
+                <table class="audit-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Provider</th>
+                            <th>Status</th>
+                            <th>Records</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-tbody">
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <button id="audit-prev" onclick="loadAudits(-1)">Prev</button>
+                <span id="audit-page-info">Page 1</span>
+                <button id="audit-next" onclick="loadAudits(1)">Next</button>
+            </div>
+        </div>
+    </div>
+
+        <div id="settings-view" class="view">
+            <header style="margin-bottom: 0;">
+                <div class="header-left">
+                    <h4>Configuration</h4>
+                    <h3>Application Settings</h3>
+                </div>
+            </header>
+
+            <div class="responsive-grid-2col" style="gap: 1.5rem;">
+                <!-- General Settings -->
+                <div class="card glass-panel collapsible-pane full-width-col" id="general-settings-pane" data-pane-id="general-settings" data-pane-helper-title="Shape your dashboard" data-pane-helper-description="Choose what appears on the dashboard and how your portfolio history is presented.">
+                    <div class="collapsible-header">
+                        <h4 class="section-title">General Settings</h4>
+                        <span class="collapsible-indicator" aria-label="Toggle General Settings">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                    </div>
+                    <div class="collapsible-content">
+                        <form id="general-settings-form" class="settings-toggle-list">
+                            <div id="general-settings-controls"></div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Asset Catalogue -->
+                <div class="card glass-panel collapsible-pane full-width-col" id="asset-catalog-pane" data-pane-id="asset-catalog" data-pane-helper-title="Keep your tracked assets organised." data-pane-helper-description="Each asset has one Type and one optional Group. Edit either independently, or use Move to place an asset in a different Group.">
+                    <div class="collapsible-header">
+                        <h4 class="section-title">Asset Catalogue</h4>
+                        <span class="collapsible-indicator" aria-label="Toggle Asset Catalogue">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                    </div>
+                    <div class="collapsible-content">
+                        <div id="asset-catalogue-list" class="catalog-workspace">
+                            <div class="catalog-workspace-header">
+                                <div>
+                                    <strong>Tracked assets</strong>
+                                    <span>Search, filter, and update the assets used throughout WealthWatcher.</span>
+                                </div>
+                                <span class="catalog-workspace-hint">Single source of truth</span>
+                            </div>
+                            <div class="catalog-toolbar" aria-label="Asset catalogue controls">
+                                <button type="button" class="action-btn catalog-primary-action" id="catalog-add-asset-button">Add asset</button>
+                                <label class="catalog-search-field">
+                                    <span class="sr-only">Search assets</span>
+                                    <input id="catalog-asset-search" type="search" placeholder="Search assets…" autocomplete="off">
+                                </label>
+                                <div class="catalog-filter-field" data-catalog-filter="kind">
+                                    <span class="sr-only">Filter by Type</span>
+                                    <input id="catalog-asset-kind-filter" type="search" data-catalog-filter-input="kind" aria-label="Filter by Type" aria-autocomplete="list" aria-controls="catalog-asset-kind-options" aria-expanded="false" placeholder="All Types" autocomplete="off" role="combobox">
+                                    <div id="catalog-asset-kind-options" class="catalog-filter-options" data-catalog-filter-options="kind" role="listbox" hidden></div>
+                                </div>
+                                <div class="catalog-filter-field" data-catalog-filter="group">
+                                    <span class="sr-only">Filter by Group</span>
+                                    <input id="catalog-asset-group-filter" type="search" data-catalog-filter-input="group" aria-label="Filter by Group" aria-autocomplete="list" aria-controls="catalog-asset-group-options" aria-expanded="false" placeholder="All Groups" autocomplete="off" role="combobox">
+                                    <div id="catalog-asset-group-options" class="catalog-filter-options" data-catalog-filter-options="group" role="listbox" hidden></div>
+                                </div>
+                                <div class="catalog-view-toggle" role="group" aria-label="Asset catalogue view">
+                                    <button type="button" class="catalog-view-button is-active" data-catalog-view="board" aria-pressed="true">Board</button>
+                                    <button type="button" class="catalog-view-button" data-catalog-view="list" aria-pressed="false">List</button>
+                                </div>
+                            </div>
+                            <div id="catalog-needs-attention" class="catalog-needs-attention" role="status" aria-live="polite"></div>
+                            <div id="catalog-board" class="catalog-board" aria-label="Asset catalogue"></div>
+                            <details class="catalog-management-panel" id="catalog-management-panel">
+                                <summary class="catalog-management-summary">
+                                    <span>
+                                        <strong>Manage types &amp; groups</strong>
+                                        <span>Define the Types and Groups used to organise your assets.</span>
+                                    </span>
+                                    <span class="catalog-management-summary-hint">Advanced</span>
+                                </summary>
+                                <div class="catalog-kind-manager">
+                                    <div class="catalog-kind-manager-header">
+                                        <div>
+                                            <strong>Asset Types</strong>
+                                            <span>Types classify assets and provide a default Group for new assets.</span>
+                                        </div>
+                                    </div>
+                                    <div id="asset-kind-list" class="catalog-kind-list" aria-label="Asset Types"></div>
+                                </div>
+                                <div class="catalog-add-panel">
+                                    <div class="catalog-add-panel-header">
+                                        <div>
+                                            <strong>Add to catalogue</strong>
+                                            <span>Add assets from the main action above, or create a Type or Group here.</span>
+                                        </div>
+                                    </div>
+                                    <div id="asset-catalog-create-forms" class="catalog-add-grid"></div>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Integrations -->
+                <div class="card glass-panel collapsible-pane full-width-col" id="integration-settings-pane" data-pane-id="integrations" data-pane-helper-title="Connect and manage external accounts." data-pane-helper-description="Add partner credentials, test the connection, and map discovered accounts to assets.">
+                    <div class="collapsible-header">
+                        <h4 class="section-title">Integrations</h4>
+                        <span class="collapsible-indicator" aria-label="Toggle Integrations">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="integration-intro">
+                            <p>Connect read-only partner accounts, test them, and map each discovered account to an asset.</p>
+                            <small>Credentials are encrypted locally before they are stored. Polling is configured per connection, with optional market-hours gating.</small>
+                        </div>
+                        <div id="integration-connections" class="integration-connections"></div>
+                        <div class="integration-section-heading"><h5>Available partners</h5><span>Choose a partner to start the setup wizard.</span></div>
+                        <div id="integration-catalog" class="integration-catalog"></div>
+                        <div id="integration-market-hours" class="integration-market-hours"></div>
+                        <div id="integration-wizard" class="integration-wizard" hidden>
+                            <div id="integration-wizard-steps" class="integration-wizard-steps"></div>
+                            <div id="integration-wizard-body"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FIRE Settings -->
+                <div class="card glass-panel full-width-col collapsible-pane" id="fire-settings-pane" data-pane-id="fire-settings" data-pane-helper-title="Plan your path to financial independence." data-pane-helper-description="Enable FIRE tools and configure the tracker and forecast around your target.">
+                    <div class="collapsible-header">
+                        <h4 class="section-title">FIRE</h4>
+                        <div class="collapsible-header-actions">
+                            <div id="fire-setting-enabled-toggle"></div>
+                            <span class="collapsible-indicator" aria-label="Toggle FIRE Settings">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="collapsible-content">
+                        <p id="fire-disabled-description" class="feature-disabled-description" hidden>
+                            Enable FIRE to use the Tracker and Forecast views.
+                        </p>
+                        <div id="fire-settings-content">
+                            <div class="fire-subfeature-controls" id="fire-subfeature-controls">
+                                <div class="fire-subfeature-control">
+                                    <div>
+                                        <strong>Tracker</strong>
+                                        <span>Track progress toward your FIRE target.</span>
+                                    </div>
+                                    <div id="fire-setting-tracker-toggle"></div>
+                                </div>
+                                <div class="fire-subfeature-control">
+                                    <div>
+                                        <strong>Forecast</strong>
+                                        <span>Project when you could reach your FIRE target.</span>
+                                    </div>
+                                    <div id="fire-setting-forecast-toggle"></div>
+                                </div>
+                            </div>
+
+                            <div id="fire-tracker-settings" class="fire-settings-section">
+                                <h5 class="fire-settings-section-title">Tracker settings</h5>
+                                <form id="fire-settings-form">
+                            <div class="form-group">
+                                <label>Target Monthly Income (£)</label>
+                                <input type="text" class="currency-input" id="fire-setting-income" required placeholder="4,000.00">
+                            </div>
+                            <div class="form-group">
+                                <label>Safe Withdrawal Rate (%)</label>
+                                <input type="number" id="fire-setting-swr" step="0.1" required placeholder="4.0">
+                            </div>
+                            <div class="form-group">
+                                <label style="margin-bottom: 0.8rem;">Assets to Include</label>
+                                <div id="fire-asset-options" class="fire-asset-options"></div>
+                            </div>
+                            <div class="form-group fire-setting-toggle-group">
+                                <div id="fire-setting-include-state-pension-toggle"></div>
+                            </div>
+                            <div class="form-group fire-setting-dependent-group" id="state-pension-amount-group" style="display: none;">
+                                <label for="fire-setting-state-pension">State Pension Amount (£ / Year)</label>
+                                <input type="text" class="currency-input" id="fire-setting-state-pension" required placeholder="12,547.00">
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Defaults to current UK full State Pension (£241.30/week)</div>
+                            </div>
+                            <div class="form-group fire-setting-toggle-group">
+                                <div id="fire-setting-include-windfalls-toggle"></div>
+                            </div>
+                            <div class="form-group fire-setting-dependent-group" id="windfalls-group" style="display: none;">
+                                <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
+                                    <table class="data-table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                                        <thead>
+                                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                                                <th style="width: 40px; text-align: center; padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Inc.</th>
+                                                <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
+                                                <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Amount</th>
+                                                <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Date</th>
+                                                <th style="width: 40px; padding: 0.75rem 0.5rem;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="windfalls-tbody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <input type="checkbox" id="new-wf-include" checked title="Include in calculation" style="margin: 0; width: 1.1rem; height: 1.1rem; cursor: pointer;">
+                                        <label style="margin: 0; font-size: 0.8rem;">Include</label>
+                                    </div>
+                                    <div id="windfall-entry-fields" style="display: contents;"></div>
+                                    <button type="button" onclick="addWindfall()" style="flex: 0 0 auto; background: var(--cyan); color: #000; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; transition: all 0.2s;">Add</button>
+                                </div>
+                            </div>
+                                </form>
+                            </div>
+
+                            <div id="fire-forecast-settings" class="fire-settings-section">
+                                <h5 class="fire-settings-section-title">Forecast settings</h5>
+                                <form id="forecast-settings-form">
+                                    <div class="form-group">
+                                        <label>Date of Birth</label>
+                                        <input type="text" id="forecast-setting-dob" class="flatpickr-input" placeholder="Select Date of Birth">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Expected Annual Market Return (%)</label>
+                                        <input type="number" id="forecast-setting-return" step="0.1" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Expected Monthly Contribution (£)</label>
+                                        <input type="number" id="forecast-setting-contribution" step="1" required>
+                                    </div>
+                                    <div class="form-group forecast-strategy-field">
+                                        <label for="forecast-setting-calculation-strategy">Projection strategy</label>
+                                        <div id="forecast-setting-calculation-strategy-picker" data-forecast-strategy-picker-host></div>
+                                        <small>Choose the historical extrapolation or configured FIRE/default approach.</small>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Budgeting Settings -->
+                <div class="card glass-panel full-width-col collapsible-pane" id="budget-settings-pane" data-pane-id="monthly-budget" data-pane-helper-title="Give every pound a job." data-pane-helper-description="Organise income, bills, savings and spending to understand your monthly plan.">
+                    <div class="collapsible-header">
+                        <h4 class="section-title">Budgeting</h4>
+                        <div class="collapsible-header-actions">
+                            <div id="budget-setting-enabled-toggle"></div>
+                            <span class="collapsible-indicator" aria-label="Toggle Budgeting">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="collapsible-content">
+                        <p id="budget-disabled-description" class="feature-disabled-description" hidden>
+                            Track your income and regular expenses, allocate them to savings plans, etc.
+                        </p>
+                        <form id="budget-settings-form">
+                            <h5 style="color: var(--cyan); margin-bottom: 0.5rem; font-size: 1rem;">Income Sources</h5>
+                            <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
+                                <table class="budget-table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                                            <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
+                                            <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Amount (£)</th>
+                                            <th style="width: 40px; padding: 0.75rem 0.5rem;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="budget-income-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="budget-entry-income"></div>
+
+                            <h5 style="color: #ef4444; margin-bottom: 0.5rem; font-size: 1rem;">Bills (Needs)</h5>
+                            <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
+                                <table class="budget-table">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                                            <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
+                                            <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Amount (£)</th>
+                                            <th style="width: 40px; padding: 0.75rem 0.5rem;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="budget-bills-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="budget-entry-bills"></div>
+
+                            <h5 style="color: #10b981; margin-bottom: 0.5rem; font-size: 1rem;">Savings (Future)</h5>
+                            <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
+                                <table class="budget-table">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                                            <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
+                                            <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Amount (£)</th>
+                                            <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Forecast asset</th>
+                                            <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Cadence</th>
+                                            <th style="width: 40px; padding: 0.75rem 0.5rem;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="budget-savings-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="budget-entry-savings"></div>
+
+                            <h5 style="color: #8b5cf6; margin-bottom: 0.5rem; font-size: 1rem;">Spend (Wants)</h5>
+                            <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
+                                <table class="budget-table">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                                            <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
+                                            <th style="padding: 0.75rem 0.5rem; text-align: right; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Amount (£)</th>
+                                            <th style="width: 40px; padding: 0.75rem 0.5rem;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="budget-spend-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="budget-entry-spend"></div>
+
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Guaranteed scroll spacer for mobile -->
+            <div style="height: 120px; width: 100%;"></div>
+        </div>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>

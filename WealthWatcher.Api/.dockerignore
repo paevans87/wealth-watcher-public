@@ -1,0 +1,8 @@
+bin/
+obj/
+.git/
+.gitignore
+appsettings.Development.json
+config/
+*.user
+*.suo

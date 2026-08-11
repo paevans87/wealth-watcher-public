@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/WealthWatcher.Api"
+    schedule:
+      interval: weekly
+  - package-ecosystem: nuget
+    directory: "/WealthWatcher.Api.Tests"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/WealthWatcher.UI"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/WealthWatcher.Api"
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directory: "/WealthWatcher.UI"
+    schedule:
+      interval: monthly
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
