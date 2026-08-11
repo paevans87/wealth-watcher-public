@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: wealth-watcher-api
+    image: ${API_IMAGE:-wealth-watcher-api}
     build:
       context: ./WealthWatcher.Api
       dockerfile: Dockerfile
@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: wealth-watcher-web
+    image: ${WEB_IMAGE:-wealth-watcher-web}
     build:
       context: ./WealthWatcher.UI
       dockerfile: Dockerfile

@@ -59,6 +59,31 @@ Open <http://127.0.0.1:8182>. The database, API, and web ports bind to loopback 
 
 The `CONFIG_PATH` directory contains the Data Protection key ring used to decrypt stored integration credentials. Treat it as sensitive application data, back it up securely, and do not commit it.
 
+### Use published container images
+
+Successful pushes to `main` and version tags publish the API and web images to GitHub Container Registry:
+
+```text
+ghcr.io/paevans87/wealth-watcher-public-api
+ghcr.io/paevans87/wealth-watcher-public-web
+```
+
+The Compose file defaults to local builds. To use the published `main` images instead, set these optional values in `.env`:
+
+```dotenv
+API_IMAGE=ghcr.io/paevans87/wealth-watcher-public-api:main
+WEB_IMAGE=ghcr.io/paevans87/wealth-watcher-public-web:main
+```
+
+Then pull only the application images and start without rebuilding:
+
+```powershell
+docker compose pull api web
+docker compose up -d --no-build --remove-orphans
+```
+
+For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.1.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
+
 ## Configuration
 
 Compose configuration is supplied through a private `.env` file. The supported variables are documented in [.env.example](.env.example). For a direct API process, use standard ASP.NET Core environment-variable configuration, for example `ConnectionStrings__DefaultConnection` and `Cors__AllowedOrigins__0`.
@@ -77,7 +102,7 @@ npm run build --prefix WealthWatcher.UI
 docker compose config
 ```
 
-The public pull-request workflow repeats the API and UI checks and validates both Docker builds.
+The public pull-request workflow repeats the API and UI checks and validates both Docker builds. Successful pushes to `main` and version tags also publish the application images described above.
 
 ## Contributing
 
