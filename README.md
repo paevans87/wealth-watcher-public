@@ -4,6 +4,8 @@ Wealth Watcher is a self-hosted personal wealth dashboard for recording assets, 
 
 > **Status:** The original project code and documentation are licensed under the [MIT License](LICENSE). This is a local/trusted-network, single-user application with no built-in authentication, authorization, or tenant isolation. Do not expose the API or dashboard directly to the public Internet.
 
+Project site: [wealthwatcher.co.uk](https://wealthwatcher.co.uk)
+
 ## What it does
 
 - Tracks cash, investments, pensions, property, and other classified assets.
