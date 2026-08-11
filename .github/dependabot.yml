@@ -1,26 +1,108 @@
 version: 2
+
 updates:
-  - package-ecosystem: nuget
-    directory: "/WealthWatcher.Api"
+  # API and test projects share several NuGet packages.
+  - package-ecosystem: "nuget"
+    directories:
+      - "/WealthWatcher.Api"
+      - "/WealthWatcher.Api.Tests"
+    target-branch: "main"
     schedule:
-      interval: weekly
-  - package-ecosystem: nuget
-    directory: "/WealthWatcher.Api.Tests"
-    schedule:
-      interval: weekly
-  - package-ecosystem: npm
-    directory: "/WealthWatcher.UI"
-    schedule:
-      interval: weekly
-  - package-ecosystem: docker
-    directory: "/WealthWatcher.Api"
-    schedule:
-      interval: monthly
-  - package-ecosystem: docker
-    directory: "/WealthWatcher.UI"
-    schedule:
-      interval: monthly
-  - package-ecosystem: github-actions
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 5
+    groups:
+      nuget-minor-patch:
+        applies-to: "version-updates"
+        group-by: "dependency-name"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Keeps global.json aligned with supported .NET SDK releases.
+  - package-ecosystem: "dotnet-sdk"
     directory: "/"
+    target-branch: "main"
     schedule:
-      interval: monthly
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "npm"
+    directory: "/WealthWatcher.UI"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    versioning-strategy: "increase"
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        applies-to: "version-updates"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "docker"
+    directory: "/WealthWatcher.Api"
+    target-branch: "main"
+    schedule:
+      interval: "monthly"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 3
+    groups:
+      api-container-images:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/WealthWatcher.UI"
+    target-branch: "main"
+    schedule:
+      interval: "monthly"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 3
+    groups:
+      ui-container-images:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "monthly"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 3
+    groups:
+      compose-images:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions-minor-patch:
+        applies-to: "version-updates"
+        update-types:
+          - "minor"
+          - "patch"
