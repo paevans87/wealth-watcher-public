@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wealthwatcher}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting the stack}
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: wealth-watcher-api
+    image: ${API_IMAGE:-wealth-watcher-api}
     build:
       context: ./WealthWatcher.Api
       dockerfile: Dockerfile
@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: wealth-watcher-web
+    image: ${WEB_IMAGE:-wealth-watcher-web}
     build:
       context: ./WealthWatcher.UI
       dockerfile: Dockerfile

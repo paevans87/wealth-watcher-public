@@ -1,5 +1,7 @@
 # Wealth Watcher
 
+[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=paevans87&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/paevans87)
+
 Wealth Watcher is a self-hosted personal wealth dashboard for recording assets, tracking net worth, modelling forecasts, managing budgets, and optionally synchronising supported providers.
 
 > **Status:** The original project code and documentation are licensed under the [MIT License](LICENSE). This is a local/trusted-network, single-user application with no built-in authentication, authorization, or tenant isolation. Do not expose the API or dashboard directly to the public Internet.
@@ -57,6 +59,31 @@ Open <http://127.0.0.1:8182>. The database, API, and web ports bind to loopback 
 
 The `CONFIG_PATH` directory contains the Data Protection key ring used to decrypt stored integration credentials. Treat it as sensitive application data, back it up securely, and do not commit it.
 
+### Use published container images
+
+Successful pushes to `main` and version tags publish the API and web images to GitHub Container Registry:
+
+```text
+ghcr.io/paevans87/wealth-watcher-public-api
+ghcr.io/paevans87/wealth-watcher-public-web
+```
+
+The Compose file defaults to local builds. To use the published `main` images instead, set these optional values in `.env`:
+
+```dotenv
+API_IMAGE=ghcr.io/paevans87/wealth-watcher-public-api:main
+WEB_IMAGE=ghcr.io/paevans87/wealth-watcher-public-web:main
+```
+
+Then pull only the application images and start without rebuilding:
+
+```powershell
+docker compose pull api web
+docker compose up -d --no-build --remove-orphans
+```
+
+For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.1.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
+
 ## Configuration
 
 Compose configuration is supplied through a private `.env` file. The supported variables are documented in [.env.example](.env.example). For a direct API process, use standard ASP.NET Core environment-variable configuration, for example `ConnectionStrings__DefaultConnection` and `Cors__AllowedOrigins__0`.
@@ -75,7 +102,7 @@ npm run build --prefix WealthWatcher.UI
 docker compose config
 ```
 
-The public pull-request workflow repeats the API and UI checks and validates both Docker builds.
+The public pull-request workflow repeats the API and UI checks and validates both Docker builds. Successful pushes to `main` and version tags also publish the application images described above.
 
 ## Contributing
 
@@ -88,3 +115,9 @@ Original project code and documentation are released under the [MIT License](LIC
 Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLICY.md). The initial public release is planned as `v0.1.0`; the UI package remains private and is not published as an npm library.
 
 The project owner retains sole responsibility for merge decisions, release approval, and changing the release boundary.
+
+## Support the project
+
+If Wealth Watcher is useful to you, you can support its continued development:
+
+[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=paevans87&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/paevans87)

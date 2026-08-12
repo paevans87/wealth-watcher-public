@@ -16,16 +16,23 @@ Each release should include:
 
 - a GitHub release with concise release notes and a `CHANGELOG.md` entry;
 - the exact Git tag and source archive;
-- SHA-256 checksums for the source archive and any published release artefacts; and
+- SHA-256 checksums for the source archive and any published release artefacts;
+- the API and web container image digests for tagged releases; and
 - an SBOM for the application dependency graph.
 
 The project owner retains responsibility for dependency, security, provider-integration, and release decisions.
 
-## Local Docker deployment
+## Container images and local Docker deployment
 
-Container images are a local implementation detail of the self-managed Docker Compose deployment. They are built and run locally by each installation and will never be published to a container registry.
+Successful pushes to `main` and version tags publish the API and web container images to the public GitHub Container Registry packages associated with this repository. The images contain application code only; deployment configuration, database data, Data Protection keys, and provider credentials remain local to each installation.
 
-There is therefore no public container image tag, digest, registry credential, or container provenance/attestation contract. The Git tag and source archive remain the release identity; users build the local images from that tagged source repository.
+The image tags follow this policy:
+
+- `main` is a moving development image published from successful pushes to the development branch.
+- `sha-<full-commit-sha>` identifies an immutable source commit and is suitable for rollback or reproducible deployment.
+- `vMAJOR.MINOR.PATCH` identifies a tagged application release.
+
+The Git tag and source archive remain the release identity. Image digests should be recorded for tagged releases and may be used instead of tags by installations requiring stronger deployment pinning. The Compose file continues to support local builds by default; installations can opt into the published images through `API_IMAGE` and `WEB_IMAGE` configuration.
 
 ## UI package
 
