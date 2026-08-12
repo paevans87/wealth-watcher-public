@@ -8,6 +8,8 @@ const CHOICE_SELECTOR = '[data-asset-typeahead-choice]';
 
 const optionOwners = new WeakMap();
 const portalPositions = new WeakMap();
+const optionHandlers = new WeakSet();
+const handledChoiceEvents = new WeakSet();
 
 export function escapeAssetTypeaheadHtml(value) {
     return String(value ?? '')
@@ -44,6 +46,20 @@ function findSearch(element) {
     return searchKeys.some(key => Object.prototype.hasOwnProperty.call(dataset, key))
         ? element
         : null;
+}
+
+function findChoice(event) {
+    const target = event?.target;
+    return target?.closest?.(CHOICE_SELECTOR)
+        || target?.parentElement?.closest?.(CHOICE_SELECTOR)
+        || event?.composedPath?.().find(item => item?.matches?.(CHOICE_SELECTOR))
+        || null;
+}
+
+function choiceAssetId(choice) {
+    return choice?.dataset?.assetTypeaheadChoice
+        ?? choice?.getAttribute?.('data-asset-typeahead-choice')
+        ?? '';
 }
 
 export function renderAssetTypeahead({
@@ -271,11 +287,26 @@ export function setupAssetTypeahead(
                 getAssets: getAssetsForPicker
             });
         }
+        bindPickerOptions(picker);
         setAssetTypeaheadOpen(picker, true);
     };
     const choosePickerAsset = (picker, assetId) => {
         onChoose?.(picker, assetId);
         setAssetTypeaheadOpen(picker, false);
+    };
+    const bindPickerOptions = picker => {
+        const options = getAssetTypeaheadState(picker).options;
+        if (!options?.addEventListener || optionHandlers.has(options)) return;
+
+        optionHandlers.add(options);
+        options.addEventListener('click', event => {
+            if (handledChoiceEvents.has(event)) return;
+            const choice = findChoice(event);
+            const owner = optionOwners.get(options);
+            if (!choice || (owner && owner !== picker)) return;
+            handledChoiceEvents.add(event);
+            choosePickerAsset(picker, choiceAssetId(choice));
+        });
     };
 
     root.addEventListener('click', event => {
@@ -284,11 +315,13 @@ export function setupAssetTypeahead(
     });
 
     globalThis.document?.addEventListener?.('click', event => {
-        const choice = event.target.closest?.(CHOICE_SELECTOR);
+        if (handledChoiceEvents.has(event)) return;
+        const choice = findChoice(event);
         const options = choice?.closest?.(OPTIONS_SELECTOR);
         const picker = options && (optionOwners.get(options) || options.closest?.(TYPEAHEAD_SELECTOR));
         if (!choice || !picker || !ownsPicker(picker)) return;
-        choosePickerAsset(picker, choice.dataset.assetTypeaheadChoice || '');
+        handledChoiceEvents.add(event);
+        choosePickerAsset(picker, choiceAssetId(choice));
     });
 
     root.addEventListener('focusin', event => {
@@ -322,6 +355,7 @@ export function setupAssetTypeahead(
             includeEmptyChoice,
             getAssets: getAssetsForPicker
         });
+        bindPickerOptions(picker);
         setAssetTypeaheadOpen(picker, true);
     });
 
