@@ -524,6 +524,7 @@ function chooseAsset(picker, assetId) {
         state.search.value = asset.DisplayName;
         state.search.placeholder = 'Search assets…';
     }
+    if (state.newName) state.newName.value = '';
     if (state.newName) state.newName.hidden = true;
     if (state.assetKind) state.assetKind.hidden = true;
     if (state.status) {
@@ -540,19 +541,21 @@ function accountAllocationState(accountId, role) {
     const slot = row?.querySelector(`.integration-allocation-slot[data-account-allocation-role="${role}"]`);
     const picker = slot?.querySelector(`[data-account-asset-picker="${accountId}"][data-account-allocation-role="${role}"]`);
     const typeahead = getAssetTypeaheadState(picker);
+    const newAssetInput = slot?.querySelector(`[data-account-new-asset="${accountId}"][data-account-allocation-role="${role}"]`);
     return {
         initialAssetId: String(slot?.dataset.accountInitialAssetId || ''),
         cleared: slot?.dataset.accountAllocationCleared === 'true',
         assetId: String(typeahead.value?.value || ''),
-        newName: String(slot?.querySelector(`[data-account-new-asset="${accountId}"][data-account-allocation-role="${role}"]`)?.value || '').trim(),
+        newName: newAssetInput && !newAssetInput.hidden ? String(newAssetInput.value || '').trim() : '',
         assetKindId: String(slot?.querySelector(`[data-account-asset-kind="${accountId}"][data-account-allocation-role="${role}"]`)?.value || '').trim()
     };
 }
 
-function accountAllocationNeedsSave(account, connection) {
-    return allocationRoles(connection).some(role => {
-        const state = accountAllocationState(account.Id, role);
-        const currentAssetId = String(allocationFor(account, role)?.AssetId || '');
+function accountAllocationNeedsSave(account, connection, role) {
+    const roles = role ? [role] : allocationRoles(connection);
+    return roles.some(roleName => {
+        const state = accountAllocationState(account.Id, roleName);
+        const currentAssetId = String(allocationFor(account, roleName)?.AssetId || '');
         if (state.assetId) return state.assetId !== currentAssetId;
         if (state.newName) return true;
         return state.cleared && Boolean(currentAssetId);
@@ -935,7 +938,7 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
                     const pending = (connection?.Accounts || []).filter(account => accountAllocationNeedsSave(account, connection));
                     for (const account of pending) {
                         for (const role of allocationRoles(connection)) {
-                            if (accountAllocationNeedsSave(account, connection)) await allocateAccount(account.Id, role);
+                            if (accountAllocationNeedsSave(account, connection, role)) await allocateAccount(account.Id, role);
                         }
                     }
                     await refresh({ includeCatalog: false, includeAssets: true });
