@@ -1,6 +1,6 @@
 # Wealth Watcher
 
-[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=paevans87&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/paevans87)
+[![Leave a tip](https://img.buymeacoffee.com/button-api/?text=Leave%20a%20tip&emoji=%F0%9F%91%8D&slug=paevans87&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000)](https://buymeacoffee.com/paevans87)
 
 Wealth Watcher is a self-hosted personal wealth dashboard for recording assets, tracking net worth, modelling forecasts, managing budgets, and optionally synchronising supported providers.
 
@@ -116,8 +116,8 @@ Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLIC
 
 The project owner retains sole responsibility for merge decisions, release approval, and changing the release boundary.
 
-## Support the project
+## Leave a tip
 
-If Wealth Watcher is useful to you, you can support its continued development:
+If Wealth Watcher has been useful, you can leave an optional tip as thanks for the software already provided:
 
-[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=%E2%98%95&slug=paevans87&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/paevans87)
+[![Leave a tip](https://img.buymeacoffee.com/button-api/?text=Leave%20a%20tip&emoji=%F0%9F%91%8D&slug=paevans87&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000)](https://buymeacoffee.com/paevans87)
