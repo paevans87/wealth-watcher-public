@@ -1,0 +1,896 @@
+import { store } from '../store/store.js';
+
+// This is the canonical browser-demo provisioner. When a UI feature adds an
+// API-backed request, update this adapter and demoContract.js together; the
+// parity tests then fail if the UI or demo drifts from the shared request
+// boundary.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_MARKET_HOURS = {
+    Days: [
+        { Day: 'Monday', Enabled: true, OpenTime: '08:00', CloseTime: '16:30' },
+        { Day: 'Tuesday', Enabled: true, OpenTime: '08:00', CloseTime: '16:30' },
+        { Day: 'Wednesday', Enabled: true, OpenTime: '08:00', CloseTime: '16:30' },
+        { Day: 'Thursday', Enabled: true, OpenTime: '08:00', CloseTime: '16:30' },
+        { Day: 'Friday', Enabled: true, OpenTime: '08:00', CloseTime: '16:30' },
+        { Day: 'Saturday', Enabled: false, OpenTime: '08:00', CloseTime: '16:30' },
+        { Day: 'Sunday', Enabled: false, OpenTime: '08:00', CloseTime: '16:30' }
+    ]
+};
+
+const CATEGORY_SEEDS = [
+    { Id: 'investments', Label: 'Investments', Color: '#22d3ee', DisplayOrder: 1, ClassificationValueId: 'kind-investments', AssetGroupId: 'group-investments', AssetGroupCode: 'investments' },
+    { Id: 'pensions', Label: 'Pensions', Color: '#a78bfa', DisplayOrder: 2, ClassificationValueId: 'kind-pensions', AssetGroupId: 'group-investments', AssetGroupCode: 'investments' },
+    { Id: 'property', Label: 'Property', Color: '#f59e0b', DisplayOrder: 3, ClassificationValueId: 'kind-property', AssetGroupId: 'group-property', AssetGroupCode: 'property' },
+    { Id: 'cash', Label: 'Cash', Color: '#34d399', DisplayOrder: 4, ClassificationValueId: 'kind-cash', AssetGroupId: 'group-cash', AssetGroupCode: 'cash' }
+];
+
+const DEMO_STORAGE_KEY = 'wealth-watcher:live-demo-ledger:v4';
+
+const clone = value => {
+    if (value === undefined) return undefined;
+    return typeof structuredClone === 'function'
+        ? structuredClone(value)
+        : JSON.parse(JSON.stringify(value));
+};
+
+const dateKey = date => new Date(date).toISOString().slice(0, 10);
+const todayKey = () => dateKey(new Date());
+const addDays = (date, days) => new Date(new Date(`${date}T12:00:00Z`).getTime() + days * DAY_MS);
+const idFrom = (prefix, number) => `${prefix}-${number}`;
+const numberValue = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+const normalize = value => String(value ?? '').trim().toLowerCase();
+const json = value => JSON.stringify(value);
+
+function seedState() {
+    const today = todayKey();
+    const groups = [
+        {
+            Id: 'group-investments', Key: 'asset-group', DisplayName: 'Asset Groups',
+            Values: [
+                { Id: 'group-investments', Key: 'investments', DisplayName: 'Investments', Color: '#22d3ee', DisplayOrder: 1 },
+                { Id: 'group-property', Key: 'property', DisplayName: 'Property', Color: '#f59e0b', DisplayOrder: 2 },
+                { Id: 'group-cash', Key: 'cash', DisplayName: 'Cash', Color: '#34d399', DisplayOrder: 3 }
+            ]
+        },
+        {
+            Id: 'group-kinds', Key: 'asset-kind', DisplayName: 'Asset Kinds',
+            Values: [
+                { Id: 'kind-investments', Key: 'investments', DisplayName: 'Stocks & Shares', AssetGroupId: 'group-investments', EntryKind: 'Investment', DisplayOrder: 1 },
+                { Id: 'kind-pensions', Key: 'pensions', DisplayName: 'Pension', AssetGroupId: 'group-investments', EntryKind: 'Investment', DisplayOrder: 2 },
+                { Id: 'kind-property', Key: 'property', DisplayName: 'Property', AssetGroupId: 'group-property', EntryKind: 'Property', DisplayOrder: 3 },
+                { Id: 'kind-cash', Key: 'cash', DisplayName: 'Cash', AssetGroupId: 'group-cash', EntryKind: 'Cash', DisplayOrder: 4 }
+            ]
+        }
+    ];
+    const assets = [
+        { Id: 'asset-isa', DisplayName: 'Stocks & Shares ISA', Name: 'Stocks & Shares ISA', AssetKindId: 'kind-investments', AssetGroupId: 'group-investments', EntryKind: 'Investment', Archived: false },
+        { Id: 'asset-pension', DisplayName: 'Workplace Pension', Name: 'Workplace Pension', AssetKindId: 'kind-pensions', AssetGroupId: 'group-investments', EntryKind: 'Investment', Archived: false },
+        { Id: 'asset-home', DisplayName: 'Primary Home', Name: 'Primary Home', AssetKindId: 'kind-property', AssetGroupId: 'group-property', EntryKind: 'Property', Archived: false },
+        { Id: 'asset-cash', DisplayName: 'Emergency Cash', Name: 'Emergency Cash', AssetKindId: 'kind-cash', AssetGroupId: 'group-cash', EntryKind: 'Cash', Archived: false }
+    ];
+    const historyDays = 16 * 30;
+    const gaussianPulse = (ageDays, center, width) => Math.exp(-((ageDays - center) ** 2) / (2 * width ** 2));
+    const hashNoise = (seed, phase) => {
+        const raw = Math.sin(((seed + 1) * 12.9898) + (phase * 78.233)) * 43758.5453;
+        return ((raw - Math.floor(raw)) * 2) - 1;
+    };
+    const movementFactorAtAge = ({ phase = 0, shocks = [], noiseScale = 0 }, ageDays) => {
+        const marketCycle =
+            (Math.sin((ageDays / 29) + phase) * 0.58) +
+            (Math.sin((ageDays / 73) + (phase * 0.61)) * 0.34) +
+            (Math.sin((ageDays / 13) + (phase * 1.31)) * 0.12) +
+            (Math.sin((ageDays / 5.7) + (phase * 2.1)) * 0.08);
+        const eventPulse = shocks.reduce(
+            (total, shock) => total + (shock.amount * gaussianPulse(ageDays, shock.center, shock.width)),
+            0
+        );
+        const shortTermNoise = (
+            (hashNoise(ageDays, phase) * 0.55) +
+            (hashNoise(Math.floor(ageDays / 3), phase + 2.7) * 0.45)
+        ) * noiseScale;
+        return marketCycle + eventPulse + shortTermNoise;
+    };
+    const valueAtAge = ({ current, start, volatility = 0, phase = 0, shocks = [], noiseScale = 0 }, ageDays) => {
+        const progress = Math.min(1, Math.max(0, ageDays / historyDays));
+        const trend = current + ((start - current) * progress);
+        const movement = (movementFactorAtAge({ phase, shocks, noiseScale }, ageDays) - movementFactorAtAge({ phase, shocks, noiseScale }, 0)) * volatility;
+        return Math.max(0, Math.round(trend + movement));
+    };
+    const historyConfigs = [
+        {
+            type: 'investments', name: 'Stocks & Shares ISA', assetId: 'asset-isa', time: '16:00:00',
+            current: 91800, start: 52000, volatility: 10500, phase: 0.4, noiseScale: 0.24,
+            shocks: [
+                { center: 330, width: 32, amount: -0.75 },
+                { center: 195, width: 42, amount: 0.55 },
+                { center: 95, width: 24, amount: -0.6 },
+                { center: 14, width: 7, amount: -0.32 }
+            ],
+            investedCurrent: 70000, investedStart: 50000, investedVolatility: 900
+        },
+        {
+            type: 'pensions', name: 'Workplace Pension', assetId: 'asset-pension', time: '16:00:00',
+            current: 139500, start: 82000, volatility: 15000, phase: 1.2, noiseScale: 0.2,
+            shocks: [
+                { center: 330, width: 34, amount: -0.65 },
+                { center: 195, width: 46, amount: 0.45 },
+                { center: 95, width: 26, amount: -0.45 },
+                { center: 15, width: 8, amount: -0.24 }
+            ],
+            investedCurrent: 105000, investedStart: 72000, investedVolatility: 1100
+        },
+        {
+            type: 'property', name: 'Primary Home', assetId: 'asset-home', time: '12:00:00',
+            current: 355000, start: 270000, volatility: 14000, phase: 2, noiseScale: 0.07,
+            shocks: [
+                { center: 315, width: 62, amount: -0.75 },
+                { center: 150, width: 60, amount: 0.45 },
+                { center: 18, width: 10, amount: -0.12 }
+            ],
+            mortgageCurrent: 175000, mortgageStart: 205000, mortgageVolatility: 1200
+        },
+        {
+            type: 'cash', name: 'Emergency Cash', assetId: 'asset-cash', time: '16:00:00',
+            current: 31200, start: 15500, volatility: 3800, phase: 2.6, noiseScale: 0.18,
+            shocks: [
+                { center: 250, width: 65, amount: -0.25 },
+                { center: 110, width: 50, amount: 0.2 },
+                { center: 9, width: 5, amount: -0.35 }
+            ]
+        }
+    ];
+    const todayDate = new Date(`${today}T12:00:00Z`);
+    const observations = [];
+    // Completed months get 14 snapshots spread across their days. The current
+    // month is sampled through today so the calendar never contains future data.
+    for (let monthOffset = 15; monthOffset >= 0; monthOffset -= 1) {
+        const monthStart = new Date(Date.UTC(
+            todayDate.getUTCFullYear(),
+            todayDate.getUTCMonth() - monthOffset,
+            1,
+            12
+        ));
+        const lastDay = new Date(Date.UTC(
+            monthStart.getUTCFullYear(),
+            monthStart.getUTCMonth() + 1,
+            0,
+            12
+        )).getUTCDate();
+        const maximumDay = monthOffset === 0 ? todayDate.getUTCDate() : lastDay;
+        const observationCount = Math.min(14, maximumDay);
+        const days = [...new Set(Array.from({ length: observationCount }, (_, index) => (
+            observationCount === 1
+                ? 1
+                : Math.round(1 + (index * (maximumDay - 1) / (observationCount - 1)))
+        )))];
+
+        for (const day of days) {
+            const observationDate = new Date(Date.UTC(
+                monthStart.getUTCFullYear(),
+                monthStart.getUTCMonth(),
+                day,
+                12
+            ));
+            observations.push({
+                ageDays: Math.round((todayDate - observationDate) / DAY_MS),
+                date: dateKey(observationDate)
+            });
+        }
+    }
+    let entryNumber = 1;
+    const entries = historyConfigs.flatMap(config => observations.map(observation => {
+        const entry = {
+            Id: idFrom('entry', entryNumber++),
+            Type: config.type,
+            Name: config.name,
+            AssetId: config.assetId,
+            Value: valueAtAge(config, observation.ageDays),
+            Date: observation.date,
+            Time: config.time,
+            Source: 'Demo'
+        };
+        if (config.investedCurrent !== undefined) {
+            entry.InvestedCapital = valueAtAge({
+                current: config.investedCurrent,
+                start: config.investedStart,
+                volatility: config.investedVolatility,
+                phase: config.phase + 0.35
+            }, observation.ageDays);
+        }
+        if (config.mortgageCurrent !== undefined) {
+            entry.Mortgage = valueAtAge({
+                current: config.mortgageCurrent,
+                start: config.mortgageStart,
+                volatility: config.mortgageVolatility,
+                phase: config.phase + 0.5
+            }, observation.ageDays);
+        }
+        return entry;
+    }));
+    return {
+        settings: {
+            wealthWatcherGeneralSettings: json({ showZeroValuesOnDashboard: false, showZeroValuesOnHistory: false, showSparklines: true }),
+            wealthWatcherFeatureSettings: json({ fire: true, tracker: true, forecast: true, budget: true }),
+            wealthWatcherForecastSettings: json({ dateOfBirth: '1990-06-15', annualReturn: 4, monthlyContribution: 1500, forecastStrategy: 'fire-default' }),
+            wealthWatcherFireSettings: json({ targetIncome: 4000, swr: 4, includeStatePension: false, statePensionAmount: 12547, includeWindfalls: false, expectedWindfalls: 0, includedAssets: ['investments', 'pensions', 'property'] }),
+            wealthWatcherBudgetSettings: json({
+                income: [
+                    { name: 'Salary', amount: 6500 },
+                    { name: 'Freelance design', amount: 650 }
+                ],
+                bills: [
+                    { name: 'Mortgage', amount: 1450 },
+                    { name: 'Council tax', amount: 190 },
+                    { name: 'Utilities', amount: 230 }
+                ],
+                savings: [
+                    { id: 'saving-demo-emergency', name: 'Emergency fund', amount: 450, cadence: 'monthly', assetId: 'asset-cash' },
+                    { id: 'saving-demo-index', name: 'Index fund contribution', amount: 1500, cadence: 'monthly', assetId: 'asset-isa' }
+                ],
+                spend: [
+                    { name: 'Groceries', amount: 520 },
+                    { name: 'Travel', amount: 350 },
+                    { name: 'Everything else', amount: 610 }
+                ]
+            })
+        },
+        groups,
+        categories: clone(CATEGORY_SEEDS),
+        assets,
+        entries,
+        audits: [{ Id: 'audit-1', StartTime: new Date().toISOString(), ProviderName: 'Demo data', Status: 'Completed', StatusClass: 'success', RecordsAdded: entries.length, LogMessage: 'Demo portfolio loaded.' }],
+        integrations: [],
+        integrationCatalog: [
+            { Key: 'snaptrade', DisplayName: 'SnapTrade', Description: 'Connect investment accounts', MinimumPollingIntervalMinutes: 60 },
+            { Key: 'demo-bank', DisplayName: 'Demo Bank', Description: 'Connect a demonstration cash account', MinimumPollingIntervalMinutes: 30 }
+        ],
+        marketHours: clone(DEFAULT_MARKET_HOURS),
+        nextIds: { asset: 5, entry: entries.length + 1, value: 1, property: 2, connection: 1, account: 1, audit: 2 }
+    };
+}
+
+function demoStorage() {
+    try {
+        return globalThis.window?.localStorage || globalThis.localStorage || null;
+    } catch {
+        return null;
+    }
+}
+
+function loadStoredState() {
+    const storage = demoStorage();
+    if (!storage) return seedState();
+    try {
+        const raw = storage.getItem(DEMO_STORAGE_KEY);
+        return raw ? { ...seedState(), ...JSON.parse(raw) } : seedState();
+    } catch {
+        return seedState();
+    }
+}
+
+function persistState() {
+    const storage = demoStorage();
+    if (!storage) return;
+    try {
+        storage.setItem(DEMO_STORAGE_KEY, JSON.stringify(demoState));
+    } catch {
+        // Browser storage is an enhancement; the in-memory demo remains usable.
+    }
+}
+
+let demoState = loadStoredState();
+
+export function resetDemoState() {
+    demoState = seedState();
+    const storage = demoStorage();
+    try { storage?.removeItem(DEMO_STORAGE_KEY); } catch { /* storage is optional */ }
+    return getDemoState();
+}
+
+export function getDemoState() {
+    return clone(demoState);
+}
+
+export function getDemoStore() {
+    return demoState;
+}
+
+class DemoResponse {
+    constructor(payload, status = 200, statusText = '') {
+        this.status = status;
+        this.statusText = statusText || (status >= 200 && status < 300 ? 'OK' : 'Error');
+        this.ok = status >= 200 && status < 300;
+        this.headers = new Map([['content-type', 'application/json']]);
+        this.headers.get = this.headers.get.bind(this.headers);
+        this._text = payload === undefined ? '' : typeof payload === 'string' ? payload : json(payload);
+        this.body = this._text;
+    }
+
+    async json() {
+        if (!this._text) throw new SyntaxError('The demo response has no JSON body.');
+        return JSON.parse(this._text);
+    }
+
+    async text() {
+        return this._text;
+    }
+}
+
+const response = (payload, status = 200) => new DemoResponse(payload, status);
+const errorResponse = (message, status = 404) => response({ Error: message }, status);
+
+function parseRequestUrl(input) {
+    const raw = input instanceof URL ? input.toString() : String(input ?? '');
+    const parsed = new URL(raw, 'http://wealthwatcher.demo');
+    let path = parsed.pathname.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+    if (path === '/api') path = '/';
+    else if (path.startsWith('/api/')) path = path.slice(4);
+    return { parsed, path };
+}
+
+function readBody(options) {
+    if (!options || options.body === undefined || options.body === null || options.body === '') return {};
+    if (typeof options.body === 'object') return clone(options.body);
+    try {
+        return JSON.parse(options.body);
+    } catch (error) {
+        throw new Error(`Invalid JSON body for demo request: ${error.message}`);
+    }
+}
+
+function nextId(kind) {
+    const number = demoState.nextIds[kind]++;
+    return idFrom(kind, number);
+}
+
+function findGroup(key) {
+    const normalizedKey = normalize(key);
+    return demoState.groups.find(group => normalize(group.Key) === normalizedKey || String(group.Id) === String(key));
+}
+
+function findValue(id) {
+    return demoState.groups.flatMap(group => group.Values || []).find(value => String(value.Id) === String(id));
+}
+
+function findAsset(id) {
+    return demoState.assets.find(asset => String(asset.Id) === String(id));
+}
+
+function categoryForType(type) {
+    const normalizedType = normalize(type).replace(/\s+/g, '-');
+    return demoState.categories.find(category => normalize(category.Id) === normalizedType || normalize(category.Label) === normalizedType)
+        || demoState.categories.find(category => normalizedType.startsWith(normalize(category.Id)));
+}
+
+function categoryForEntry(entry) {
+    const asset = entry.AssetId ? findAsset(entry.AssetId) : null;
+    const kind = asset ? findValue(asset.AssetKindId) : null;
+    return categoryForType(entry.Type) || categoryForType(kind?.Key) || demoState.categories[0];
+}
+
+function entryValue(entry) {
+    const value = numberValue(entry.Value);
+    return categoryForEntry(entry)?.Id === 'property' ? value - numberValue(entry.Mortgage) : value;
+}
+
+function entityKey(entry) {
+    return String(entry.AssetId || `${categoryForEntry(entry)?.Id || 'other'}:${entry.Name || entry.Id}`);
+}
+
+function allObservationDates() {
+    return [...new Set([...demoState.entries.map(entry => entry.Date), todayKey()])].sort();
+}
+
+function periodStart(period) {
+    const days = ({ '1D': 1, '1W': 7, '1M': 31, '3M': 93, '6M': 186, '1Y': 366 }[String(period).toUpperCase()] ?? null);
+    return days ? dateKey(addDays(todayKey(), -days)) : null;
+}
+
+function buildCategoryHistory(category, period) {
+    const entries = demoState.entries
+        .filter(entry => categoryForEntry(entry)?.Id === category.Id)
+        .sort((left, right) => `${left.Date}T${left.Time || ''}`.localeCompare(`${right.Date}T${right.Time || ''}`));
+    const dates = allObservationDates().filter(date => !periodStart(period) || date >= periodStart(period));
+    const latest = new Map();
+    const data = [];
+    dates.forEach(date => {
+        entries.filter(entry => entry.Date <= date).forEach(entry => latest.set(entityKey(entry), entry));
+        const currentEntries = [...latest.values()];
+        const value = currentEntries.reduce((total, entry) => total + entryValue(entry), 0);
+        if (currentEntries.length || date === todayKey()) {
+            const invested = currentEntries.reduce((total, entry) => total + numberValue(entry.InvestedCapital), 0);
+            const breakdown = Object.fromEntries(currentEntries.map(entry => [entry.Name || entry.Id, entryValue(entry)]));
+            data.push({ Time: date, Value: Number(value.toFixed(2)), Invested: Number(invested.toFixed(2)), Breakdown: breakdown, HasObservation: entries.some(entry => entry.Date === date) });
+        }
+    });
+    const aggregate = {
+        Data: data,
+        LastSyncDateTime: new Date().toISOString(),
+        LatestBreakdown: data.at(-1)?.Breakdown || {}
+    };
+    if (category.Id === 'property') {
+        const properties = demoState.assets
+            .filter(asset => asset.EntryKind === 'Property' && !asset.Archived)
+            .map(asset => {
+                const entry = latest.get(asset.Id);
+                const value = entry ? numberValue(entry.Value) : 0;
+                const mortgage = entry ? numberValue(entry.Mortgage) : 0;
+                return { Id: asset.Id, Name: asset.DisplayName, Value: value, Mortgage: mortgage, Equity: value - mortgage };
+            });
+        const value = properties.reduce((total, property) => total + property.Value, 0);
+        const mortgage = properties.reduce((total, property) => total + property.Mortgage, 0);
+        aggregate.PropertyDetails = {
+            Properties: properties,
+            Totals: { Value: value, Mortgage: mortgage, Equity: value - mortgage }
+        };
+    }
+    if (category.Id === 'investments' || category.Id === 'pensions') {
+        aggregate.InvestmentDetails = currentInvestmentDetails(category, entries);
+    }
+    return aggregate;
+}
+
+function currentInvestmentDetails(category, categoryEntries) {
+    const latest = new Map();
+    categoryEntries.forEach(entry => {
+        if (!latest.has(entityKey(entry)) || `${entry.Date}T${entry.Time || ''}` >= `${latest.get(entityKey(entry)).Date}T${latest.get(entityKey(entry)).Time || ''}`) latest.set(entityKey(entry), entry);
+    });
+    return Object.fromEntries([...latest.values()].map(entry => {
+        const currentValue = entryValue(entry);
+        const growthValue = Number((currentValue * 0.62).toFixed(2));
+        const defensiveValue = Number((currentValue - growthValue).toFixed(2));
+        return [entry.Name, [
+            {
+                Ticker: 'DEMO-GROWTH',
+                Name: 'Global equity fund',
+                Quantity: 100,
+                AveragePrice: Number((growthValue * 0.92 / 100).toFixed(2)),
+                CurrentPrice: Number((growthValue / 100).toFixed(2)),
+                CurrentValue: growthValue
+            },
+            {
+                Ticker: 'DEMO-BALANCED',
+                Name: 'Global bond fund',
+                Quantity: 100,
+                AveragePrice: Number((defensiveValue * 0.98 / 100).toFixed(2)),
+                CurrentPrice: Number((defensiveValue / 100).toFixed(2)),
+                CurrentValue: defensiveValue
+            }
+        ]];
+    }));
+}
+
+function buildDashboard(period) {
+    const categories = demoState.categories.map(category => ({
+        ...clone(category),
+        Aggregate: buildCategoryHistory(category, period)
+    }));
+    const ytdCategories = demoState.categories.map(category => ({
+        ...clone(category),
+        Aggregate: buildCategoryHistory(category, '1Y')
+    }));
+    const timeline = buildTimeline(categories);
+    const ytdTimeline = buildTimeline(ytdCategories);
+    const currentTotal = timeline.at(-1)?.Value || 0;
+    const previousTotal = timeline.at(-2)?.Value ?? currentTotal;
+    const ytdStartTotal = ytdTimeline[0]?.Value || 0;
+    return {
+        Categories: categories,
+        Timeline: timeline,
+        YtdCategories: ytdCategories,
+        CurrentTotal: currentTotal,
+        PreviousTotal: previousTotal,
+        YtdStartTotal: ytdStartTotal,
+        Contributors: categories.map(category => {
+            const data = category.Aggregate?.Data || [];
+            const current = data.at(-1)?.Value || 0;
+            const first = data[0]?.Value || 0;
+            return {
+                Name: category.Label,
+                Color: category.Color,
+                CurrentValue: current,
+                Delta: current - first,
+                DeltaInvested: (data.at(-1)?.Invested || 0) - (data[0]?.Invested || 0)
+            };
+        }).filter(item => item.CurrentValue !== 0 || item.Delta !== 0),
+        LastSyncDateTime: new Date().toISOString()
+    };
+}
+
+function buildTimeline(categories) {
+    const totals = new Map();
+    categories.forEach(category => (category.Aggregate?.Data || []).forEach(point => {
+        totals.set(point.Time, Number(((totals.get(point.Time) || 0) + numberValue(point.Value)).toFixed(2)));
+    }));
+    return [...totals.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([Time, Value]) => ({ Time, Value }));
+}
+
+function buildCurrentObservation(categoryId = null) {
+    const categories = demoState.categories
+        .filter(category => !categoryId || category.Id === categoryId)
+        .map(category => ({ ...clone(category), ...buildCategoryHistory(category, '1D') }));
+    return categoryId ? (categories[0] || null) : { Categories: categories, Data: categories.flatMap(category => category.Data || []) };
+}
+
+function namesForCategory(categoryId) {
+    const category = categoryForType(categoryId);
+    const names = new Map();
+    demoState.assets.filter(asset => !asset.Archived && categoryForType(findValue(asset.AssetKindId)?.Key)?.Id === category?.Id)
+        .forEach(asset => names.set(asset.Id, { ...clone(asset), Name: asset.DisplayName }));
+    demoState.entries.filter(entry => categoryForEntry(entry)?.Id === category?.Id)
+        .forEach(entry => names.set(entityKey(entry), { Id: entry.AssetId || entityKey(entry), Name: entry.Name, DisplayName: entry.Name, AssetId: entry.AssetId }));
+    return [...names.values()];
+}
+
+function catalogueAssets(searchParams) {
+    let assets = demoState.assets.slice();
+    const classificationValueId = searchParams.get('classificationValueId');
+    if (classificationValueId) assets = assets.filter(asset => String(asset.AssetKindId) === String(classificationValueId) || String(asset.AssetGroupId) === String(classificationValueId));
+    return clone(assets);
+}
+
+function createAudit(message, providerName = 'Demo data', recordsAdded = 0) {
+    demoState.audits.unshift({ Id: nextId('audit'), StartTime: new Date().toISOString(), ProviderName: providerName, Status: 'Completed', StatusClass: 'success', RecordsAdded: recordsAdded, LogMessage: message });
+}
+
+function addEntry(payload, defaults = {}) {
+    const entry = {
+        Id: nextId('entry'),
+        Type: payload.Type || defaults.Type || 'cash',
+        Name: payload.Name || defaults.Name || 'Demo entry',
+        AssetId: payload.AssetId || defaults.AssetId,
+        Value: numberValue(payload.Value),
+        Mortgage: numberValue(payload.Mortgage),
+        InvestedCapital: numberValue(payload.InvestedCapital),
+        Date: payload.Date || todayKey(),
+        Time: payload.Time || '12:00:00',
+        Source: payload.Source || 'Manual'
+    };
+    demoState.entries.push(entry);
+    return entry;
+}
+
+function createAsset(payload, type = 'cash') {
+    const requestedKind = payload.AssetKindId || payload.ClassificationValueId;
+    const kind = findValue(requestedKind) || findValue(`kind-${normalize(type)}`) || findValue('kind-cash');
+    const asset = {
+        Id: nextId('asset'),
+        DisplayName: payload.DisplayName || payload.Name || 'New asset',
+        Name: payload.DisplayName || payload.Name || 'New asset',
+        AssetKindId: kind.Id,
+        AssetGroupId: payload.AssetGroupId ?? kind.AssetGroupId ?? null,
+        EntryKind: kind.EntryKind || 'Cash',
+        Archived: false
+    };
+    demoState.assets.push(asset);
+    return asset;
+}
+
+function updateObject(target, payload) {
+    Object.entries(payload || {}).forEach(([key, value]) => {
+        if (key !== 'Id') target[key] = clone(value);
+    });
+    return target;
+}
+
+function findIntegration(id) {
+    return demoState.integrations.find(item => String(item.Id) === String(id));
+}
+
+function mutateSettings(body) {
+    Object.entries(body).forEach(([key, value]) => {
+        demoState.settings[key] = typeof value === 'string' ? value : json(value);
+        try {
+            const parsed = JSON.parse(demoState.settings[key]);
+            if (key === 'wealthWatcherGeneralSettings') store.state.generalSettings = parsed;
+            if (key === 'wealthWatcherFeatureSettings') store.state.featureSettings = parsed;
+            if (key === 'wealthWatcherForecastSettings') store.state.forecastSettings = parsed;
+            if (key === 'wealthWatcherFireSettings') store.state.fireSettings = parsed;
+            if (key === 'wealthWatcherBudgetSettings') store.state.budgetSettings = parsed;
+        } catch {
+            // Settings are persisted as opaque JSON strings by the real API.
+        }
+    });
+    return clone(demoState.settings);
+}
+
+function handleGet(path, searchParams) {
+    if (path === '/settings') return response(clone(demoState.settings));
+    if (path === '/classification-groups') return response(clone(demoState.groups));
+    const groupValuesMatch = path.match(/^\/classification-groups\/([^/]+)\/values$/);
+    if (groupValuesMatch) {
+        const group = findGroup(decodeURIComponent(groupValuesMatch[1]));
+        return group ? response(clone(group.Values || [])) : errorResponse(`Classification group '${groupValuesMatch[1]}' was not found.`);
+    }
+    if (path === '/categories') return response(clone(demoState.categories));
+    if (path === '/assets') return response(catalogueAssets(searchParams));
+    const assetMatch = path.match(/^\/assets\/([^/]+)$/);
+    if (assetMatch) {
+        const asset = findAsset(decodeURIComponent(assetMatch[1]));
+        return asset ? response(clone(asset)) : errorResponse(`Asset '${assetMatch[1]}' was not found.`);
+    }
+    const valueMatch = path.match(/^\/classification-values\/([^/]+)$/);
+    if (valueMatch) {
+        const value = findValue(decodeURIComponent(valueMatch[1]));
+        return value ? response(clone(value)) : errorResponse(`Classification value '${valueMatch[1]}' was not found.`);
+    }
+    const namesMatch = path.match(/^\/wealth\/([^/]+)\/names$/);
+    if (namesMatch) return response(namesForCategory(decodeURIComponent(namesMatch[1])));
+    if (path === '/dashboard') return response(buildDashboard(searchParams.get('period') || '1M'));
+    if (path === '/history') return response(buildDashboard(searchParams.get('period') || '1Y'));
+    if (path === '/audits') {
+        const page = Math.max(1, Number(searchParams.get('page')) || 1);
+        const pageSize = Math.max(1, Number(searchParams.get('pageSize')) || 10);
+        return response({ Rows: clone(demoState.audits.slice((page - 1) * pageSize, page * pageSize)), Total: demoState.audits.length, Page: page, PageSize: pageSize });
+    }
+    if (path === '/calendar') return response(buildCalendar(searchParams.get('year'), searchParams.get('month')));
+    if (path === '/integrations/catalog') return response(clone(demoState.integrationCatalog));
+    if (path === '/integrations') return response(clone(demoState.integrations));
+    if (path === '/integrations/settings') return response(clone(demoState.marketHours));
+    const integrationMatch = path.match(/^\/integrations\/([^/]+)$/);
+    if (integrationMatch) {
+        const integration = findIntegration(decodeURIComponent(integrationMatch[1]));
+        return integration ? response(clone(integration)) : errorResponse(`Integration '${integrationMatch[1]}' was not found.`);
+    }
+    const propertyMatch = path.match(/^\/properties\/([^/]+)$/);
+    if (propertyMatch) {
+        const asset = findAsset(decodeURIComponent(propertyMatch[1]));
+        if (!asset || asset.EntryKind !== 'Property') return errorResponse(`Property '${propertyMatch[1]}' was not found.`);
+        const entry = demoState.entries.filter(item => item.AssetId === asset.Id).sort((a, b) => b.Date.localeCompare(a.Date))[0];
+        return response({ Id: asset.Id, Name: asset.DisplayName, Value: entry?.Value || 0, Mortgage: entry?.Mortgage || 0, Archived: asset.Archived });
+    }
+    const categoryAggregateMatch = path.match(/^\/wealth\/([^/]+)\/(aggregate|current|current-observation)$/);
+    if (categoryAggregateMatch) return response(buildCurrentObservation(decodeURIComponent(categoryAggregateMatch[1])));
+    if (path === '/wealth/aggregate' || path === '/wealth/current' || path === '/current-observation' || path === '/wealth/current-observations') return response({ Date: todayKey(), Categories: demoState.categories.map(category => category.Id) });
+    throw new Error(`Unsupported demo GET route: ${path}`);
+}
+
+function buildCalendar(yearValue, monthValue) {
+    const year = Number(yearValue) || new Date().getUTCFullYear();
+    const month = Number(monthValue) || new Date().getUTCMonth() + 1;
+    const first = new Date(Date.UTC(year, month - 1, 1));
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const allDates = allObservationDates();
+    const days = Array.from({ length: lastDay }, (_, index) => {
+        const date = dateKey(new Date(first.getTime() + index * DAY_MS));
+        const total = portfolioTotalAtDate(date);
+        const previousDate = dateKey(new Date(first.getTime() + (index - 1) * DAY_MS));
+        const previousTotal = portfolioTotalAtDate(previousDate);
+        const hasObservation = demoState.entries.some(entry => entry.Date === date);
+        const hasPreviousObservation = demoState.entries.some(entry => entry.Date === previousDate);
+        const changeAvailable = hasObservation && hasPreviousObservation && total !== null && previousTotal !== null;
+        const change = changeAvailable ? Number((total - previousTotal).toFixed(2)) : null;
+        const percentage = changeAvailable && previousTotal !== 0
+            ? Number(((change / previousTotal) * 100).toFixed(4))
+            : changeAvailable ? 0 : null;
+        return {
+            Date: date,
+            Total: total === null ? null : Number(total.toFixed(2)),
+            HasObservation: hasObservation,
+            ChangeAvailable: changeAvailable,
+            Change: change,
+            Percentage: percentage,
+            IsFuture: date > todayKey()
+        };
+    });
+    const previousMonth = new Date(Date.UTC(year, month - 2, 1));
+    const previous = buildCalendarTotals(previousMonth.getUTCFullYear(), previousMonth.getUTCMonth() + 1);
+    const current = [...days].reverse().find(day => day.HasObservation && day.Total !== null);
+    const prior = [...previous].reverse().find(day => day.HasObservation && day.Total !== null);
+    return {
+        Days: days,
+        EarliestHistoryDate: allDates[0] || null,
+        MonthComparison: current && prior ? {
+            Available: true,
+            CurrentTotal: current.Total,
+            PreviousTotal: prior.Total,
+            Change: Number((current.Total - prior.Total).toFixed(2)),
+            Percentage: prior.Total === 0 ? 0 : Number((((current.Total - prior.Total) / prior.Total) * 100).toFixed(4)),
+            CurrentDate: current.Date,
+            PreviousDate: prior.Date
+        } : null
+    };
+}
+
+function buildCalendarTotals(year, month) {
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return Array.from({ length: lastDay }, (_, index) => {
+        const date = dateKey(new Date(Date.UTC(year, month - 1, index + 1)));
+        return { Date: date, Total: portfolioTotalAtDate(date), HasObservation: demoState.entries.some(entry => entry.Date === date) };
+    });
+}
+
+function portfolioTotalAtDate(date) {
+    const totals = demoState.categories.map(category => {
+        const points = buildCategoryHistory(category, 'ALL').Data.filter(point => point.Time <= date);
+        return points.at(-1)?.Value;
+    }).filter(value => value !== undefined);
+    return totals.length ? Number(totals.reduce((total, value) => total + numberValue(value), 0).toFixed(2)) : null;
+}
+
+function handleWrite(path, method, body, searchParams) {
+    if (path === '/settings' && method === 'POST') return response(mutateSettings(body));
+    if (path === '/sync' && method === 'POST') {
+        createAudit('Demo sync completed.', 'Demo sync', 0);
+        return response({ Succeeded: true, Message: 'Demo data synchronized successfully.', LastSyncDateTime: new Date().toISOString() });
+    }
+    if (path === '/wealth' && method === 'POST') {
+        let asset = body.AssetId ? findAsset(body.AssetId) : null;
+        if (!asset) asset = createAsset({ DisplayName: body.Name, AssetKindId: body.ClassificationValueIds?.[0] }, body.Type);
+        const entry = addEntry(body, { AssetId: asset.Id, Type: categoryForType(body.Type)?.Id || body.Type, Name: asset.DisplayName });
+        createAudit(`Added ${entry.Name}.`, 'Manual entry', 1);
+        return response(clone(entry), 201);
+    }
+    if (path === '/properties' && method === 'POST') {
+        const asset = createAsset({ DisplayName: body.Name, AssetKindId: 'kind-property' }, 'property');
+        const entry = addEntry(body, { AssetId: asset.Id, Type: 'property', Name: asset.DisplayName });
+        createAudit(`Added property ${asset.DisplayName}.`, 'Manual entry', 1);
+        return response({ ...clone(asset), Entry: clone(entry) }, 201);
+    }
+    const propertyEntryMatch = path.match(/^\/properties\/([^/]+)\/entries$/);
+    if (propertyEntryMatch && method === 'POST') {
+        const asset = findAsset(decodeURIComponent(propertyEntryMatch[1]));
+        if (!asset || asset.EntryKind !== 'Property') return errorResponse(`Property '${propertyEntryMatch[1]}' was not found.`);
+        const entry = addEntry(body, { AssetId: asset.Id, Type: 'property', Name: asset.DisplayName });
+        createAudit(`Added property entry for ${asset.DisplayName}.`, 'Manual entry', 1);
+        return response(clone(entry), 201);
+    }
+    const propertyMatch = path.match(/^\/properties\/([^/]+)$/);
+    if (propertyMatch && method === 'PATCH') {
+        const asset = findAsset(decodeURIComponent(propertyMatch[1]));
+        if (!asset || asset.EntryKind !== 'Property') return errorResponse(`Property '${propertyMatch[1]}' was not found.`);
+        if (body.Archived !== undefined) asset.Archived = body.Archived === true;
+        createAudit(`${asset.Archived ? 'Archived' : 'Restored'} property ${asset.DisplayName}.`, 'Catalogue', 0);
+        return response(clone(asset));
+    }
+    if (path === '/assets' && method === 'POST') {
+        const asset = createAsset(body);
+        createAudit(`Created asset ${asset.DisplayName}.`, 'Catalogue', 0);
+        return response(clone(asset), 201);
+    }
+    const assetMatch = path.match(/^\/assets\/([^/]+)$/);
+    if (assetMatch && method === 'PATCH') {
+        const asset = findAsset(decodeURIComponent(assetMatch[1]));
+        if (!asset) return errorResponse(`Asset '${assetMatch[1]}' was not found.`);
+        updateObject(asset, body);
+        if (body.DisplayName) asset.Name = body.DisplayName;
+        createAudit(`${asset.Archived ? 'Archived' : 'Updated'} asset ${asset.DisplayName}.`, 'Catalogue', 0);
+        return response(clone(asset));
+    }
+    const valuesMatch = path.match(/^\/classification-groups\/([^/]+)\/values$/);
+    if (valuesMatch && method === 'POST') {
+        const group = findGroup(decodeURIComponent(valuesMatch[1]));
+        if (!group) return errorResponse(`Classification group '${valuesMatch[1]}' was not found.`);
+        const value = { ...clone(body), Id: nextId('value'), DisplayName: body.DisplayName || body.Name || 'New value', ArchivedAt: null };
+        group.Values = group.Values || [];
+        group.Values.push(value);
+        createAudit(`Created catalogue value ${value.DisplayName}.`, 'Catalogue', 0);
+        return response(clone(value), 201);
+    }
+    const valueMatch = path.match(/^\/classification-values\/([^/]+)$/);
+    if (valueMatch && (method === 'PATCH' || method === 'DELETE')) {
+        const value = findValue(decodeURIComponent(valueMatch[1]));
+        if (!value) return errorResponse(`Classification value '${valueMatch[1]}' was not found.`);
+        if (method === 'DELETE') value.ArchivedAt = new Date().toISOString();
+        else updateObject(value, body);
+        createAudit(`${method === 'DELETE' ? 'Archived' : 'Updated'} catalogue value ${value.DisplayName || value.Key}.`, 'Catalogue', 0);
+        return response(clone(value));
+    }
+    if (path === '/wealth/forecast' && method === 'POST') return response(buildForecast(body));
+    if (path === '/integrations/settings' && method === 'PUT') {
+        demoState.marketHours = updateObject(demoState.marketHours, body);
+        return response(clone(demoState.marketHours));
+    }
+    const providerMatch = path.match(/^\/integrations\/([^/]+)$/);
+    if (providerMatch && method === 'POST') {
+        const providerKey = decodeURIComponent(providerMatch[1]);
+        const descriptor = demoState.integrationCatalog.find(item => item.Key === providerKey);
+        if (!descriptor) return errorResponse(`Integration provider '${providerKey}' was not found.`);
+        const integration = { Id: nextId('connection'), ProviderKey: providerKey, DisplayName: descriptor.DisplayName, Status: 'NeedsCredentials', PollingIntervalMinutes: descriptor.MinimumPollingIntervalMinutes || 60, Enabled: false, OnlyPollDuringMarketTimes: true, Accounts: [] };
+        demoState.integrations.push(integration);
+        return response(clone(integration), 201);
+    }
+    const integrationCredentialsMatch = path.match(/^\/integrations\/([^/]+)\/credentials$/);
+    if (integrationCredentialsMatch && method === 'PUT') {
+        const integration = findIntegration(decodeURIComponent(integrationCredentialsMatch[1]));
+        if (!integration) return errorResponse(`Integration '${integrationCredentialsMatch[1]}' was not found.`);
+        integration.Status = 'Ready';
+        integration.CredentialsConfigured = true;
+        return response(clone(integration));
+    }
+    const integrationTestMatch = path.match(/^\/integrations\/([^/]+)\/test$/);
+    if (integrationTestMatch && method === 'POST') {
+        const integration = findIntegration(decodeURIComponent(integrationTestMatch[1]));
+        if (!integration) return errorResponse(`Integration '${integrationTestMatch[1]}' was not found.`);
+        integration.Status = 'Connected';
+        return response({ Succeeded: true, Message: 'The demo connection is working.' });
+    }
+    const discoverMatch = path.match(/^\/integrations\/([^/]+)\/accounts\/discover$/);
+    if (discoverMatch && method === 'POST') {
+        const integration = findIntegration(decodeURIComponent(discoverMatch[1]));
+        if (!integration) return errorResponse(`Integration '${discoverMatch[1]}' was not found.`);
+        if (!integration.Accounts.length) integration.Accounts.push({ Id: nextId('account'), Name: `${integration.DisplayName} demo account`, DisplayName: `${integration.DisplayName} demo account`, AssetAllocations: [] });
+        integration.Status = 'AccountsDiscovered';
+        return response({ Succeeded: true, Message: 'Demo accounts were discovered successfully.', Accounts: clone(integration.Accounts) });
+    }
+    const allocationMatch = path.match(/^\/integrations\/([^/]+)\/accounts\/([^/]+)\/allocation$/);
+    if (allocationMatch && method === 'PUT') {
+        const integration = findIntegration(decodeURIComponent(allocationMatch[1]));
+        const account = integration?.Accounts.find(item => String(item.Id) === String(decodeURIComponent(allocationMatch[2])));
+        if (!account) return errorResponse(`Integration account '${allocationMatch[2]}' was not found.`);
+        const role = body.Role || 'Deployed';
+        account.AssetAllocations = account.AssetAllocations || [];
+        account.AssetAllocations = account.AssetAllocations.filter(item => item.Role !== role);
+        if (!body.Clear) {
+            const asset = body.AssetId ? findAsset(body.AssetId) : createAsset({ DisplayName: body.AssetName, AssetKindId: body.AssetKindId });
+            if (!asset) return errorResponse(`Asset '${body.AssetId}' was not found.`);
+            account.AssetAllocations.push({ Role: role, AssetId: asset.Id, AssetDisplayName: asset.DisplayName });
+        }
+        return response(clone(account));
+    }
+    if (providerMatch && method === 'PATCH') {
+        const integration = findIntegration(decodeURIComponent(providerMatch[1]));
+        if (!integration) return errorResponse(`Integration '${providerMatch[1]}' was not found.`);
+        updateObject(integration, body);
+        return response(clone(integration));
+    }
+    if (providerMatch && method === 'DELETE') {
+        const index = demoState.integrations.findIndex(item => String(item.Id) === String(decodeURIComponent(providerMatch[1])));
+        if (index < 0) return errorResponse(`Integration '${providerMatch[1]}' was not found.`);
+        demoState.integrations.splice(index, 1);
+        return response({ Succeeded: true });
+    }
+    throw new Error(`Unsupported demo ${method} route: ${path}`);
+}
+
+function buildForecast(request) {
+    const categories = buildCurrentObservation().Categories || [];
+    const included = new Set((request.includedAssets || request.IncludedAssets || demoState.categories.map(category => category.Id))
+        .map(value => normalize(value)));
+    const stackOrder = categories
+        .map(category => category.Id)
+        .filter(category => included.has(normalize(category)) || included.size === 0);
+    const values = Object.fromEntries(stackOrder.map(category => [category,
+        numberValue(categories.find(item => item.Id === category)?.Data?.at(-1)?.Value)]));
+    const annualReturn = numberValue(request.annualReturn ?? request.AnnualReturn ?? 4) / 100;
+    const monthlyContribution = numberValue(request.monthlyContribution ?? request.MonthlyContribution ?? 0);
+    const target = numberValue(request.target ?? request.Target ?? 1000000);
+    const projection = Array.from({ length: 361 }, (_, month) => {
+        const pointValues = {};
+        Object.entries(values).forEach(([category, startingValue]) => {
+            const growth = startingValue * ((1 + annualReturn) ** (month / 12));
+            pointValues[category] = Number((growth + (category === 'investments' ? monthlyContribution * month : 0)).toFixed(2));
+        });
+        const total = Number(Object.values(pointValues).reduce((sum, value) => sum + value, 0).toFixed(2));
+        return { Date: dateKey(addDays(todayKey(), month * 30)), Values: pointValues, Total: total };
+    });
+    const hit = projection.findIndex(point => point.Total >= target);
+    return {
+        CurrentNW: Number(Object.values(values).reduce((sum, value) => sum + value, 0).toFixed(2)),
+        Projection: projection,
+        StackOrder: stackOrder,
+        SelectedStrategy: request.forecastStrategy || request.ForecastStrategy || 'fire-default',
+        SelectedStrategyDescription: 'A steady illustrative projection using fictional demo history.',
+        TargetHitMonth: hit < 0 ? 0 : hit,
+        TargetHitDate: hit < 0 ? null : projection[hit].Date,
+        RateSources: stackOrder.map(category => ({ AssetName: category, AssetType: category, AnnualRatePercent: numberValue(request.annualReturn ?? 4), Source: 'Fictional demo history', HistoricalPeriodCount: 12 }))
+    };
+}
+
+export async function handleDemoRequest(url, options = {}) {
+    const { path, parsed } = parseRequestUrl(url);
+    const method = String(options.method || 'GET').toUpperCase();
+    const body = readBody(options);
+    if (method === 'GET' || method === 'HEAD') {
+        const result = handleGet(path, parsed.searchParams);
+        return method === 'HEAD' ? response(undefined, result.status) : result;
+    }
+    const result = handleWrite(path, method, body, parsed.searchParams);
+    persistState();
+    return result;
+}
+
+export { DemoResponse };

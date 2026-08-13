@@ -1,5 +1,5 @@
 import { store } from '../store/store.js';
-import { fetchCached, fetchFresh, API_BASE_URL } from '../api/apiClient.js';
+import { fetchCached, fetchFresh, API_BASE_URL, apiRequest } from '../api/apiClient.js';
 import { formatter } from '../utils/formatters.js';
 import { renderFireView } from './FireTracker.js';
 import { requestConfirmation, requestNotification } from '../components/ConfirmationModal.js';
@@ -138,7 +138,8 @@ async function archiveDashboardResource({ url, method, body, name, errorTitle })
             options.headers = { 'Content-Type': 'application/json' };
             options.body = JSON.stringify(body);
         }
-        const response = await fetch(url, options);
+        const response = await apiRequest(url, options);
+        if (isDemoActionDisabled(response)) return;
         if (!response.ok) {
             await requestNotification({
                 title: errorTitle,
@@ -165,6 +166,7 @@ async function archiveDashboardResource({ url, method, body, name, errorTitle })
 }
 
 async function readApiError(response, fallback) {
+    if (typeof response?.text !== 'function') return fallback;
     const responseText = await response.text();
     if (!responseText) return fallback;
     try {
@@ -204,7 +206,8 @@ export async function forceSync() {
     btn.disabled = true;
     
     try {
-        const res = await fetch(`${API_BASE_URL}/sync`, { method: 'POST' });
+        const res = await apiRequest(`${API_BASE_URL}/sync`, { method: 'POST' });
+        if (isDemoActionDisabled(res)) return;
         if (res.ok) {
             store.clearCache();
             if (store.state.currentPeriod === '1H') {
@@ -236,6 +239,13 @@ export async function forceSync() {
         if (svg) svg.style.animation = '';
         btn.disabled = false;
     }
+}
+
+function isDemoActionDisabled(response) {
+    return response == null
+        || response.demoDisabled === true
+        || response.actionDisabled === true
+        || response.disabled === true;
 }
 
 export function loadDashboard({ force = false } = {}) {

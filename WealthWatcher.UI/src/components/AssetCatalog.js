@@ -1,5 +1,5 @@
 import { store } from '../store/store.js';
-import { API_BASE_URL } from '../api/apiClient.js';
+import { apiRequest, API_BASE_URL } from '../api/apiClient.js';
 import { requestConfirmation, requestNotification } from './ConfirmationModal.js';
 import { showToast } from './Toast.js';
 import { renderCatalogInputField, renderSelectField, escapeHtml } from './FormFields.js';
@@ -36,6 +36,20 @@ const catalogFilterDefinitions = {
         allLabel: 'All Groups'
     }
 };
+
+async function request(path, options = {}) {
+    const response = await apiRequest(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+    });
+    const payload = response.status === 204 || typeof response.json !== 'function'
+        ? null
+        : await response.json().catch(() => null);
+    if (!response.ok) {
+        throw new Error(payload?.Error || payload?.error || `Request failed (${response.status}).`);
+    }
+    return payload;
+}
 
 function renderCatalogForms() {
     const target = document.getElementById('asset-catalog-create-forms');
@@ -420,7 +434,6 @@ async function addValue(form, refresh) {
     const displayName = String(formData.get('displayName') || '').trim();
     if (!displayName) return;
 
-    let response;
     try {
         if (form.id === 'asset-form') {
             const assetKindId = String(formData.get('assetKindId') || '').trim();
@@ -432,9 +445,8 @@ async function addValue(form, refresh) {
                 return;
             }
 
-            response = await fetch(`${API_BASE_URL}/assets`, {
+            await request('/assets', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ DisplayName: displayName, AssetKindId: assetKindId })
             });
         } else {
@@ -449,27 +461,15 @@ async function addValue(form, refresh) {
                 if (parentValueId) payload.ParentValueId = parentValueId;
             }
 
-            response = await fetch(
-                `${API_BASE_URL}/classification-groups/${encodeURIComponent(form.dataset.groupKey || ASSET_GROUPS_KEY)}/values`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+            await request(
+                `/classification-groups/${encodeURIComponent(form.dataset.groupKey || ASSET_GROUPS_KEY)}/values`,
+                { method: 'POST', body: JSON.stringify(payload) });
         }
     } catch (error) {
         console.error(error);
         await requestNotification({
             title: 'Unable to add catalogue value',
-            message: 'There was a problem communicating with the API.'
-        });
-        return;
-    }
-
-    if (!response.ok) {
-        await requestNotification({
-            title: 'Unable to add catalogue value',
-            message: await getApiError(response, 'Unable to add catalogue value.')
+            message: error.message || 'There was a problem communicating with the API.'
         });
         return;
     }
@@ -530,7 +530,7 @@ async function saveValue(form, refresh) {
     const displayName = String(formData.get('displayName') || '').trim();
     if (!displayName) return;
 
-    let url;
+    let path;
     let payload;
     if (editorState.isAsset) {
         const assetKindId = String(formData.get('assetKindId') || '').trim();
@@ -542,9 +542,7 @@ async function saveValue(form, refresh) {
             });
             return;
         }
-        url = editorState.isNewAsset
-            ? `${API_BASE_URL}/assets`
-            : `${API_BASE_URL}/assets/${editorState.id}`;
+        path = editorState.isNewAsset ? '/assets' : `/assets/${editorState.id}`;
         payload = {
             DisplayName: displayName,
             AssetKindId: assetKindId,
@@ -552,7 +550,7 @@ async function saveValue(form, refresh) {
             SetAssetGroup: true
         };
     } else {
-        url = `${API_BASE_URL}/classification-values/${editorState.id}`;
+        path = `/classification-values/${editorState.id}`;
         payload = {
             DisplayName: displayName,
             Color: formData.get('color') || '#64748b',
@@ -565,25 +563,16 @@ async function saveValue(form, refresh) {
         }
     }
 
-    let response;
     try {
-        response = await fetch(url, {
+        await request(path, {
             method: editorState.isNewAsset ? 'POST' : 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
     } catch (error) {
         console.error(error);
         await requestNotification({
             title: 'Unable to update catalogue value',
-            message: 'There was a problem communicating with the API.'
-        });
-        return;
-    }
-    if (!response.ok) {
-        await requestNotification({
-            title: 'Unable to update catalogue value',
-            message: await getApiError(response, 'Unable to update catalogue value.')
+            message: error.message || 'There was a problem communicating with the API.'
         });
         return;
     }
@@ -633,29 +622,19 @@ async function archiveValue(state, refresh) {
         confirmLabel: `Archive ${noun}`
     })) return;
 
-    let response;
     try {
-        response = state.isAsset
-            ? await fetch(`${API_BASE_URL}/assets/${state.id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ Archived: true })
-            })
-            : await fetch(`${API_BASE_URL}/classification-values/${state.id}`, {
-                method: 'DELETE'
-            });
+        const path = state.isAsset
+            ? `/assets/${state.id}`
+            : `/classification-values/${state.id}`;
+        const options = state.isAsset
+            ? { method: 'PATCH', body: JSON.stringify({ Archived: true }) }
+            : { method: 'DELETE' };
+        await request(path, options);
     } catch (error) {
         console.error(error);
         await requestNotification({
             title: `Unable to archive ${noun}`,
-            message: 'There was a problem communicating with the API.'
-        });
-        return;
-    }
-    if (!response.ok) {
-        await requestNotification({
-            title: `Unable to archive ${noun}`,
-            message: await getApiError(response, `Unable to archive ${noun}.`)
+            message: error.message || 'There was a problem communicating with the API.'
         });
         return;
     }
@@ -886,22 +865,13 @@ export async function moveAssetToGroup(assetId, destinationGroupId, refresh = as
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/assets/${encodeURIComponent(assetId)}`, {
+        await request(`/assets/${encodeURIComponent(assetId)}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 AssetGroupId: noGroupDestination ? null : String(destinationGroupId),
                 SetAssetGroup: true
             })
         });
-        if (!response.ok) {
-            await requestNotification({
-                title: 'Unable to move asset',
-                message: await getApiError(response, `The asset could not be moved to ${destinationLabel}.`)
-            });
-            setDragStatus(catalogue, `Unable to move ${getAssetLabel(assetId)} to ${destinationLabel}.`);
-            return false;
-        }
 
         await refresh();
         renderAssetCatalog();
@@ -917,7 +887,7 @@ export async function moveAssetToGroup(assetId, destinationGroupId, refresh = as
         console.error(error);
         await requestNotification({
             title: 'Unable to move asset',
-            message: 'There was a problem communicating with the API.'
+            message: error.message || 'There was a problem communicating with the API.'
         });
         setDragStatus(catalogue, `Unable to move ${getAssetLabel(assetId)} to ${destinationLabel}.`);
         return false;
@@ -1323,15 +1293,4 @@ function setEditorVisible(id, visible) {
 
 function getSafeColor(color) {
     return /^#[0-9a-f]{6}$/i.test(String(color || '')) ? color : '#64748b';
-}
-
-async function getApiError(response, fallback) {
-    const responseText = await response.text();
-    if (!responseText) return fallback;
-    try {
-        const body = JSON.parse(responseText);
-        return body?.Error || body?.error || fallback;
-    } catch {
-        return responseText.slice(0, 300) || fallback;
-    }
 }

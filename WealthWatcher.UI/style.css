@@ -1,5 +1,88 @@
 * { box-sizing: border-box; }
 
+.demo-mode-banner {
+    align-items: center;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.13), rgba(16, 185, 129, 0.1));
+    border-bottom: 1px solid rgba(34, 211, 238, 0.3);
+    color: var(--text-primary, #f8fafc);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 0.65rem clamp(1rem, 3vw, 2rem);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 110;
+    box-shadow: 0 4px 18px rgba(2, 6, 23, 0.24);
+}
+
+.demo-mode-banner[hidden] { display: none; }
+
+.demo-mode-copy {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    min-width: 0;
+}
+
+.demo-mode-copy > span:last-child {
+    color: var(--text-muted, #a0aec0);
+    font-size: 0.8rem;
+    flex-basis: 100%;
+}
+
+.demo-mode-eyebrow {
+    color: var(--cyan, #22d3ee);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.demo-mode-actions {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.5rem;
+}
+
+.demo-mode-actions .action-btn {
+    justify-content: center;
+    text-decoration: none;
+}
+
+.demo-reset-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.demo-mode .top-nav {
+    left: 0;
+    position: fixed;
+    right: 0;
+    top: var(--demo-banner-height, 0px);
+    width: 100%;
+    z-index: 100;
+}
+
+@media (max-width: 640px) {
+    .demo-mode-banner {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .demo-mode-actions {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .demo-mode-actions .action-btn { width: 100%; }
+}
+
 [hidden] {
     display: none !important;
 }
@@ -35,6 +118,10 @@ body {
     min-height: 100vh;
     box-sizing: border-box;
     overflow-x: hidden;
+}
+
+body.demo-mode {
+    padding-top: calc(var(--demo-banner-height, 0px) + var(--demo-app-bar-height, 0px));
 }
 
 .main-content {
