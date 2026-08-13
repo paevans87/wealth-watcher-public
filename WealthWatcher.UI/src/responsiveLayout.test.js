@@ -39,6 +39,8 @@ test('mobile Budget configuration uses contained controls and card rows', () => 
     assert.match(stylesheet, /#budget-settings-pane\s+\.table-container\s*\{[\s\S]*overflow-x:\s*hidden\s*!important/);
     assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table\s*\{[\s\S]*table-layout:\s*fixed/);
     assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table:has\(\.budget-item-row\)\s+\.budget-item-row\s*\{[\s\S]*display:\s*grid/);
+    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table\[data-budget-category="savings"\]\s+th\s*\{[\s\S]*font-size:\s*0\.68rem\s*!important[\s\S]*word-break:\s*normal/);
+    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table\[data-budget-category="savings"\]\s+th:nth-child\(2\)\s*\{\s*width:\s*21%\s*!important/);
 });
 
 test('settings controls and integrations cannot establish a narrow-screen min-content width', () => {

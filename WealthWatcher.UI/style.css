@@ -4992,3 +4992,25 @@ body.obfuscated h1 .obfuscate-val {
         min-width: 0;
     }
 }
+
+/* Give the mobile Savings header enough room for readable whole words. */
+@media (max-width: 560px) {
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th {
+        box-sizing: border-box;
+        font-size: 0.68rem !important;
+        line-height: 1.15;
+        padding-left: 0.3rem !important;
+        padding-right: 0.3rem !important;
+        text-align: left !important;
+        white-space: normal;
+        overflow-wrap: normal;
+        word-break: normal;
+        hyphens: none;
+    }
+
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(1) { width: 20% !important; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(2) { width: 21% !important; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(3) { width: 31% !important; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(4) { width: 20% !important; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(5) { width: 8% !important; }
+}
