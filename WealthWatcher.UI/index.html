@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="stylesheet" href="style.css?v=9">
+    <link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 
@@ -44,31 +44,31 @@
             </button>
         </div>
         <div class="nav-links">
-            <a href="#dashboard" class="nav-link active" id="nav-dashboard">
+            <a href="#dashboard" class="nav-link active" id="nav-dashboard" aria-label="Dashboard">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                 <span class="nav-text">Dashboard</span>
             </a>
-            <a href="#history" class="nav-link" id="nav-history">
+            <a href="#history" class="nav-link" id="nav-history" aria-label="History">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span class="nav-text">History</span>
             </a>
-            <a href="#calendar" class="nav-link" id="nav-calendar">
+            <a href="#calendar" class="nav-link" id="nav-calendar" aria-label="Calendar">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 <span class="nav-text">Calendar</span>
             </a>
-            <a href="#forecast" class="nav-link" id="nav-forecast">
+            <a href="#forecast" class="nav-link" id="nav-forecast" aria-label="Forecast">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
                 <span class="nav-text">Forecast</span>
             </a>
-            <a href="#fire" class="nav-link" id="nav-fire">
+            <a href="#fire" class="nav-link" id="nav-fire" aria-label="Tracker">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 7c0-5.333-8-5.333-8 0"></path><path d="M10 7v14"></path><path d="M6 21h12"></path><path d="M6 13h10"></path></svg>
                 <span class="nav-text">Tracker</span>
             </a>
-            <a href="#budget" class="nav-link" id="nav-budget">
+            <a href="#budget" class="nav-link" id="nav-budget" aria-label="Budget">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
                 <span class="nav-text">Budget</span>
             </a>
-            <a href="#settings" class="nav-link" id="nav-settings">
+            <a href="#settings" class="nav-link" id="nav-settings" aria-label="Settings">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 <span class="nav-text">Settings</span>
             </a>
@@ -471,10 +471,10 @@
 
     <!-- Add Entry Modal -->
     <div class="modal-overlay" id="entry-modal">
-        <div class="modal-content glass-panel">
+        <div class="modal-content glass-panel" role="dialog" aria-modal="true" aria-labelledby="entry-modal-title">
             <div class="modal-header">
                 <h2 id="entry-modal-title">Add Wealth Entry</h2>
-                <button class="close-btn" onclick="closeModal('entry-modal')">&times;</button>
+                <button class="close-btn" type="button" onclick="closeModal('entry-modal')" aria-label="Close">&times;</button>
             </div>
             <form id="add-entry-form">
                 <div class="form-group">
@@ -560,10 +560,10 @@
 
     <!-- Audit Log Modal -->
     <div class="modal-overlay" id="audit-modal">
-        <div class="modal-content glass-panel audit-panel">
+        <div class="modal-content glass-panel audit-panel" role="dialog" aria-modal="true" aria-labelledby="audit-modal-title">
             <div class="modal-header">
-                <h2>Sync Audit Log</h2>
-                <button class="close-btn" onclick="closeModal('audit-modal')">&times;</button>
+                <h2 id="audit-modal-title">Sync Audit Log</h2>
+                <button class="close-btn" type="button" onclick="closeModal('audit-modal')" aria-label="Close">&times;</button>
             </div>
             <div class="audit-table-container">
                 <table class="audit-table">
@@ -839,7 +839,7 @@
                         <form id="budget-settings-form">
                             <h5 style="color: var(--cyan); margin-bottom: 0.5rem; font-size: 1rem;">Income Sources</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                                <table class="budget-table" data-budget-category="income" style="width: 100%; text-align: left; border-collapse: collapse;">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
@@ -855,7 +855,7 @@
 
                             <h5 style="color: #ef4444; margin-bottom: 0.5rem; font-size: 1rem;">Bills (Needs)</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table">
+                                <table class="budget-table" data-budget-category="bills">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
@@ -871,7 +871,7 @@
 
                             <h5 style="color: #10b981; margin-bottom: 0.5rem; font-size: 1rem;">Savings (Future)</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table">
+                                <table class="budget-table" data-budget-category="savings">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
@@ -889,7 +889,7 @@
 
                             <h5 style="color: #8b5cf6; margin-bottom: 0.5rem; font-size: 1rem;">Spend (Wants)</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table">
+                                <table class="budget-table" data-budget-category="spend">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>

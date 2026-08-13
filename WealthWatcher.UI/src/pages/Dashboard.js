@@ -16,6 +16,7 @@ let hourlyRefreshInterval = null;
 let hourlyBoundaryTimeout = null;
 let hourlyRefreshLifecycleSetup = false;
 let dashboardActionsSetup = false;
+let collapsedAssetGroupKeys = new Set();
 let refreshDashboardData = async () => {};
 
 export function setupDashboardActions({ refresh } = {}) {
@@ -516,18 +517,38 @@ function renderAssetGroupSections(descriptors) {
         return new Map(descriptors.map(descriptor => [descriptor.key, document.getElementById(descriptor.gridId)]));
     }
 
+    const existingSections = typeof assetGroupSections.querySelectorAll === 'function'
+        ? assetGroupSections.querySelectorAll('[data-asset-group-key]')
+        : [];
+    existingSections.forEach(section => {
+        if (section.open) collapsedAssetGroupKeys.delete(section.dataset.assetGroupKey);
+        else collapsedAssetGroupKeys.add(section.dataset.assetGroupKey);
+    });
+
     assetGroupSections.innerHTML = descriptors.map(descriptor => {
-        const heading = descriptor.title
-            ? `<h4 class="section-title">
-                    <span>${escapeHtml(descriptor.title)}</span>
+        const title = descriptor.title || 'Assets';
+        const openAttribute = collapsedAssetGroupKeys.has(descriptor.key) ? '' : ' open';
+        return `<details class="asset-group-section lane-section" data-asset-group-key="${escapeHtml(descriptor.key)}"${openAttribute}>
+            <summary class="asset-group-summary section-title">
+                <span>${escapeHtml(title)}</span>
+                <span class="asset-group-summary-total">
                     <span id="${escapeHtml(descriptor.totalId)}" class="obfuscate-val lane-total"></span>
-                </h4>`
-            : '';
-        return `<section class="asset-group-section lane-section">
-            ${heading}
+                    <span class="asset-group-summary-chevron" aria-hidden="true">⌄</span>
+                </span>
+            </summary>
             <div class="grid-container" id="${escapeHtml(descriptor.gridId)}"></div>
-        </section>`;
+        </details>`;
     }).join('');
+
+    const renderedSections = typeof assetGroupSections.querySelectorAll === 'function'
+        ? assetGroupSections.querySelectorAll('details[data-asset-group-key]')
+        : [];
+    renderedSections.forEach(section => {
+        section.addEventListener?.('toggle', () => {
+            if (section.open) collapsedAssetGroupKeys.delete(section.dataset.assetGroupKey);
+            else collapsedAssetGroupKeys.add(section.dataset.assetGroupKey);
+        });
+    });
 
     return new Map(descriptors.map(descriptor => [descriptor.key, document.getElementById(descriptor.gridId)]));
 }
