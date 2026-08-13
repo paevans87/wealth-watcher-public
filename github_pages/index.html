@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0f172a">
     <meta name="description" content="WealthWatcher is an open-source, local-first personal-finance dashboard for tracking wealth, budgets, forecasts, and financial independence.">
-    <title>WealthWatcher — your whole financial picture</title>
+    <title>WealthWatcher — see your whole financial picture</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=4">
     <script src="clarity-config.js"></script>
     <script src="ga4-config.js"></script>
     <script src="analytics.js" defer></script>
@@ -40,9 +40,11 @@
             <span>WealthWatcher</span>
         </a>
         <nav class="site-nav" aria-label="Primary navigation">
-            <a href="#features">Features</a>
-            <a href="#privacy">Why local-first?</a>
-            <a class="nav-github" href="https://github.com/paevans87/wealth-watcher-public" target="_blank" rel="noreferrer">View on GitHub <span aria-hidden="true">↗</span></a>
+            <a href="#features">What you can do</a>
+            <a href="#demo">Demo</a>
+            <a href="#privacy">Your data</a>
+            <a class="nav-github" href="https://github.com/paevans87/wealth-watcher-public" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+            <a class="nav-demo" href="demo/">Try the live demo <span aria-hidden="true">↗</span></a>
         </nav>
     </header>
 
@@ -50,116 +52,161 @@
         <section class="hero shell">
             <div class="hero-copy">
                 <div class="eyebrow"><span class="eyebrow-dot"></span> Open source · local-first · MIT licensed</div>
-                <h1>Make sense of the <em>whole</em> picture.</h1>
-                <p class="hero-lede">WealthWatcher brings net worth, assets, history, budgets, forecasts, and financial independence planning into one calm, private dashboard.</p>
+                <h1>See your money’s <em>whole</em> picture.</h1>
+                <p class="hero-lede">Track net worth across cash, investments, pensions, property, and custom assets—then see what changed and what today’s choices could mean for your future.</p>
                 <div class="hero-actions">
-                    <a class="button button-primary" href="https://github.com/paevans87/wealth-watcher-public" target="_blank" rel="noreferrer">Explore the project <span aria-hidden="true">↗</span></a>
-                    <a class="button button-secondary" href="https://github.com/paevans87/wealth-watcher-public#run-with-docker-compose" target="_blank" rel="noreferrer">Read the quick start</a>
-                    <a class="button button-secondary" href="demo/">Try the browser demo</a>
+                    <a class="button button-primary" href="demo/">Try the live demo <span aria-hidden="true">↗</span></a>
+                    <a class="button button-secondary" href="https://github.com/paevans87/wealth-watcher-public#run-with-docker-compose" target="_blank" rel="noreferrer">Run it locally</a>
+                    <a class="text-link" href="https://github.com/paevans87/wealth-watcher-public" target="_blank" rel="noreferrer">View the source <span aria-hidden="true">↗</span></a>
                 </div>
-                <div class="hero-notes" aria-label="Project characteristics">
-                    <span><strong>Runs locally</strong><small>Docker Compose</small></span>
-                    <span><strong>Stores locally</strong><small>PostgreSQL</small></span>
-                    <span><strong>Built openly</strong><small>MIT licence</small></span>
+                <div class="hero-notes" aria-label="What WealthWatcher helps you see">
+                    <span><strong>Track</strong><small>Every asset in one view</small></span>
+                    <span><strong>Understand</strong><small>History and daily movement</small></span>
+                    <span><strong>Plan</strong><small>Budgets, forecasts, and FIRE</small></span>
                 </div>
             </div>
 
-            <div class="hero-visual" aria-label="Illustrative WealthWatcher dashboard preview">
+            <div class="hero-visual" role="img" aria-label="WealthWatcher dashboard preview showing the top navigation, holistic net worth, asset cards, and a period picker">
                 <div class="glow-orb glow-orb-cyan" aria-hidden="true"></div>
-                <div class="app-window">
+                <div class="app-window" aria-hidden="true">
                     <div class="window-chrome">
                         <div class="chrome-dots" aria-hidden="true"><i></i><i></i><i></i></div>
                         <span class="chrome-title">WEALTH WATCHER</span>
                         <span class="chrome-status"><span></span> private workspace</span>
                     </div>
-                    <div class="window-layout">
-                        <aside class="preview-sidebar" aria-hidden="true">
-                            <div class="preview-logo"><span class="mini-mark"></span><b>Wealth<br>Watcher</b></div>
-                            <div class="preview-nav preview-nav-active"><span class="nav-square"></span>Dashboard</div>
-                            <div class="preview-nav"><span class="nav-circle"></span>History</div>
-                            <div class="preview-nav"><span class="nav-line"></span>Forecast</div>
-                            <div class="preview-nav"><span class="nav-fire"></span>Tracker</div>
-                            <div class="preview-nav"><span class="nav-pie"></span>Budget</div>
-                            <div class="preview-nav preview-nav-settings"><span class="nav-gear"></span>Settings</div>
-                        </aside>
+                    <div class="preview-app">
+                        <div class="preview-top-nav">
+                            <div class="preview-logo"><span class="mini-mark"></span><b>Wealth Watcher</b></div>
+                            <div class="preview-nav-links">
+                                <span class="preview-nav-active">Dashboard</span>
+                                <span>History</span>
+                                <span>Calendar</span>
+                                <span>Forecast</span>
+                                <span>Tracker</span>
+                                <span>Budget</span>
+                                <span>Settings</span>
+                            </div>
+                            <span class="preview-privacy">◉</span>
+                        </div>
                         <div class="preview-main">
                             <div class="preview-heading">
                                 <div>
                                     <span class="preview-kicker">WEALTH WATCHER</span>
                                     <h2>Holistic Net Worth</h2>
-                                    <strong>£82,640 <span>+6.8%</span></strong>
+                                    <strong>£442,500 <span>+£21,014 · 4.99%</span></strong>
+                                    <small class="preview-ytd">YTD: +£212,770 · 92.62%</small>
                                 </div>
-                                <div class="period-picker" aria-hidden="true"><b>1M</b><span>3M</span><span>1Y</span><span>MAX</span></div>
+                                <div class="preview-heading-actions">
+                                    <div class="period-picker"><b>1M</b><span>3M</span><span>1Y</span><span>MAX</span></div>
+                                    <div class="preview-action-icons"><span>↻</span><span>◷</span></div>
+                                </div>
                             </div>
-                            <div class="preview-allocation" aria-hidden="true">
-                                <i class="allocation-cash"></i><i class="allocation-investments"></i><i class="allocation-property"></i><i class="allocation-pension"></i>
-                            </div>
+                            <div class="preview-allocation" aria-hidden="true"><i class="allocation-property"></i><i class="allocation-pension"></i><i class="allocation-investments"></i><i class="allocation-cash"></i></div>
                             <div class="preview-grid">
-                                <div class="preview-card preview-history-card">
-                                    <div class="preview-card-head"><span>Wealth journey</span><small>1M</small></div>
-                                    <div class="chart-area" aria-hidden="true">
-                                        <div class="chart-grid"></div>
-                                        <div class="chart-bars"><i style="height: 32%"></i><i style="height: 42%"></i><i style="height: 38%"></i><i style="height: 55%"></i><i style="height: 50%"></i><i style="height: 67%"></i><i style="height: 61%"></i><i style="height: 82%"></i><i style="height: 76%"></i><i style="height: 92%"></i></div>
-                                        <div class="chart-line"></div>
-                                    </div>
-                                    <div class="chart-labels"><span>01 Jul</span><span>31 Jul</span></div>
+                                <div class="preview-card preview-asset-card preview-asset-property">
+                                    <div class="preview-card-head"><span>Property</span><b>+8.8%</b></div>
+                                    <strong>£180,000</strong>
+                                    <div class="preview-sparkline preview-sparkline-property"><i></i></div>
+                                    <div class="preview-card-foot"><span>Primary Home</span><small>Equity</small></div>
                                 </div>
-                                <div class="preview-card preview-breakdown-card">
-                                    <div class="preview-card-head"><span>Asset groups</span><small>share</small></div>
-                                    <div class="asset-row"><span><i class="asset-dot dot-cyan"></i> Cash</span><b>18%</b></div>
-                                    <div class="asset-row"><span><i class="asset-dot dot-green"></i> Investments</span><b>46%</b></div>
-                                    <div class="asset-row"><span><i class="asset-dot dot-orange"></i> Property</span><b>24%</b></div>
-                                    <div class="asset-row"><span><i class="asset-dot dot-purple"></i> Pensions</span><b>12%</b></div>
+                                <div class="preview-card preview-asset-card preview-asset-investments">
+                                    <div class="preview-card-head"><span>Investments</span><b class="preview-negative">−2.5%</b></div>
+                                    <strong>£91,800</strong>
+                                    <div class="preview-sparkline preview-sparkline-investments"><i></i></div>
+                                    <div class="preview-card-foot"><span>Stocks &amp; Shares ISA</span><small>20.7% share</small></div>
+                                </div>
+                                <div class="preview-card preview-asset-card preview-asset-pension">
+                                    <div class="preview-card-head"><span>Pensions</span><b>+4.7%</b></div>
+                                    <strong>£139,500</strong>
+                                    <div class="preview-sparkline preview-sparkline-pension"><i></i></div>
+                                    <div class="preview-card-foot"><span>Workplace Pension</span><small>31.5% share</small></div>
+                                </div>
+                                <div class="preview-card preview-asset-card preview-asset-cash">
+                                    <div class="preview-card-head"><span>Cash</span><b>+9.0%</b></div>
+                                    <strong>£31,200</strong>
+                                    <div class="preview-sparkline preview-sparkline-cash"><i></i></div>
+                                    <div class="preview-card-foot"><span>Emergency Cash</span><small>7.1% share</small></div>
                                 </div>
                             </div>
-                            <div class="preview-footer-row"><span><i class="sync-dot"></i> Last synced just now</span><span class="privacy-chip">◈ Privacy mode available</span></div>
+                            <div class="preview-footer-row"><span><i class="sync-dot"></i> Updated today</span><span class="privacy-chip">◈ Privacy mode</span></div>
                         </div>
                     </div>
                 </div>
-                <div class="float-card float-card-one"><span class="float-icon float-icon-green">↗</span><span><small>Monthly savings</small><b>£1,500</b></span></div>
-                <div class="float-card float-card-two"><span class="float-icon float-icon-purple">◎</span><span><small>FIRE target</small><b>2038 forecast</b></span></div>
+                <div class="float-card float-card-one"><span class="float-icon float-icon-green">£</span><span><small>Budget remaining</small><b>£1,850 / month</b></span></div>
+                <div class="float-card float-card-two"><span class="float-icon float-icon-purple">◎</span><span><small>FIRE progress</small><b>34.27% complete</b></span></div>
             </div>
         </section>
 
         <section class="feature-section shell" id="features">
             <div class="section-intro">
                 <div>
-                    <span class="section-label">A clearer view</span>
-                    <h2>One place for the decisions<br><em>behind the numbers.</em></h2>
+                    <span class="section-label">A calmer way to look at your money</span>
+                    <h2>Do the useful things<br><em>in one place.</em></h2>
                 </div>
-                <p>Track what you have, understand what changed, and explore where your plan could take you—without turning your finances into a spreadsheet maze.</p>
+                <p>Start with the question you actually have—what do I own, what changed, or when could I reach my target—and move through the app from there.</p>
             </div>
             <div class="feature-grid">
-                <article class="feature-card feature-card-wide">
+                <article class="feature-card feature-card-workflow feature-card-wide">
                     <div class="feature-icon feature-icon-cyan">↗</div>
-                    <div><h3>See your whole wealth picture</h3><p>Bring cash, investments, pensions, property, and custom asset groups into a single net-worth dashboard.</p></div>
-                    <div class="feature-swatch feature-swatch-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+                    <div><h3>Build your wealth picture</h3><p>Bring cash, investments, pensions, property, and custom assets into a single net-worth view.</p></div>
+                    <div class="feature-fragment asset-fragment" aria-hidden="true">
+                        <span><i class="fragment-rail rail-green"></i><b>Investments</b><strong>£91,800</strong></span>
+                        <span><i class="fragment-rail rail-purple"></i><b>Pensions</b><strong>£139,500</strong></span>
+                        <span><i class="fragment-rail rail-orange"></i><b>Property</b><strong>£180,000</strong></span>
+                        <span><i class="fragment-rail rail-cyan"></i><b>Cash</b><strong>£31,200</strong></span>
+                    </div>
                 </article>
-                <article class="feature-card">
+                <article class="feature-card feature-card-workflow">
                     <div class="feature-icon feature-icon-blue">⌁</div>
-                    <h3>Follow the journey</h3>
-                    <p>Review historical values, range changes, peaks, and portfolio share over time.</p>
+                    <h3>Understand what changed</h3>
+                    <p>Use History and Calendar to follow range change, peaks, and daily portfolio movement.</p>
+                    <div class="feature-fragment trend-fragment" aria-hidden="true"><div><small>Change over range</small><b>+£21,014</b></div><span class="mini-trend-line"></span><em>1 month · +5.0%</em></div>
                 </article>
-                <article class="feature-card">
+                <article class="feature-card feature-card-workflow">
                     <div class="feature-icon feature-icon-green">+</div>
-                    <h3>Give every pound a job</h3>
-                    <p>Organise income, bills, savings, and spending with budget lines that can feed your forecast.</p>
+                    <h3>Plan the next move</h3>
+                    <p>Organise income, bills, savings, and spending—and connect savings to the assets they build.</p>
+                    <div class="feature-fragment budget-fragment" aria-hidden="true"><span><small>Income</small><b>£7,150</b></span><span><small>Savings</small><b>£1,950</b></span><span><small>Left to allocate</small><b>£1,850</b></span></div>
                 </article>
-                <article class="feature-card">
-                    <div class="feature-icon feature-icon-purple">◌</div>
-                    <h3>Model the road ahead</h3>
-                    <p>Explore illustrative projections with configurable returns, contributions, and historical strategies.</p>
+                <article class="feature-card feature-card-workflow">
+                    <div class="feature-icon feature-icon-cyan">↻</div>
+                    <h3>Automate updates with integrations</h3>
+                    <p>Connect Trading 212 or SnapTrade, discover accounts, map them to your assets, and let scheduled polling keep your dashboard current.</p>
+                    <div class="feature-fragment integration-fragment" aria-hidden="true">
+                        <div class="integration-pills"><span><i></i> Trading 212</span><span><i></i> SnapTrade</span></div>
+                        <div class="integration-state"><b>Scheduled polling</b><small>Sync results recorded in the audit log</small></div>
+                        <em>More providers can be added by request or by the community.</em>
+                    </div>
                 </article>
-                <article class="feature-card feature-card-wide feature-card-accent">
+                <article class="feature-card feature-card-workflow feature-card-accent">
                     <div class="feature-icon feature-icon-orange">△</div>
-                    <div><h3>Plan for financial independence</h3><p>Set a FIRE target, monitor progress, and see estimated target dates and income scenarios.</p></div>
-                    <div class="progress-preview" aria-hidden="true"><span><i></i></span><small>68% toward target</small></div>
+                    <h3>Model the road ahead</h3>
+                    <p>Explore illustrative forecasts and set a FIRE target with contributions and return assumptions you can see.</p>
+                    <div class="feature-fragment fire-fragment" aria-hidden="true"><div><small>Progress to FIRE</small><b>34.27%</b></div><span><i></i></span><em>£411,300 invested · £1.2m target</em></div>
                 </article>
-                <article class="feature-card">
-                    <div class="feature-icon feature-icon-slate">↻</div>
-                    <h3>Sync when you choose</h3>
-                    <p>Connect optional read-only provider integrations and keep a clear audit trail of sync activity.</p>
+                <article class="feature-card feature-card-workflow feature-card-wide">
+                    <div class="feature-icon feature-icon-slate">◈</div>
+                    <div><h3>Keep control of the setup</h3><p>Run the full stack on your own machine, keep credentials protected, and choose exactly how provider connections are polled and mapped.</p></div>
+                    <div class="feature-fragment setup-fragment" aria-hidden="true"><span><i>✓</i> Docker Compose</span><span><i>✓</i> PostgreSQL</span><span><i>✓</i> Audit history</span><span><i>✓</i> Privacy mode</span></div>
                 </article>
+            </div>
+        </section>
+
+        <section class="demo-section shell" id="demo">
+            <div class="demo-panel">
+                <div class="demo-copy">
+                    <span class="section-label">See the real product first</span>
+                    <h2>Explore it before<br><em>you install it.</em></h2>
+                    <p>Try WealthWatcher with fictional data in your browser. Move between Dashboard, History, Calendar, Forecast, Tracker, Budget, and Settings without creating an account or connecting a provider.</p>
+                    <div class="demo-actions"><a class="button button-primary" href="demo/">Open the live demo <span aria-hidden="true">↗</span></a><span class="demo-note">No API · no database · no account</span></div>
+                </div>
+                <div class="demo-proof" aria-label="The browser demo includes fictional data and resettable state">
+                    <div class="demo-proof-top"><span class="demo-proof-dot"></span><span>PUBLIC DEMO</span><b>↗</b></div>
+                    <div class="demo-proof-total"><small>Holistic Net Worth</small><strong>£442,500</strong><span>+£21,014 · 4.99%</span></div>
+                    <div class="demo-proof-nav"><span class="active">Dashboard</span><span>History</span><span>Calendar</span><span>Forecast</span><span>Budget</span></div>
+                    <div class="demo-proof-list"><span><i class="rail-orange"></i><b>Property</b><strong>£180,000</strong></span><span><i class="rail-purple"></i><b>Pensions</b><strong>£139,500</strong></span><span><i class="rail-green"></i><b>Investments</b><strong>£91,800</strong></span></div>
+                    <div class="demo-proof-bottom"><span>Fictional data</span><span>Reset anytime</span><span>Runs in browser</span></div>
+                </div>
             </div>
         </section>
 
@@ -168,26 +215,27 @@
                 <div class="privacy-copy">
                     <span class="section-label">Your data, your boundary</span>
                     <h2>Built to live <em>with</em> your setup.</h2>
-                    <p>WealthWatcher is designed as a local-first application. Run the API, browser UI, and PostgreSQL database on a machine or trusted network you control. Saved integration credentials are protected before they are stored.</p>
+                    <p>WealthWatcher is designed as a local-first application. Run the API, browser UI, and PostgreSQL database on a machine or trusted network you control. Optional provider integrations are read-only, and saved credentials are protected before they are stored.</p>
                     <p class="privacy-caution">This is an early-stage, single-user project. Keep it local unless you add the authentication and network controls needed for a public deployment.</p>
                     <p class="privacy-analytics-note">Optional analytics applies only to this public landing page. Use the analytics preferences control in the footer to change your choice.</p>
                 </div>
                 <div class="privacy-list">
-                    <div><span class="check-mark">✓</span><span><b>Docker Compose ready</b><small>Start the full stack with one command.</small></span></div>
+                    <div><span class="check-mark">✓</span><span><b>Docker Compose ready</b><small>Start the API, UI, and database together.</small></span></div>
                     <div><span class="check-mark">✓</span><span><b>PostgreSQL persistence</b><small>Keep your financial history in your own database.</small></span></div>
-                    <div><span class="check-mark">✓</span><span><b>Illustrative forecasts</b><small>Make assumptions visible; no financial advice claims.</small></span></div>
+                    <div><span class="check-mark">✓</span><span><b>Visible assumptions</b><small>Forecasts show the inputs behind the projection.</small></span></div>
+                    <div><span class="check-mark">✓</span><span><b>Privacy mode</b><small>Hide values when you are sharing your screen.</small></span></div>
                 </div>
             </div>
         </section>
 
         <section class="closing-section shell">
             <div class="closing-rule" aria-hidden="true"></div>
-            <span class="section-label">Start with the source</span>
-            <h2>A more useful view of<br><em>where you are going.</em></h2>
-            <p>Read the documentation, run it locally, and help shape what comes next. If WealthWatcher has been useful, you can leave an optional tip as thanks for the software.</p>
+            <span class="section-label">Start with fictional data</span>
+            <h2>See where you are.<br><em>Then decide what’s next.</em></h2>
+            <p>Open the demo for an immediate feel, or run the open-source stack on your own machine when you are ready to bring in your numbers.</p>
             <div class="closing-actions">
-                <a class="button button-primary" href="https://github.com/paevans87/wealth-watcher-public" target="_blank" rel="noreferrer">Open WealthWatcher on GitHub <span aria-hidden="true">↗</span></a>
-                <a class="button button-tip" href="https://buymeacoffee.com/paevans87" target="_blank" rel="noreferrer">Leave a tip <span aria-hidden="true">↗</span></a>
+                <a class="button button-primary" href="demo/">Try the live demo <span aria-hidden="true">↗</span></a>
+                <a class="button button-secondary" href="https://github.com/paevans87/wealth-watcher-public" target="_blank" rel="noreferrer">View the project on GitHub <span aria-hidden="true">↗</span></a>
             </div>
         </section>
     </main>
@@ -195,7 +243,7 @@
     <footer class="site-footer shell">
         <a class="brand footer-brand" href="#top"><span class="brand-mark brand-mark-small" aria-hidden="true"><span class="brand-ring"></span><span class="brand-bar brand-bar-one"></span><span class="brand-bar brand-bar-two"></span><span class="brand-bar brand-bar-three"></span></span><span>WealthWatcher</span></a>
         <span>Open source personal finance, built for your own machine.</span>
-        <div class="footer-links"><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT licence</a><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">Contribute</a><button id="analytics-consent-manage" class="footer-link-button" type="button" hidden>Analytics preferences</button></div>
+        <div class="footer-links"><a href="demo/">Live demo</a><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT licence</a><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">Contribute</a><button id="analytics-consent-manage" class="footer-link-button" type="button" hidden>Analytics preferences</button></div>
     </footer>
 </body>
 </html>
