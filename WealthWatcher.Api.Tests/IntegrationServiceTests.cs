@@ -93,6 +93,50 @@ public sealed class IntegrationServiceTests
     }
 
     [Fact]
+    public async Task Replacing_a_connection_and_reallocating_the_same_asset_does_not_duplicate_the_value()
+    {
+        var options = new DbContextOptionsBuilder<WealthDbContext>()
+            .UseInMemoryDatabase($"integration-replacement-tests-{Guid.NewGuid():N}")
+            .Options;
+        await using var db = new WealthDbContext(options);
+        var provider = DataProtectionProvider.Create("wealth-watcher-integration-replacement-tests");
+        var observedAt = new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero);
+        var service = CreateService(
+            db,
+            new IntegrationRegistry([new TestAdapter(observedAt: observedAt)]),
+            new IntegrationCredentialProtector(provider),
+            new FixedTimeProvider(observedAt));
+
+        var firstConnection = await service.CreateConnectionAsync("test", "First connection");
+        await service.SaveCredentialsAsync(firstConnection.Id, new Dictionary<string, string> { ["apiKey"] = "secret" });
+        await service.DiscoverAccountsAsync(firstConnection.Id);
+        var firstAccount = await db.IntegrationAccounts.SingleAsync();
+        var asset = new Asset { DisplayName = "Existing investment" };
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+        await service.AllocateAccountAsync(firstConnection.Id, firstAccount.Id, asset.Id);
+        Assert.True((await service.SyncAsync(firstConnection.Id))!.Succeeded);
+
+        Assert.True(await service.DeleteConnectionAsync(firstConnection.Id));
+
+        var replacementConnection = await service.CreateConnectionAsync("test", "Replacement connection");
+        await service.SaveCredentialsAsync(
+            replacementConnection.Id,
+            new Dictionary<string, string> { ["apiKey"] = "replacement-secret" });
+        await service.DiscoverAccountsAsync(replacementConnection.Id);
+        var replacementAccount = await db.IntegrationAccounts
+            .SingleAsync(account => account.IntegrationConnectionId == replacementConnection.Id);
+        await service.AllocateAccountAsync(replacementConnection.Id, replacementAccount.Id, asset.Id);
+
+        Assert.True((await service.SyncAsync(replacementConnection.Id))!.Succeeded);
+
+        var entries = await db.AssetValueEntries.ToListAsync();
+        var entry = Assert.Single(entries);
+        Assert.Equal(asset.Id, entry.AssetId);
+        Assert.Equal(125m, entry.Value);
+    }
+
+    [Fact]
     public async Task Current_day_sync_does_not_invalidate_historical_wealth_cache()
     {
         var options = new DbContextOptionsBuilder<WealthDbContext>()
