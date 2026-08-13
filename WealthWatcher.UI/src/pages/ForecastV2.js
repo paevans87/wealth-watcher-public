@@ -1,8 +1,9 @@
 import { store } from '../store/store.js';
-import { fetchFresh, saveDbSettings, API_BASE_URL } from '../api/apiClient.js';
+import { fetchFreshStrict, saveDbSettings, API_BASE_URL } from '../api/apiClient.js';
 import { isFeatureEnabled } from '../utils/featureFlags.js';
 import { getAssetTypeaheadState, renderAssetTypeahead, setupAssetTypeahead } from '../components/AssetTypeahead.js';
 import { renderFeatureToggle } from '../components/FormFields.js';
+import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 import { showToast } from '../components/Toast.js';
 import { setPageLoading } from '../components/PageLoading.js';
 
@@ -11,6 +12,8 @@ let forecastSaveTimer;
 let forecastStrategyChangeHandler;
 let forecastRateSources = [];
 let showForecastAssetCalculations = true;
+let forecastRequestId = 0;
+let boundForecastRetryButton = null;
 const DEFAULT_ANNUAL_RETURN = 4;
 const DEFAULT_MONTHLY_CONTRIBUTION = 1500;
 const DEFAULT_FORECAST_STRATEGY = 'fire-default';
@@ -368,68 +371,141 @@ function hideLegacyForecastPanels() {
     });
 }
 
-export function updateForecastEmptyState(hasForecastData) {
-    const view = document.getElementById('forecast-view');
-    if (!view || typeof document.createElement !== 'function') return;
+function insertForecastState(view, state) {
+    const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
+    if (header && typeof view.insertBefore === 'function') {
+        view.insertBefore(state, header.nextElementSibling || null);
+    } else if (typeof view.prepend === 'function') view.prepend(state);
+    else if (typeof view.insertBefore === 'function') view.insertBefore(state, view.firstChild || null);
+    else if (typeof view.appendChild === 'function') view.appendChild(state);
+}
 
+function ensureForecastEmptyState(view) {
+    if (typeof document.createElement !== 'function') return null;
     let emptyState = document.getElementById('forecast-empty-state');
-    if (!emptyState) {
-        emptyState = document.createElement('div');
-        emptyState.id = 'forecast-empty-state';
-        emptyState.className = 'catalog-workspace presentation-empty-state forecast-empty-state';
-        emptyState.setAttribute?.('role', 'status');
-        emptyState.innerHTML = `
-            <div class="presentation-empty-state-layout">
-                <div class="presentation-empty-copy">
-                    <span class="presentation-empty-kicker">Future projections</span>
-                    <h2>See the shape of your future.</h2>
-                    <p>No forecast data yet. Explore how your portfolio could grow towards its FIRE target with a projection strategy that matches the way you want to think about the future.</p>
-                    <p class="presentation-empty-note">Add asset history and choose a strategy in Settings to turn this preview into your live forecast.</p>
-                    <a class="action-btn" href="#settings?panel=fire-settings&focus=fire-forecast-settings" aria-controls="fire-settings-pane">Open Forecast Settings</a>
+    if (emptyState) return emptyState;
+
+    emptyState = document.createElement('div');
+    emptyState.id = 'forecast-empty-state';
+    emptyState.className = 'catalog-workspace presentation-empty-state forecast-empty-state';
+    emptyState.setAttribute?.('role', 'status');
+    emptyState.innerHTML = `
+        <div class="presentation-empty-state-layout">
+            <div class="presentation-empty-copy">
+                <span class="presentation-empty-kicker">Future projections</span>
+                <h2>See the shape of your future.</h2>
+                <p>No forecast data yet. Explore how your portfolio could grow towards its FIRE target with a projection strategy that matches the way you want to think about the future.</p>
+                <p class="presentation-empty-note">Add asset history and choose a strategy in Settings to turn this illustrative preview into your live forecast.</p>
+                <a class="action-btn" href="#settings?panel=fire-settings&focus=fire-forecast-settings" aria-controls="fire-settings-pane">Open Forecast Settings</a>
+            </div>
+            <div class="presentation-preview forecast-preview" role="img" aria-label="Illustrative preview of a configured wealth forecast; not your data">
+                <div class="presentation-preview-header">
+                    <div>
+                        <span class="presentation-preview-label">Illustrative preview</span>
+                        <strong>Wealth forecast</strong>
+                    </div>
+                    <span class="presentation-preview-status">FIRE strategy</span>
                 </div>
-                <div class="presentation-preview forecast-preview" role="img" aria-label="Static preview of a configured wealth forecast">
-                    <div class="presentation-preview-header">
-                        <div>
-                            <span class="presentation-preview-label">Static preview</span>
-                            <strong>Wealth forecast</strong>
-                        </div>
-                        <span class="presentation-preview-status">FIRE strategy</span>
-                    </div>
-                    <div class="forecast-preview-metrics">
-                        <div><span>Target date</span><strong>Jun 2042</strong></div>
-                        <div><span>Time remaining</span><strong>15y 10m</strong></div>
-                    </div>
-                    <div class="forecast-preview-chart" aria-hidden="true">
-                        <div class="forecast-preview-chart-label">Projected portfolio</div>
-                        <svg viewBox="0 0 560 190" preserveAspectRatio="none">
-                            <defs>
-                                <linearGradient id="forecast-preview-fill" x1="0" x2="0" y1="0" y2="1">
-                                    <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.34"></stop>
-                                    <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"></stop>
-                                </linearGradient>
-                            </defs>
-                            <path class="forecast-preview-area" d="M0 174 C80 166, 108 145, 164 150 S250 126, 290 111 S365 108, 410 76 S500 44, 560 18 L560 190 L0 190 Z"></path>
-                            <polyline class="forecast-preview-line" points="0,174 64,165 112,148 164,150 220,133 290,111 350,113 410,76 475,54 520,46 560,18"></polyline>
-                            <line class="forecast-preview-target" x1="0" y1="62" x2="560" y2="62"></line>
-                        </svg>
-                        <div class="forecast-preview-axis"><span>Today</span><span>Target</span><span>2042</span></div>
-                    </div>
-                    <div class="forecast-preview-legend"><span><i class="preview-dot preview-dot-investments"></i>Portfolio value</span><span><i class="preview-dot preview-dot-target"></i>FIRE target</span></div>
+                <div class="forecast-preview-metrics">
+                    <div><span>Target date</span><strong>Jun 2042</strong></div>
+                    <div><span>Time remaining</span><strong>15y 10m</strong></div>
                 </div>
-            </div>`;
-        const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
-        if (header && typeof view.insertBefore === 'function') {
-            view.insertBefore(emptyState, header.nextElementSibling || null);
-        } else if (typeof view.prepend === 'function') view.prepend(emptyState);
-        else if (typeof view.insertBefore === 'function') view.insertBefore(emptyState, view.firstChild || null);
-        else view.appendChild(emptyState);
+                <div class="forecast-preview-chart" aria-hidden="true">
+                    <div class="forecast-preview-chart-label">Projected portfolio</div>
+                    <svg viewBox="0 0 560 190" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="forecast-preview-fill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.34"></stop>
+                                <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"></stop>
+                            </linearGradient>
+                        </defs>
+                        <path class="forecast-preview-area" d="M0 174 C80 166, 108 145, 164 150 S250 126, 290 111 S365 108, 410 76 S500 44, 560 18 L560 190 L0 190 Z"></path>
+                        <polyline class="forecast-preview-line" points="0,174 64,165 112,148 164,150 220,133 290,111 350,113 410,76 475,54 520,46 560,18"></polyline>
+                        <line class="forecast-preview-target" x1="0" y1="62" x2="560" y2="62"></line>
+                    </svg>
+                    <div class="forecast-preview-axis"><span>Today</span><span>Target</span><span>2042</span></div>
+                </div>
+                <div class="forecast-preview-legend"><span><i class="preview-dot preview-dot-investments"></i>Portfolio value</span><span><i class="preview-dot preview-dot-target"></i>FIRE target</span></div>
+            </div>
+        </div>`;
+    insertForecastState(view, emptyState);
+    return emptyState;
+}
+
+function ensureForecastErrorState(view) {
+    if (typeof document.createElement !== 'function') return null;
+    let errorState = document.getElementById('forecast-error-state');
+    if (errorState) return errorState;
+
+    errorState = document.createElement('div');
+    errorState.id = 'forecast-error-state';
+    errorState.className = 'catalog-workspace presentation-empty-state forecast-error-state';
+    errorState.setAttribute?.('role', 'alert');
+    errorState.innerHTML = `
+        <div class="presentation-empty-state-layout">
+            <div class="presentation-empty-copy">
+                <span class="presentation-empty-kicker">Forecast unavailable</span>
+                <h2>We couldn't load your forecast.</h2>
+                <p>Your projection could not be calculated right now. Try again, or check your settings if the problem continues.</p>
+                <button id="forecast-retry" class="action-btn" type="button">Try again</button>
+            </div>
+        </div>`;
+    insertForecastState(view, errorState);
+    return errorState;
+}
+
+function clearForecastResults() {
+    forecastChart?.destroy();
+    forecastChart = null;
+
+    if (typeof document === 'undefined') {
+        forecastRateSources = [];
+        return;
     }
 
-    emptyState.hidden = hasForecastData;
+    ['forecast-fire-date', 'forecast-time-remaining', 'forecast-age'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.innerText = '--';
+    });
+    const trend = document.getElementById('forecast-historical-trend');
+    if (trend) {
+        trend.innerText = '';
+        trend.title = '';
+    }
+    renderHistoricalRateSources([], false);
+}
+
+export function setForecastPageState(status) {
+    const view = document.getElementById('forecast-view');
+    if (!view) return;
+
+    setPageStatus(view, status);
+
+    const emptyState = status === PAGE_STATUS.EMPTY
+        ? ensureForecastEmptyState(view)
+        : document.getElementById('forecast-empty-state');
+    const errorState = status === PAGE_STATUS.ERROR
+        ? ensureForecastErrorState(view)
+        : document.getElementById('forecast-error-state');
+    if (emptyState) emptyState.hidden = status !== PAGE_STATUS.EMPTY;
+    if (errorState) errorState.hidden = status !== PAGE_STATUS.ERROR;
+
     const strategyControls = view.querySelector?.('.forecast-strategy-controls');
-    if (strategyControls) strategyControls.hidden = !hasForecastData;
     const results = view.querySelector?.('.forecast-results');
-    if (results) results.hidden = !hasForecastData;
+    if (strategyControls) strategyControls.hidden = status !== PAGE_STATUS.READY;
+    if (results) results.hidden = status === PAGE_STATUS.EMPTY || status === PAGE_STATUS.ERROR;
+
+    if (status === PAGE_STATUS.EMPTY || status === PAGE_STATUS.ERROR) clearForecastResults();
+
+    if (status === PAGE_STATUS.ERROR && errorState) {
+        const retryButton = errorState.querySelector?.('#forecast-retry');
+        if (retryButton && retryButton !== boundForecastRetryButton) {
+            retryButton.addEventListener('click', () => {
+                void loadForecastView();
+            });
+            boundForecastRetryButton = retryButton;
+        }
+    }
 }
 
 function hitResult(current, target, months, date) {
@@ -520,8 +596,9 @@ export function renderHistoricalRateSources(rates = forecastRateSources, visible
 }
 
 export async function loadForecastView() {
+    const requestId = ++forecastRequestId;
     setPageLoading('forecast-view', true);
-    updateForecastEmptyState(true);
+    setForecastPageState(PAGE_STATUS.LOADING);
     const fire = store.state.fireSettings || {};
     const settings = store.state.forecastSettings || {};
     showForecastAssetCalculations = getForecastAssetCalculationsPreference();
@@ -531,31 +608,25 @@ export async function loadForecastView() {
     if (fire.includeStatePension === true) annualIncome -= parseFloat(fire.statePensionAmount) || 12547;
     const target = Math.max(0, annualIncome) / ((parseFloat(fire.swr) || 4) / 100) || 100000;
     try {
-        const data = await fetchFresh(`${API_BASE_URL}/wealth/forecast`, {
+        const data = await fetchFreshStrict(`${API_BASE_URL}/wealth/forecast`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildForecastRequest(settings, target, fire))
         });
-        if (!data) {
-            updateForecastEmptyState(false);
-            forecastChart?.destroy();
-            forecastChart = null;
-            return;
-        }
-        hideLegacyForecastPanels();
-        if (!data) {
-            updateForecastEmptyState(false);
-            forecastChart?.destroy();
-            forecastChart = null;
-            return;
+        if (requestId !== forecastRequestId) return data;
+        if (!data || typeof data !== 'object') {
+            throw new Error('Forecast response was invalid.');
         }
         const categories = Array.isArray(store.state.CATEGORIES) ? store.state.CATEGORIES : [];
         const points = data.Projection || data.projection || data.Expected || data.expected || [];
-        updateForecastEmptyState(points.length > 0);
+        if (!Array.isArray(points)) {
+            throw new Error('Forecast response did not include a projection.');
+        }
         if (!points.length) {
-            forecastChart?.destroy();
-            forecastChart = null;
+            setForecastPageState(PAGE_STATUS.EMPTY);
             return;
         }
+        hideLegacyForecastPanels();
+        setForecastPageState(PAGE_STATUS.READY);
         forecastChart = showChart('forecastExpectedChart', forecastChart, points,
             data.StackOrder || data.stackOrder || [], target, categories);
         const selectedStrategy = data.SelectedStrategy || data.selectedStrategy
@@ -571,11 +642,10 @@ export async function loadForecastView() {
         summary('forecast', hitResult(data.CurrentNW ?? data.currentNW, target,
             data.TargetHitMonth ?? data.targetHitMonth, data.TargetHitDate ?? data.targetHitDate), settings.dateOfBirth);
     } catch (error) {
-        updateForecastEmptyState(false);
-        forecastChart?.destroy();
-        forecastChart = null;
+        if (requestId !== forecastRequestId) return;
+        setForecastPageState(PAGE_STATUS.ERROR);
         console.error('Failed to load forecast:', error);
     } finally {
-        setPageLoading('forecast-view', false);
+        if (requestId === forecastRequestId) setPageLoading('forecast-view', false);
     }
 }

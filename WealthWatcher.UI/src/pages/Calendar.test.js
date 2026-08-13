@@ -13,6 +13,7 @@ function createCalendarElement() {
         innerHTML: '',
         textContent: '',
         className: '',
+        hidden: false,
         disabled: false,
         addEventListener(type, listener) {
             const callbacks = listeners.get(type) || [];
@@ -30,6 +31,16 @@ function createCalendarElement() {
         },
         getAttribute(name) {
             return attributes.get(name) || null;
+        },
+        removeAttribute(name) {
+            attributes.delete(name);
+        },
+        querySelector(selector) {
+            if (selector === '#calendar-retry') {
+                this.retryButton ||= createCalendarElement();
+                return this.retryButton;
+            }
+            return null;
         }
     };
 }
@@ -43,9 +54,33 @@ const calendarElements = new Map([
     ['calendar-grid', createCalendarElement()]
 ]);
 
+const calendarStateElements = new Map();
+const calendarHeader = createCalendarElement();
+calendarHeader.nextElementSibling = null;
+const calendarPanel = createCalendarElement();
+const calendarView = {
+    querySelector(selector) {
+        if (selector === ':scope > header' || selector === 'header') return calendarHeader;
+        if (selector === '.calendar-panel') return calendarPanel;
+        return null;
+    },
+    insertBefore(element) {
+        calendarStateElements.set(element.id, element);
+    },
+    prepend(element) {
+        calendarStateElements.set(element.id, element);
+    },
+    appendChild(element) {
+        calendarStateElements.set(element.id, element);
+    }
+};
+
 globalThis.document = {
     getElementById(id) {
-        return calendarElements.get(id) || null;
+        return calendarElements.get(id) || calendarStateElements.get(id) || (id === 'calendar-view' ? calendarView : null);
+    },
+    createElement() {
+        return createCalendarElement();
     }
 };
 
@@ -594,7 +629,7 @@ test('renders a navigable Monday-first calendar with signed, private daily chang
     assert.equal(requestedUrls.length, requestCountAfterLoad + 3);
 });
 
-test('keeps the calendar visible and explains when no portfolio history is available', async () => {
+test('renders a mutually exclusive illustrative empty experience without stale calendar results', async () => {
     store.clearCache();
     store.state.CATEGORIES = [];
 
@@ -605,11 +640,40 @@ test('keeps the calendar visible and explains when no portfolio history is avail
     const status = calendarElements.get('calendar-status');
     const monthComparison = calendarElements.get('calendar-month-comparison');
     const grid = calendarElements.get('calendar-grid');
+    const emptyState = calendarStateElements.get('calendar-empty-state');
+    const errorState = calendarStateElements.get('calendar-error-state');
 
     assert.equal(status.textContent, 'No wealth data is available yet.');
     assert.equal(monthComparison.hidden, true);
-    assert.equal((grid.innerHTML.match(/data-date=/g) || []).length, 29);
-    assert.match(grid.innerHTML, /calendar-day-unavailable/);
+    assert.equal(grid.innerHTML, '');
+    assert.equal(emptyState.hidden, false);
+    assert.match(emptyState.innerHTML, /Illustrative preview/);
+    assert.match(emptyState.innerHTML, /not your data/i);
+    assert.equal(errorState?.hidden ?? true, true);
+    assert.equal(calendarHeader.hidden, true);
+    assert.equal(calendarPanel.hidden, true);
     assert.equal(previousButton.disabled, true);
     assert.equal(nextButton.disabled, true);
+});
+
+test('renders a distinct calendar error with retry instead of the empty preview', async () => {
+    store.clearCache();
+    store.state.CATEGORIES = [{ Id: 'pensions', Label: 'Pensions', Color: '#8b5cf6' }];
+    failedCategories.add('pensions');
+
+    await loadCalendarView({ currentDate: new Date(2024, 1, 29, 12) });
+    failedCategories.clear();
+
+    const status = calendarElements.get('calendar-status');
+    const grid = calendarElements.get('calendar-grid');
+    const emptyState = calendarStateElements.get('calendar-empty-state');
+    const errorState = calendarStateElements.get('calendar-error-state');
+
+    assert.equal(status.textContent, 'Unable to load wealth data. Please try again.');
+    assert.equal(grid.innerHTML, '');
+    assert.equal(emptyState.hidden, true);
+    assert.equal(errorState.hidden, false);
+    assert.match(errorState.innerHTML, /We couldn't load your calendar/);
+    assert.match(errorState.innerHTML, /calendar-retry/);
+    assert.doesNotMatch(errorState.innerHTML, /calendar-preview/);
 });

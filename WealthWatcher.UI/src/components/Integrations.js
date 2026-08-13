@@ -10,6 +10,7 @@ import {
     setupAssetTypeahead
 } from './AssetTypeahead.js';
 import { renderFeatureToggle, renderSelectField } from './FormFields.js';
+import { PAGE_STATUS, setPageStatus } from './PageState.js';
 
 const steps = ['Enable', 'Add Keys', 'Test', 'Pull Accounts', 'Allocate'];
 const DEMO_ONLY_MESSAGE = 'This provider action is unavailable in demo mode. No credentials or live provider accounts are changed.';
@@ -30,6 +31,8 @@ let currentConnectionId = null;
 let currentStep = 1;
 let refreshDashboardData = async () => {};
 let lastWizardTrigger = null;
+let integrationLoadState = { status: 'idle', error: null };
+let lastIntegrationLoadOptions = {};
 
 const escapeHtml = value => String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -216,8 +219,22 @@ function renderSteps() {
 function renderConnections() {
     const target = document.getElementById('integration-connections');
     if (!target) return;
+
+    if (integrationLoadState.status === 'loading') {
+        setPageStatus(target, PAGE_STATUS.LOADING);
+        target.innerHTML = '<p class="integration-empty" role="status">Loading integrations…</p>';
+        return;
+    }
+
+    if (integrationLoadState.status === 'error') {
+        setPageStatus(target, PAGE_STATUS.ERROR);
+        target.innerHTML = renderIntegrationLoadError(integrationLoadState.error);
+        return;
+    }
+
+    setPageStatus(target, connections.length > 0 ? PAGE_STATUS.READY : PAGE_STATUS.EMPTY);
     if (connections.length === 0) {
-        target.innerHTML = '<p class="integration-empty">No integrations are enabled yet. Choose a partner below to begin.</p>';
+        target.innerHTML = '<p class="integration-empty" role="status">No integrations are enabled yet. Choose a partner below to begin.</p>';
         return;
     }
 
@@ -267,6 +284,15 @@ function renderConnections() {
             </article>
         `;
     }).join('');
+}
+
+export function renderIntegrationLoadError(error) {
+    const message = error?.message || 'There was a problem communicating with the API.';
+    return `<div class="integration-message error" role="alert">
+        <strong>Unable to load integrations.</strong>
+        <span>${escapeHtml(message)}</span>
+        <button type="button" class="action-btn" data-integration-retry>Retry loading integrations</button>
+    </div>`;
 }
 
 function renderCatalog() {
@@ -593,22 +619,36 @@ function accountAllocationNeedsSave(account, connection, role) {
 }
 
 async function refresh({ includeCatalog = true, includeAssets = true } = {}) {
-    const [nextCatalog, nextConnections, nextAssets, nextMarketHours] = await Promise.all([
-        includeCatalog ? request('/integrations/catalog') : Promise.resolve(catalog),
-        request('/integrations'),
-        includeAssets ? request('/assets') : Promise.resolve(null),
-        request('/integrations/settings')
-    ]);
-    catalog = nextCatalog;
-    connections = nextConnections;
-    marketHoursSettings = nextMarketHours || createDefaultMarketHoursSettings();
-    if (includeAssets) store.state.assets = nextAssets;
-    store.state.integrationCatalog = catalog;
-    store.state.integrations = connections;
-    renderMarketHours();
-    renderCatalog();
+    integrationLoadState = { status: 'loading', error: null };
     renderConnections();
-    renderWizardBody();
+    try {
+        const [nextCatalog, nextConnections, nextAssets, nextMarketHours] = await Promise.all([
+            includeCatalog ? request('/integrations/catalog') : Promise.resolve(catalog),
+            request('/integrations'),
+            includeAssets ? request('/assets') : Promise.resolve(null),
+            request('/integrations/settings')
+        ]);
+
+        if (!Array.isArray(nextCatalog)) throw new Error('The integration catalogue response was invalid.');
+        if (!Array.isArray(nextConnections)) throw new Error('The integrations response was invalid.');
+        if (includeAssets && !Array.isArray(nextAssets)) throw new Error('The integration assets response was invalid.');
+
+        catalog = nextCatalog;
+        connections = nextConnections;
+        marketHoursSettings = nextMarketHours || createDefaultMarketHoursSettings();
+        if (includeAssets) store.state.assets = nextAssets;
+        store.state.integrationCatalog = catalog;
+        store.state.integrations = connections;
+        integrationLoadState = { status: 'ready', error: null };
+        renderMarketHours();
+        renderCatalog();
+        renderConnections();
+        renderWizardBody();
+    } catch (error) {
+        integrationLoadState = { status: 'error', error };
+        renderConnections();
+        throw error;
+    }
 }
 
 function showMessage(message, success = false) {
@@ -884,11 +924,11 @@ async function allocateAccount(accountId, role = 'Deployed') {
 export async function loadIntegrations(options = {}) {
     const panel = document.getElementById('integration-settings-pane');
     if (!panel) return;
+    lastIntegrationLoadOptions = { ...options };
     try {
         await refresh(options);
     } catch (error) {
-        const target = document.getElementById('integration-connections');
-        if (target) target.innerHTML = `<p class="integration-message error">${escapeHtml(error.message)}</p>`;
+        renderConnections();
     }
 }
 
@@ -909,6 +949,9 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
         if (!button) return;
         try {
             if (button.disabled) return;
+            if (button.hasAttribute?.('data-integration-retry')) {
+                return loadIntegrations(lastIntegrationLoadOptions);
+            }
             if (button.dataset.accountAllocationClear) return clearAccountAllocationSelection(button);
             if (button.dataset.integrationEnable) return withBusyButton(
                 button,

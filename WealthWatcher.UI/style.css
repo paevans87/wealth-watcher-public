@@ -3948,6 +3948,40 @@ body.obfuscated h1 .obfuscate-val {
     box-shadow: none;
 }
 
+.page-state-error {
+    display: grid;
+    gap: 0.6rem;
+    max-width: 42rem;
+    margin: 1.25rem 0;
+    padding: 1.25rem 1.4rem;
+    border: 1px solid rgba(248, 113, 113, 0.35);
+    border-radius: 14px;
+    background: rgba(127, 29, 29, 0.2);
+    color: var(--text-main);
+}
+
+.page-state-error strong {
+    color: #fecaca;
+    font-size: 1rem;
+}
+
+.page-state-error span {
+    color: #fecaca;
+    line-height: 1.5;
+}
+
+.page-state-retry {
+    justify-self: start;
+    margin-top: 0.25rem;
+}
+
+[data-page-state="loading"] .page-state-error,
+[data-page-state="loading"] [data-page-content],
+[data-page-state="ready"] [data-page-empty],
+[data-page-state="ready"] [data-page-error] {
+    display: none;
+}
+
 .presentation-empty-state-layout {
     position: relative;
     display: grid;

@@ -13,6 +13,7 @@ globalThis.document = {
 const { store } = await import('../store/store.js');
 const {
     moveAssetToGroup,
+    renderCatalogLoadError,
     renderAssetKindManager,
     renderAssetKindOptions,
     renderBoard
@@ -65,6 +66,32 @@ test('asset catalogue derives lanes from AssetKind mappings and exposes drag sem
     assert.match(board, /data-asset-id="asset-invest"[^>]*role="button"[^>]*draggable="true"/);
     assert.match(board, /data-move-asset="asset-invest"/);
     assert.match(board, /aria-label="Edit asset Trading 212 - Invest\. Drag to move it to another Group\."/);
+});
+
+test('asset catalogue distinguishes a valid empty collection from filtered results', () => {
+    setCatalogState();
+
+    const emptyBoard = renderBoard(assetGroups, [], []);
+    assert.match(emptyBoard, /catalog-collection-empty/);
+    assert.match(emptyBoard, /No assets have been added yet/);
+
+    const filteredBoard = renderBoard(assetGroups, [], [{
+        Id: 'asset-road',
+        DisplayName: '49 Hillsley Road',
+        AssetKindCode: 'property',
+        AssetKindId: 'kind-property'
+    }]);
+    assert.match(filteredBoard, /catalog-list-empty/);
+    assert.match(filteredBoard, /No assets match these filters/);
+    assert.doesNotMatch(filteredBoard, /No assets have been added yet/);
+});
+
+test('asset catalogue exposes an actionable load error without presenting it as an empty collection', () => {
+    const markup = renderCatalogLoadError(new Error('Catalogue unavailable.'));
+    assert.match(markup, /role="alert"/);
+    assert.match(markup, /Catalogue unavailable\./);
+    assert.match(markup, /data-catalog-retry/);
+    assert.doesNotMatch(markup, /No assets have been added yet/);
 });
 
 test('drag status spans the catalogue board instead of reserving a lane column', async () => {

@@ -15,7 +15,7 @@ const {
     getForecastContributionInputs,
     renderHistoricalRateSources,
     setForecastAssetCalculationsPreference,
-    updateForecastEmptyState
+    setForecastPageState
 } = await import('./ForecastV2.js');
 
 function createForecastDom() {
@@ -169,13 +169,13 @@ test('projection chart uses configured asset colours for matching stacks', () =>
 
 test('forecast empty state leaves only the setup prompt when projection data is absent', () => {
     withForecastDom(({ elements, strategyControls, results, wasInsertedAfterHeader }) => {
-        updateForecastEmptyState(false);
+        setForecastPageState('empty');
 
         assert.equal(elements.get('forecast-empty-state').hidden, false);
         assert.match(elements.get('forecast-empty-state').innerHTML, /presentation-empty-state-layout/);
-        assert.match(elements.get('forecast-empty-state').innerHTML, /Static preview/);
+        assert.match(elements.get('forecast-empty-state').innerHTML, /Illustrative preview/);
         assert.match(elements.get('forecast-empty-state').innerHTML, /forecast-preview/);
-        assert.match(elements.get('forecast-empty-state').innerHTML, /aria-label="Static preview of a configured wealth forecast"/);
+        assert.match(elements.get('forecast-empty-state').innerHTML, /aria-label="Illustrative preview of a configured wealth forecast; not your data"/);
         assert.match(elements.get('forecast-empty-state').innerHTML, /href="#settings\?panel=fire-settings(?:&amp;|&)focus=fire-forecast-settings"/);
         assert.match(elements.get('forecast-empty-state').innerHTML, /aria-controls="fire-settings-pane"/);
         assert.equal(strategyControls.hidden, true);
@@ -186,12 +186,29 @@ test('forecast empty state leaves only the setup prompt when projection data is 
 
 test('forecast empty state restores the strategy control and results when projection data exists', () => {
     withForecastDom(({ elements, strategyControls, results }) => {
-        updateForecastEmptyState(false);
-        updateForecastEmptyState(true);
+        setForecastPageState('empty');
+        setForecastPageState('ready');
 
         assert.equal(elements.get('forecast-empty-state').hidden, true);
         assert.equal(strategyControls.hidden, false);
         assert.equal(results.hidden, false);
+    });
+});
+
+test('forecast error state is distinct from the illustrative empty experience and offers retry', () => {
+    withForecastDom(({ elements, strategyControls, results }) => {
+        setForecastPageState('empty');
+        setForecastPageState('error');
+
+        const emptyState = elements.get('forecast-empty-state');
+        const errorState = elements.get('forecast-error-state');
+        assert.equal(emptyState.hidden, true);
+        assert.equal(errorState.hidden, false);
+        assert.match(errorState.innerHTML, /We couldn't load your forecast/);
+        assert.match(errorState.innerHTML, /forecast-retry/);
+        assert.doesNotMatch(errorState.innerHTML, /forecast-preview/);
+        assert.equal(strategyControls.hidden, true);
+        assert.equal(results.hidden, true);
     });
 });
 

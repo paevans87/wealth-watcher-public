@@ -19,6 +19,16 @@ export const API_BASE_URL = isDevelopment
     ? (configuredApiBaseUrl || (useDevelopmentProxy ? '/api' : `http://${apiHost}:${apiPort}/api`))
     : '/api';
 
+export class ApiRequestError extends Error {
+    constructor(message, { url = '', status = null, statusText = '', cause = null } = {}) {
+        super(message, cause ? { cause } : undefined);
+        this.name = 'ApiRequestError';
+        this.url = url;
+        this.status = status;
+        this.statusText = statusText;
+    }
+}
+
 function normalizeApiRequestUrl(url) {
     if (url instanceof URL) return url;
     const value = String(url ?? '');
@@ -49,7 +59,8 @@ export async function resetDemoData() {
 export async function fetchCached(url, options = null, cacheOptions = {}) {
     const method = options?.method || 'GET';
     const body = options?.body || '';
-    const cacheKey = `${method}:${url}:${body}`;
+    const throwOnError = cacheOptions.throwOnError === true;
+    const cacheKey = `${method}:${url}:${body}:${throwOnError ? 'strict' : 'compat'}`;
     const shouldCache = cacheOptions.cacheResponse !== false;
     const generation = store.cacheGeneration;
     const now = Date.now();
@@ -68,7 +79,12 @@ export async function fetchCached(url, options = null, cacheOptions = {}) {
         try {
             const res = await apiRequest(url, options);
             if (!res.ok) {
-                console.error(`API Error ${res.status}: ${res.statusText} for ${url}`);
+                const error = new ApiRequestError(
+                    `API request failed (${res.status || 'unknown'}): ${res.statusText || 'Request failed'}`,
+                    { url, status: res.status ?? null, statusText: res.statusText || '' }
+                );
+                if (throwOnError) throw error;
+                console.error(error.message, `for ${url}`);
                 return null;
             }
             const data = await res.json();
@@ -84,6 +100,13 @@ export async function fetchCached(url, options = null, cacheOptions = {}) {
             }
             return data;
         } catch (e) {
+            if (throwOnError) {
+                if (e instanceof ApiRequestError) throw e;
+                throw new ApiRequestError(
+                    e?.message || 'Unable to complete the API request.',
+                    { url, cause: e }
+                );
+            }
             console.error("Fetch Error:", e);
             return null;
         } finally {
@@ -97,6 +120,10 @@ export async function fetchCached(url, options = null, cacheOptions = {}) {
 
 export function fetchFresh(url, options = null) {
     return fetchCached(url, options, { cacheResponse: false });
+}
+
+export function fetchFreshStrict(url, options = null) {
+    return fetchCached(url, options, { cacheResponse: false, throwOnError: true });
 }
 
 export async function saveDbSettings(key, valueObj) {

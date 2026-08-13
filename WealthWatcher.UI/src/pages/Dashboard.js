@@ -1,10 +1,11 @@
 import { store } from '../store/store.js';
-import { fetchCached, fetchFresh, API_BASE_URL, apiRequest } from '../api/apiClient.js';
+import { fetchCached, API_BASE_URL, apiRequest } from '../api/apiClient.js';
 import { formatter } from '../utils/formatters.js';
 import { renderFireView } from './FireTracker.js';
 import { requestConfirmation, requestNotification } from '../components/ConfirmationModal.js';
 import { showToast } from '../components/Toast.js';
 import { setPageLoading } from '../components/PageLoading.js';
+import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 import pluralize from 'pluralize';
 
 let charts = {};
@@ -13,6 +14,8 @@ let dashboardLoadPromise = null;
 let dashboardLoadPeriod = null;
 let dashboardReloadPending = false;
 let dashboardHasData = false;
+let dashboardPageState = PAGE_STATUS.LOADING;
+let dashboardPageError = null;
 let hourlyRefreshInterval = null;
 let hourlyBoundaryTimeout = null;
 let hourlyRefreshLifecycleSetup = false;
@@ -30,6 +33,12 @@ export function setupDashboardActions({ refresh } = {}) {
         if (!action) return;
 
         const actionName = action.dataset.dashboardAction;
+        if (actionName === 'retry') {
+            event.preventDefault();
+            await loadDashboard({ force: true });
+            return;
+        }
+
         if (actionName === 'entry') {
             event.preventDefault();
             if (action.dataset.categoryId === 'property') {
@@ -257,16 +266,25 @@ export function loadDashboard({ force = false } = {}) {
     }
 
     dashboardHasData = false;
+    dashboardPageState = PAGE_STATUS.LOADING;
+    dashboardPageError = null;
     setPageLoading('dashboard-view', true);
+    renderDashboardPageState();
     dashboardLoadPromise = (async () => {
-        do {
-            dashboardReloadPending = false;
-            dashboardLoadPeriod = store.state.currentPeriod;
-            await loadDashboardInternal();
-        } while (dashboardReloadPending || dashboardLoadPeriod !== store.state.currentPeriod);
+        try {
+            do {
+                dashboardReloadPending = false;
+                dashboardLoadPeriod = store.state.currentPeriod;
+                await loadDashboardInternal();
+            } while (dashboardReloadPending || dashboardLoadPeriod !== store.state.currentPeriod);
+        } catch (error) {
+            dashboardPageState = PAGE_STATUS.ERROR;
+            dashboardPageError = error;
+            console.error('Dashboard load failed:', error);
+        }
     })().finally(() => {
         setPageLoading('dashboard-view', false);
-        updateDashboardEmptyState(dashboardHasData);
+        renderDashboardPageState();
         dashboardLoadPromise = null;
         dashboardLoadPeriod = null;
     });
@@ -286,7 +304,7 @@ async function loadDashboardInternal() {
 
     const dashboardUrl = `${API_BASE_URL}/dashboard?period=${encodeURIComponent(selectedPeriod)}${
         timeZone ? `&timeZone=${encodeURIComponent(timeZone)}` : ''}`;
-    const dashboardResponse = await fetchFresh(dashboardUrl);
+    const dashboardResponse = await requestDashboardData(dashboardUrl);
     const results = (dashboardResponse?.Categories || []).map(category => ({
         cat: {
             Id: category.Id,
@@ -305,7 +323,13 @@ async function loadDashboardInternal() {
     const visibleResults = results.filter(({ cat, data }) => !shouldHideDashboardCategory(cat, data));
     dashboardHasData = visibleResults.some(({ data }) =>
         Array.isArray(data?.Data) && data.Data.length > 0);
-    updateDashboardEmptyState(dashboardHasData);
+    if (!dashboardHasData) {
+        dashboardPageState = PAGE_STATUS.EMPTY;
+        clearDashboardLiveContent();
+        return;
+    }
+
+    dashboardPageState = PAGE_STATUS.READY;
     const visibleAssetGroupDescriptors = getVisibleAssetGroupDescriptors(
         assetGroupDescriptors,
         visibleResults.map(result => result.cat));
@@ -422,82 +446,166 @@ async function loadDashboardInternal() {
     }
 }
 
-export function updateDashboardEmptyState(hasDashboardData) {
+async function requestDashboardData(url) {
+    let response;
+    try {
+        response = await apiRequest(url);
+    } catch (error) {
+        throw new Error('The dashboard request could not be completed.', { cause: error });
+    }
+
+    if (!response?.ok) {
+        const status = response?.status ? ` (${response.status})` : '';
+        throw new Error(`The dashboard request failed${status}.`);
+    }
+
+    let payload;
+    try {
+        payload = await response.json();
+    } catch (error) {
+        throw new Error('The dashboard response could not be read.', { cause: error });
+    }
+
+    if (!payload || typeof payload !== 'object' || !Array.isArray(payload.Categories)) {
+        throw new Error('The dashboard response was not in the expected format.');
+    }
+
+    return payload;
+}
+
+function clearDashboardLiveContent() {
+    const laneSections = document.getElementById('lane-sections');
+    if (laneSections) laneSections.innerHTML = '';
+}
+
+function insertDashboardState(view, stateElement) {
+    if (!view || !stateElement) return;
+    const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
+    if (header && typeof view.insertBefore === 'function') {
+        view.insertBefore(stateElement, header.nextElementSibling || null);
+    } else if (typeof view.prepend === 'function') {
+        view.prepend(stateElement);
+    } else if (typeof view.insertBefore === 'function') {
+        view.insertBefore(stateElement, view.firstChild || null);
+    } else if (typeof view.appendChild === 'function') {
+        view.appendChild(stateElement);
+    }
+}
+
+function createDashboardEmptyState(view) {
+    if (typeof document.createElement !== 'function') return null;
+
+    const emptyState = document.createElement('div');
+    emptyState.id = 'dashboard-empty-state';
+    emptyState.className = 'catalog-workspace presentation-empty-state dashboard-empty-state';
+    emptyState.setAttribute?.('role', 'status');
+    emptyState.setAttribute?.('data-page-empty', '');
+    emptyState.innerHTML = `
+        <div class="presentation-empty-state-layout">
+            <div class="presentation-empty-copy">
+                <span class="presentation-empty-kicker">Portfolio dashboard</span>
+                <h2>Make your whole picture visible.</h2>
+                <p>No portfolio data yet. Add your first asset to see net worth, allocation, and the changes shaping your wealth in one calm view.</p>
+                <p class="presentation-empty-note">The illustrative preview is not your data. Add an asset in Settings, then record a value or connect an integration to replace it with your live dashboard.</p>
+                <a class="action-btn" href="#settings?panel=asset-catalog&focus=catalog-add-asset-button" aria-controls="asset-catalog-pane">Add your first asset</a>
+            </div>
+            <div class="presentation-preview dashboard-preview" role="img" aria-label="Illustrative static preview of a configured wealth dashboard; not your data">
+                <div class="presentation-preview-header">
+                    <div>
+                        <span class="presentation-preview-label">Illustrative preview</span>
+                        <strong>Wealth Watcher</strong>
+                    </div>
+                    <span class="presentation-preview-status">1M example</span>
+                </div>
+                <div class="dashboard-preview-toolbar" aria-hidden="true">
+                    <div class="dashboard-preview-periods"><span>1H</span><span>1D</span><span>1W</span><span class="active">1M</span><span>3M</span><span>1Y</span><span>MAX</span></div>
+                    <div class="dashboard-preview-actions"><i>↻</i><i>◌</i></div>
+                </div>
+                <div class="dashboard-preview-total">
+                    <span>Holistic net worth</span>
+                    <strong>£428,640</strong>
+                    <small>+£12,480 <b>(3.0%)</b> this month</small>
+                    <em>YTD: +£12,480 (3.0%)</em>
+                    <div class="dashboard-preview-proportion" aria-hidden="true"><i class="preview-dot-cash"></i><i class="preview-dot-investments"></i><i class="preview-dot-property"></i></div>
+                </div>
+                <div class="dashboard-preview-lanes">
+                    <div class="dashboard-preview-lane-heading"><span>Liquid Assets</span><strong>£297,360</strong></div>
+                    <div class="dashboard-preview-card-grid">
+                        <div class="dashboard-preview-asset-card">
+                            <div class="dashboard-preview-card-header"><span><i class="preview-dot preview-dot-cash"></i>Cash <b class="dashboard-preview-freshness"></b></span><strong>+£2,160</strong></div>
+                            <div class="dashboard-preview-card-value">£82,400</div>
+                            <svg class="dashboard-preview-sparkline" viewBox="0 0 180 32" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,25 20,22 42,24 64,16 86,19 108,11 132,14 156,7 180,9"></polyline></svg>
+                            <div class="dashboard-preview-card-breakdown"><span>Current Account</span><strong>£82,400</strong></div>
+                        </div>
+                        <div class="dashboard-preview-asset-card">
+                            <div class="dashboard-preview-card-header"><span><i class="preview-dot preview-dot-investments"></i>Investments <b class="dashboard-preview-freshness"></b></span><strong>+£10,320</strong></div>
+                            <div class="dashboard-preview-card-value">£214,960</div>
+                            <svg class="dashboard-preview-sparkline dashboard-preview-sparkline-investments" viewBox="0 0 180 32" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,27 18,25 39,24 58,20 79,22 98,16 120,17 141,10 160,12 180,4"></polyline></svg>
+                            <div class="dashboard-preview-card-breakdown"><span>Global Index Fund</span><strong>£214,960</strong></div>
+                        </div>
+                    </div>
+                    <div class="dashboard-preview-lane-heading"><span>Illiquid Assets</span><strong>£131,280</strong></div>
+                    <div class="dashboard-preview-asset-card dashboard-preview-property-card">
+                        <div class="dashboard-preview-card-header"><span><i class="preview-dot preview-dot-property"></i>Properties <b class="dashboard-preview-freshness"></b></span><strong>+£0</strong></div>
+                        <div class="dashboard-preview-card-value">£131,280</div>
+                        <div class="dashboard-preview-card-breakdown"><span>Home</span><strong>£131,280</strong></div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    insertDashboardState(view, emptyState);
+    return emptyState;
+}
+
+function createDashboardErrorState(view) {
+    if (typeof document.createElement !== 'function') return null;
+
+    const errorState = document.createElement('div');
+    errorState.id = 'dashboard-error-state';
+    errorState.className = 'catalog-workspace presentation-empty-state dashboard-error-state';
+    errorState.setAttribute?.('role', 'alert');
+    errorState.setAttribute?.('data-page-error', '');
+    errorState.innerHTML = `
+        <div class="presentation-empty-state-layout">
+            <div class="presentation-empty-copy">
+                <span class="presentation-empty-kicker">Portfolio dashboard</span>
+                <h2>We couldn’t load your dashboard.</h2>
+                <p>There was a problem retrieving your portfolio data. Try again, and if the problem continues check your connection or API status.</p>
+                <button class="action-btn" type="button" data-dashboard-action="retry">Try again</button>
+            </div>
+        </div>`;
+    insertDashboardState(view, errorState);
+    return errorState;
+}
+
+function renderDashboardPageState() {
     const view = document.getElementById('dashboard-view');
     if (!view || typeof document.createElement !== 'function') return;
 
+    setPageStatus(view, dashboardPageState);
+
+    const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
+    const laneSections = document.getElementById('lane-sections');
     let emptyState = document.getElementById('dashboard-empty-state');
-    if (!emptyState) {
-        emptyState = document.createElement('div');
-        emptyState.id = 'dashboard-empty-state';
-        emptyState.className = 'catalog-workspace presentation-empty-state dashboard-empty-state';
-        emptyState.setAttribute?.('role', 'status');
-        emptyState.innerHTML = `
-            <div class="presentation-empty-state-layout">
-                <div class="presentation-empty-copy">
-                    <span class="presentation-empty-kicker">Portfolio dashboard</span>
-                    <h2>Make your whole picture visible.</h2>
-                    <p>No portfolio data yet. Add your first asset to see net worth, allocation, and the changes shaping your wealth in one calm view.</p>
-                    <p class="presentation-empty-note">Add an asset in Settings, then record a value or connect an integration to replace this preview with your live dashboard.</p>
-                    <a class="action-btn" href="#settings?panel=asset-catalog&focus=catalog-add-asset-button" aria-controls="asset-catalog-pane">Add your first asset</a>
-                </div>
-                <div class="presentation-preview dashboard-preview" role="img" aria-label="Static preview of a configured wealth dashboard">
-                    <div class="presentation-preview-header">
-                        <div>
-                            <span class="presentation-preview-label">Wealth Watcher</span>
-                            <strong>Holistic Net Worth</strong>
-                        </div>
-                        <span class="presentation-preview-status">1M preview</span>
-                    </div>
-                    <div class="dashboard-preview-toolbar" aria-hidden="true">
-                        <div class="dashboard-preview-periods"><span>1H</span><span>1D</span><span>1W</span><span class="active">1M</span><span>3M</span><span>1Y</span><span>MAX</span></div>
-                        <div class="dashboard-preview-actions"><i>↻</i><i>◌</i></div>
-                    </div>
-                    <div class="dashboard-preview-total">
-                        <span>Holistic net worth</span>
-                        <strong>£428,640</strong>
-                        <small>+£12,480 <b>(3.0%)</b> this month</small>
-                        <em>YTD: +£12,480 (3.0%)</em>
-                        <div class="dashboard-preview-proportion" aria-hidden="true"><i class="preview-dot-cash"></i><i class="preview-dot-investments"></i><i class="preview-dot-property"></i></div>
-                    </div>
-                    <div class="dashboard-preview-lanes">
-                        <div class="dashboard-preview-lane-heading"><span>Liquid Assets</span><strong>£297,360</strong></div>
-                        <div class="dashboard-preview-card-grid">
-                            <div class="dashboard-preview-asset-card">
-                                <div class="dashboard-preview-card-header"><span><i class="preview-dot preview-dot-cash"></i>Cash <b class="dashboard-preview-freshness"></b></span><strong>+£2,160</strong></div>
-                                <div class="dashboard-preview-card-value">£82,400</div>
-                                <svg class="dashboard-preview-sparkline" viewBox="0 0 180 32" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,25 20,22 42,24 64,16 86,19 108,11 132,14 156,7 180,9"></polyline></svg>
-                                <div class="dashboard-preview-card-breakdown"><span>Current Account</span><strong>£82,400</strong></div>
-                            </div>
-                            <div class="dashboard-preview-asset-card">
-                                <div class="dashboard-preview-card-header"><span><i class="preview-dot preview-dot-investments"></i>Investments <b class="dashboard-preview-freshness"></b></span><strong>+£10,320</strong></div>
-                                <div class="dashboard-preview-card-value">£214,960</div>
-                                <svg class="dashboard-preview-sparkline dashboard-preview-sparkline-investments" viewBox="0 0 180 32" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,27 18,25 39,24 58,20 79,22 98,16 120,17 141,10 160,12 180,4"></polyline></svg>
-                                <div class="dashboard-preview-card-breakdown"><span>Global Index Fund</span><strong>£214,960</strong></div>
-                            </div>
-                        </div>
-                        <div class="dashboard-preview-lane-heading"><span>Illiquid Assets</span><strong>£131,280</strong></div>
-                        <div class="dashboard-preview-asset-card dashboard-preview-property-card">
-                            <div class="dashboard-preview-card-header"><span><i class="preview-dot preview-dot-property"></i>Properties <b class="dashboard-preview-freshness"></b></span><strong>+£0</strong></div>
-                            <div class="dashboard-preview-card-value">£131,280</div>
-                            <div class="dashboard-preview-card-breakdown"><span>Home</span><strong>£131,280</strong></div>
-                        </div>
-                    </div>
-                </div>
-            </div>`;
-        const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
-        if (header && typeof view.insertBefore === 'function') {
-            view.insertBefore(emptyState, header.nextElementSibling || null);
-        } else if (typeof view.prepend === 'function') view.prepend(emptyState);
-        else if (typeof view.insertBefore === 'function') view.insertBefore(emptyState, view.firstChild || null);
-        else view.appendChild(emptyState);
+    let errorState = document.getElementById('dashboard-error-state');
+
+    if (dashboardPageState === PAGE_STATUS.EMPTY && !emptyState) emptyState = createDashboardEmptyState(view);
+    if (dashboardPageState === PAGE_STATUS.ERROR && !errorState) errorState = createDashboardErrorState(view);
+
+    if (dashboardPageState === PAGE_STATUS.LOADING) {
+        if (header) header.hidden = false;
+        if (laneSections) laneSections.hidden = true;
+    } else if (dashboardPageState === PAGE_STATUS.READY) {
+        if (header) header.hidden = false;
+        if (laneSections) laneSections.hidden = false;
+    } else {
+        clearDashboardLiveContent();
+        if (header) header.hidden = true;
+        if (laneSections) laneSections.hidden = true;
     }
 
-    emptyState.hidden = hasDashboardData;
-    const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
-    if (header) header.hidden = !hasDashboardData;
-    const laneSections = document.getElementById('lane-sections');
-    if (laneSections) laneSections.hidden = !hasDashboardData;
+    if (emptyState) emptyState.hidden = dashboardPageState !== PAGE_STATUS.EMPTY;
+    if (errorState) errorState.hidden = dashboardPageState !== PAGE_STATUS.ERROR;
 }
 
 function shouldHideDashboardCategory(category, data) {

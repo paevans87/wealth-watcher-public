@@ -15,6 +15,9 @@ test('responsive shell and navigation contracts are present', () => {
     assert.match(stylesheet, /\.asset-group-section:not\(\[open\]\)\s*>\s*\.grid-container/);
     assert.match(stylesheet, /#calendar-view\s+\.calendar-grid-content\s*\{[\s\S]*grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\)/);
     assert.match(stylesheet, /\.presentation-empty-state-layout\s*\{[\s\S]*overflow:\s*hidden/);
+    assert.match(stylesheet, /\.page-state-error\s*\{[\s\S]*background/);
+    assert.match(stylesheet, /\.page-state-retry\s*\{/);
+    assert.match(stylesheet, /\[data-page-state="loading"\][\s\S]*\.page-state-error/);
 
     for (const label of ['Dashboard', 'History', 'Calendar', 'Forecast', 'Tracker', 'Budget', 'Settings']) {
         assert.match(indexMarkup, new RegExp(`<a[^>]+aria-label="${label}"`));

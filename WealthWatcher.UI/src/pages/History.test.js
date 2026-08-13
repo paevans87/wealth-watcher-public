@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 const elements = new Map();
 const localStorageStore = new Map();
 const historyResponses = new Map();
+let historyResponseOverride = null;
+let historyFailure = null;
 
 globalThis.localStorage = {
     getItem(key) {
@@ -23,6 +25,7 @@ function createElement() {
         innerHTML: '',
         textContent: '',
         className: '',
+        dataset: {},
         children: [],
         classList: {
             toggle(className, force) {
@@ -58,6 +61,7 @@ globalThis.window.location = { hostname: 'localhost' };
 globalThis.window.isObfuscated = false;
 globalThis.document = {
     getElementById(id) {
+        if (['history-empty-state', 'history-error-state'].includes(id) && !elements.has(id)) return null;
         if (!elements.has(id)) {
             const element = createElement();
             if (['history-current-value', 'history-period-change', 'history-peak-value'].includes(id)) {
@@ -83,6 +87,10 @@ globalThis.fetch = async (url) => {
     let response = [...historyResponses.entries()]
         .find(([pattern]) => url.includes(pattern))?.[1];
     if (url.includes('/history')) {
+        if (historyFailure) throw historyFailure;
+        if (historyResponseOverride !== null) {
+            response = historyResponseOverride;
+        } else {
         const period = new URL(url).searchParams.get('period') || '1M';
         const categories = store.state.CATEGORIES.map(category => {
             const categoryResponse = historyResponses.get(`/wealth/${category.Id}/aggregate`)
@@ -105,6 +113,7 @@ globalThis.fetch = async (url) => {
             Categories: categories,
             Timeline: []
         };
+        }
     }
     return {
         ok: true,
@@ -139,6 +148,35 @@ test('history charts use the dashboard standard 1M period by default', async () 
     assert.deepEqual(requestedUrls, [
         'http://localhost:5000/api/history?period=1M'
     ]);
+});
+
+test('history exposes an explicit empty page state when no history is returned', async () => {
+    store.clearCache();
+    historyResponseOverride = { Categories: [], Timeline: [] };
+
+    await loadHistoryView();
+
+    assert.equal(elements.get('history-view').dataset.pageStatus, 'empty');
+    assert.equal(elements.get('history-content').hidden, true);
+
+    historyResponseOverride = null;
+    await loadHistoryView();
+    assert.equal(elements.get('history-view').dataset.pageStatus, 'ready');
+});
+
+test('history exposes an actionable error state when the request fails', async () => {
+    store.clearCache();
+    historyFailure = new Error('history request failed');
+
+    await loadHistoryView();
+    historyFailure = null;
+
+    assert.equal(elements.get('history-view').dataset.pageStatus, 'error');
+    assert.equal(elements.get('history-content').hidden, true);
+    assert.ok(elements.get('history-view').children.some(child => child.id === 'history-error-state'));
+
+    await loadHistoryView();
+    assert.equal(elements.get('history-view').dataset.pageStatus, 'ready');
 });
 
 test('history range buttons reload the selected standard period', async () => {

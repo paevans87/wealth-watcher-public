@@ -1,6 +1,7 @@
 import { store } from '../store/store.js';
-import { fetchFresh, API_BASE_URL } from '../api/apiClient.js';
+import { fetchFreshStrict, API_BASE_URL } from '../api/apiClient.js';
 import { setPageLoading } from '../components/PageLoading.js';
+import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 
 let historyChartInstances = [];
 let historySnapshot = null;
@@ -8,6 +9,7 @@ let historyPeriod = '1M';
 let showHistoryTrend = false;
 let historyControlsBound = false;
 let historyRequestId = 0;
+let historyPageState = PAGE_STATUS.LOADING;
 
 const HISTORY_PERIODS = ['1H', '1D', '1W', '1M', '3M', '1Y', 'MAX'];
 export const HISTORY_TREND_STORAGE_KEY = 'wealthwatcher_history_show_trend';
@@ -79,6 +81,9 @@ export function setHistoryTrendPreference(value, storage = getHistoryTrendStorag
 
 async function loadHistoryPeriod(period) {
     const requestId = ++historyRequestId;
+    historyPageState = PAGE_STATUS.LOADING;
+    historySnapshot = null;
+    renderHistoryPageState();
     setPageLoading('history-view', true);
     const timeZone = period === '1H'
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -86,8 +91,9 @@ async function loadHistoryPeriod(period) {
     const requestUrl = `${API_BASE_URL}/history?period=${encodeURIComponent(period)}${
         timeZone ? `&timeZone=${encodeURIComponent(timeZone)}` : ''}`;
     try {
-        const response = await fetchFresh(requestUrl);
-        const results = (response?.Categories || []).map(category => ({
+        const response = await fetchFreshStrict(requestUrl);
+        const categories = Array.isArray(response?.Categories) ? response.Categories : [];
+        const results = categories.map(category => ({
             cat: {
                 Id: category.Id,
                 Label: category.Label,
@@ -101,10 +107,16 @@ async function loadHistoryPeriod(period) {
 
         historySnapshot = buildHistorySnapshot(results);
         renderHistoryView();
+    } catch {
+        if (requestId !== historyRequestId) return;
+        historySnapshot = null;
+        historyPageState = PAGE_STATUS.ERROR;
+        clearHistoryLiveContent();
+        renderHistoryPageState();
     } finally {
         if (requestId === historyRequestId) {
             setPageLoading('history-view', false);
-            updateHistoryEmptyState((historySnapshot?.dates?.length || 0) > 0);
+            renderHistoryPageState();
         }
     }
 }
@@ -204,88 +216,125 @@ function renderHistoryView() {
 
     const visible = getVisibleHistoryData();
     updateRangeButtonState();
-    updateHistorySummary(visible);
-    updateHistoryEmptyState(visible.dates.length > 0);
-
-    const grid = document.getElementById('history-grid');
-    if (grid) grid.innerHTML = '';
 
     if (visible.dates.length === 0) {
-        if (grid) {
-            grid.innerHTML = '<div class="history-empty-state">No historical data is available yet.</div>';
-        }
+        historyPageState = PAGE_STATUS.EMPTY;
+        updateHistorySummary(visible);
+        clearHistoryLiveContent();
+        renderHistoryPageState();
         return;
     }
 
+    historyPageState = PAGE_STATUS.READY;
+    updateHistorySummary(visible);
+    const grid = document.getElementById('history-grid');
+    if (grid) grid.innerHTML = '';
     renderNetWorthChart(visible);
     renderCategoryCharts(visible);
+    renderHistoryPageState();
 }
 
-export function updateHistoryEmptyState(hasHistoryData) {
+function clearHistoryLiveContent() {
+    historyChartInstances.forEach(chart => chart.destroy());
+    historyChartInstances = [];
+
+    const grid = document.getElementById('history-grid');
+    if (grid) grid.innerHTML = '';
+}
+
+function createHistoryEmptyState(view) {
+    if (!view || typeof document.createElement !== 'function') return null;
+
+    const emptyState = document.createElement('div');
+    emptyState.id = 'history-empty-state';
+    emptyState.className = 'catalog-workspace presentation-empty-state history-presentation-empty-state';
+    emptyState.setAttribute?.('role', 'status');
+    emptyState.innerHTML = `
+        <div class="presentation-empty-state-layout">
+            <div class="presentation-empty-copy">
+                <span class="presentation-empty-kicker">Portfolio history</span>
+                <h2>Give your wealth a story.</h2>
+                <p>No historical data yet. Record your first asset value and this view will reveal the shape of your net worth over time.</p>
+                <p class="presentation-empty-note">Add an asset value or connect an integration in Settings to replace this preview with your live wealth journey.</p>
+                <a class="action-btn" href="#settings?panel=asset-catalog&focus=catalog-add-asset-button" aria-controls="asset-catalog-pane">Start tracking history</a>
+            </div>
+            <div class="presentation-preview history-preview" role="img" aria-label="Illustrative example of a configured portfolio history, not your data">
+                <div class="presentation-preview-header">
+                    <div>
+                        <span class="presentation-preview-label">Illustrative example</span>
+                        <strong>Wealth journey</strong>
+                    </div>
+                    <span class="presentation-preview-status">1M range</span>
+                </div>
+                <div class="history-preview-summary">
+                    <div><span>Current net worth</span><strong>£428,640</strong></div>
+                    <div><span>Range change</span><strong class="history-preview-positive">+£74,280</strong></div>
+                    <div><span>Peak value</span><strong>£428,640</strong></div>
+                </div>
+                <div class="history-preview-chart" aria-hidden="true">
+                    <div class="history-preview-chart-label">Net worth over time</div>
+                    <svg viewBox="0 0 560 180" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="history-preview-fill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.28"></stop>
+                                <stop offset="100%" stop-color="#67e8f9" stop-opacity="0"></stop>
+                            </linearGradient>
+                        </defs>
+                        <path class="history-preview-area" d="M0 145 C58 139, 98 124, 146 132 S225 111, 276 117 S340 90, 390 96 S468 58, 560 26 L560 180 L0 180 Z"></path>
+                        <polyline class="history-preview-line" points="0,145 55,139 98,125 146,132 206,119 276,117 330,92 390,96 450,72 505,50 560,26"></polyline>
+                        <line class="history-preview-trend" x1="0" y1="148" x2="560" y2="38"></line>
+                    </svg>
+                    <div class="history-preview-axis"><span>1 month ago</span><span>Today</span></div>
+                </div>
+                <div class="history-preview-legend"><span><i class="preview-dot preview-dot-history"></i>Net worth</span><span><i class="preview-dot preview-dot-history-trend"></i>Start to latest trend</span></div>
+            </div>
+        </div>`;
+    view.appendChild?.(emptyState);
+    return emptyState;
+}
+
+function createHistoryErrorState(view) {
+    if (!view || typeof document.createElement !== 'function') return null;
+
+    const errorState = document.createElement('div');
+    errorState.id = 'history-error-state';
+    errorState.className = 'page-state-error history-page-error';
+    errorState.setAttribute?.('role', 'alert');
+
+    const title = document.createElement('strong');
+    title.textContent = 'History is unavailable right now';
+    const message = document.createElement('span');
+    message.textContent = 'We could not load your historical data. Try again in a moment.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'action-btn page-state-retry';
+    retry.textContent = 'Try again';
+    retry.addEventListener?.('click', () => void loadHistoryPeriod(historyPeriod));
+
+    errorState.appendChild?.(title);
+    errorState.appendChild?.(message);
+    errorState.appendChild?.(retry);
+    view.appendChild?.(errorState);
+    return errorState;
+}
+
+function renderHistoryPageState() {
     const view = document.getElementById('history-view');
     if (!view) return;
 
     const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
     const content = document.getElementById('history-content');
-    if (header) header.hidden = !hasHistoryData;
-    if (content) content.hidden = !hasHistoryData;
-
-    if (typeof document.createElement !== 'function') return;
-
     let emptyState = document.getElementById('history-empty-state');
-    if (!emptyState) {
-        emptyState = document.createElement('div');
-        emptyState.id = 'history-empty-state';
-        emptyState.className = 'catalog-workspace presentation-empty-state history-presentation-empty-state';
-        emptyState.setAttribute?.('role', 'status');
-        emptyState.innerHTML = `
-            <div class="presentation-empty-state-layout">
-                <div class="presentation-empty-copy">
-                    <span class="presentation-empty-kicker">Portfolio history</span>
-                    <h2>Give your wealth a story.</h2>
-                    <p>No historical data yet. Record your first asset value and this view will reveal the shape of your net worth over time.</p>
-                    <p class="presentation-empty-note">Add an asset value or connect an integration in Settings to replace this preview with your live wealth journey.</p>
-                    <a class="action-btn" href="#settings?panel=asset-catalog&focus=catalog-add-asset-button" aria-controls="asset-catalog-pane">Start tracking history</a>
-                </div>
-                <div class="presentation-preview history-preview" role="img" aria-label="Static preview of a configured portfolio history">
-                    <div class="presentation-preview-header">
-                        <div>
-                            <span class="presentation-preview-label">Static preview</span>
-                            <strong>Wealth journey</strong>
-                        </div>
-                        <span class="presentation-preview-status">1M range</span>
-                    </div>
-                    <div class="history-preview-summary">
-                        <div><span>Current net worth</span><strong>£428,640</strong></div>
-                        <div><span>Range change</span><strong class="history-preview-positive">+£74,280</strong></div>
-                        <div><span>Peak value</span><strong>£428,640</strong></div>
-                    </div>
-                    <div class="history-preview-chart" aria-hidden="true">
-                        <div class="history-preview-chart-label">Net worth over time</div>
-                        <svg viewBox="0 0 560 180" preserveAspectRatio="none">
-                            <defs>
-                                <linearGradient id="history-preview-fill" x1="0" x2="0" y1="0" y2="1">
-                                    <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.28"></stop>
-                                    <stop offset="100%" stop-color="#67e8f9" stop-opacity="0"></stop>
-                                </linearGradient>
-                            </defs>
-                            <path class="history-preview-area" d="M0 145 C58 139, 98 124, 146 132 S225 111, 276 117 S340 90, 390 96 S468 58, 560 26 L560 180 L0 180 Z"></path>
-                            <polyline class="history-preview-line" points="0,145 55,139 98,125 146,132 206,119 276,117 330,92 390,96 450,72 505,50 560,26"></polyline>
-                            <line class="history-preview-trend" x1="0" y1="148" x2="560" y2="38"></line>
-                        </svg>
-                        <div class="history-preview-axis"><span>1 month ago</span><span>Today</span></div>
-                    </div>
-                    <div class="history-preview-legend"><span><i class="preview-dot preview-dot-history"></i>Net worth</span><span><i class="preview-dot preview-dot-history-trend"></i>Start to latest trend</span></div>
-                </div>
-            </div>`;
-        if (header && typeof view.insertBefore === 'function') {
-            view.insertBefore(emptyState, header.nextElementSibling || null);
-        } else if (typeof view.prepend === 'function') view.prepend(emptyState);
-        else if (typeof view.insertBefore === 'function') view.insertBefore(emptyState, view.firstChild || null);
-        else view.appendChild(emptyState);
-    }
+    if (!emptyState) emptyState = createHistoryEmptyState(view);
+    let errorState = document.getElementById('history-error-state');
+    if (!errorState) errorState = createHistoryErrorState(view);
 
-    emptyState.hidden = hasHistoryData;
+    setPageStatus(view, historyPageState);
+    const hasLiveData = historyPageState === PAGE_STATUS.READY;
+    if (header) header.hidden = !hasLiveData;
+    if (content) content.hidden = !hasLiveData;
+    if (emptyState) emptyState.hidden = historyPageState !== PAGE_STATUS.EMPTY;
+    if (errorState) errorState.hidden = historyPageState !== PAGE_STATUS.ERROR;
 }
 
 function renderNetWorthChart(visible) {
