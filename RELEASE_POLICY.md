@@ -15,12 +15,29 @@ This policy applies to the planned public Wealth Watcher repository and its self
 Each release should include:
 
 - a GitHub release with concise release notes and a `CHANGELOG.md` entry;
+- a reviewed `docs/release-notes/vMAJOR.MINOR.PATCH.md` source note;
 - the exact Git tag and source archive;
 - SHA-256 checksums for the source archive and any published release artefacts;
 - the API and web container image digests for tagged releases; and
 - an SBOM for the application dependency graph.
 
 The project owner retains responsibility for dependency, security, provider-integration, and release decisions.
+
+## Release-note standard and tag enforcement
+
+The release-note source of truth is one Markdown file per stable release at `docs/release-notes/vMAJOR.MINOR.PATCH.md`. The file must begin with front matter containing:
+
+- `version`, matching `WealthWatcher.UI/package.json` and the Git tag without the leading `v`;
+- `date` in `YYYY-MM-DD` format;
+- `channel: stable`;
+- `requiresMigration: true|false`; and
+- `requiresConfigurationChange: true|false`.
+
+The body must contain a level-one title and the following level-two sections: `Highlights`, `Fixes`, `Upgrade notes`, `Docker images`, and `Known issues`. Use the checked-in `docs/release-notes/_template.md` when starting a release note.
+
+The CI release-metadata job validates the format on every change and validates the exact `vMAJOR.MINOR.PATCH` match on tag pushes. Tagged images are not published when that validation fails. The tag workflow uses the validated Markdown body to create or refresh the matching GitHub Release.
+
+The UI build converts the validated current note into bundled `release.json` metadata. The application displays that metadata in Settings and checks the latest stable GitHub Release for an available update. This check is informational only; it never modifies Docker services.
 
 ## Container images and local Docker deployment
 
@@ -36,7 +53,7 @@ The Git tag and source archive remain the release identity. Image digests should
 
 ## UI package
 
-`WealthWatcher.UI` is an application bundle, not a reusable npm library. Its package remains marked `private` and is not published to npm. Its package version tracks the application release, beginning at `0.1.0`, so build metadata remains consistent with the application release.
+`WealthWatcher.UI` is an application bundle, not a reusable npm library. Its package remains marked `private` and is not published to npm. Its package version is the application release source of truth, beginning at `0.1.0`; release-note and tag validation keep build metadata consistent with the application release.
 
 ## Support and security
 

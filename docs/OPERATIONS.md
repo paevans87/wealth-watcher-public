@@ -23,6 +23,19 @@ This guide covers the local/trusted Docker Compose deployment. Do not expose the
 
 Database migrations run during API startup. Review migration changes before upgrading and retain a backup before applying them.
 
+## Application updates
+
+Review the release note shown in the application Settings page or in `docs/release-notes` before updating. Release notes identify migrations, configuration changes, image tags, and known issues.
+
+For a published-image deployment, back up PostgreSQL and the configured Data Protection key directory, update the `API_IMAGE` and `WEB_IMAGE` values in `.env` to the desired release tag or digest, and run:
+
+```powershell
+docker compose pull api web
+docker compose up -d --no-build --remove-orphans
+```
+
+Verify `http://127.0.0.1:8182/api/health` and the browser UI after the services restart. The application version indicator does not execute these commands automatically. To roll back, restore the previous image tags or digests and repeat the same pull/start commands after assessing any database migration compatibility.
+
 ## Key loss and rotation
 
 If the Data Protection key ring is lost, existing integration credentials cannot be decrypted and must be entered again. Rotation and recovery procedures should be tested as part of the deployment owner's operational review.

@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env before starting the stack}
       POSTGRES_DB: ${POSTGRES_DB:-wealthwatcherdb}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PostgreSQL 18 stores data beneath a versioned subdirectory.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -40,8 +41,8 @@ services:
   web:
     image: ${WEB_IMAGE:-wealth-watcher-web}
     build:
-      context: ./WealthWatcher.UI
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./WealthWatcher.UI/Dockerfile
     ports:
       - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8182}:80"
     depends_on:

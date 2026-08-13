@@ -84,6 +84,21 @@ docker compose up -d --no-build --remove-orphans
 
 For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.1.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
 
+### Release notes and updates
+
+Each stable release has a reviewed Markdown note under [`docs/release-notes`](docs/release-notes). The note is also used as the GitHub Release body and is bundled into the web image, so the installed application can show the current release notes in Settings even when it cannot reach the Internet.
+
+The Settings page and desktop app bar show the installed version. When a newer stable GitHub Release is available, Settings shows an update indicator and the associated release notes. The indicator is informational; it does not update Docker services automatically.
+
+To apply a published image update manually, review the release note, back up PostgreSQL and the Data Protection key directory, then run:
+
+```powershell
+docker compose pull api web
+docker compose up -d --no-build --remove-orphans
+```
+
+Keep release image tags or digests pinned when reproducible rollback matters. Database migrations run during API startup, so review the release note and retain a verified backup before upgrading.
+
 ## Configuration
 
 Compose configuration is supplied through a private `.env` file. The supported variables are documented in [.env.example](.env.example). For a direct API process, use standard ASP.NET Core environment-variable configuration, for example `ConnectionStrings__DefaultConnection` and `Cors__AllowedOrigins__0`.

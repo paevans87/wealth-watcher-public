@@ -72,16 +72,18 @@ export function ensurePaneHelper(paneEl) {
 /**
  * Reads saved collapse state for a given pane ID from localStorage.
  * @param {string} paneId
+ * @param {boolean} [defaultCollapsed=false] State to use when no saved preference exists.
  * @returns {boolean} True if collapsed, false if expanded (default)
  */
-export function getPaneState(paneId) {
+export function getPaneState(paneId, defaultCollapsed = false) {
     if (!paneId) return false;
     try {
         const stored = localStorage.getItem(`${STORAGE_PREFIX}${paneId}`);
+        if (stored === null) return defaultCollapsed;
         return stored === 'collapsed';
     } catch (e) {
         // Fallback if localStorage is restricted or unavailable
-        return false;
+        return defaultCollapsed;
     }
 }
 
@@ -162,7 +164,8 @@ export function initCollapsiblePane(paneEl) {
 
     const paneId = paneEl.dataset?.paneId || paneEl.id;
     if (paneId) {
-        const isCollapsed = getPaneState(paneId);
+        const defaultCollapsed = paneEl.dataset?.defaultCollapsed === 'true';
+        const isCollapsed = getPaneState(paneId, defaultCollapsed);
         if (isCollapsed) {
             paneEl.classList.add('collapsed');
         } else {

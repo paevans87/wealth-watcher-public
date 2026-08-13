@@ -210,8 +210,9 @@ test('CollapsiblePane Unit Tests', async (t) => {
     });
 
     await t.test('localStorage persistence helpers (getPaneState / setPaneState)', () => {
-        // Defaults to expanded (false) when not saved
+        // Defaults to expanded (false) when not saved unless a pane-specific default is supplied
         assert.equal(getPaneState('general-settings'), false, 'Default pane state should be expanded (false)');
+        assert.equal(getPaneState('application-version', true), true, 'Pane-specific default should be respected');
         assert.equal(getPaneState(null), false, 'Null paneId returns default false');
         assert.equal(getPaneState(''), false, 'Empty paneId returns default false');
 
@@ -376,6 +377,24 @@ test('CollapsiblePane Unit Tests', async (t) => {
         initCollapsiblePane(paneEl);
         headerEl.dispatchEvent({ type: 'click', target: titleEl });
         assert.equal(paneEl.classList.contains('collapsed'), true, 'Single click should toggle once back to collapsed');
+    });
+
+    await t.test('initCollapsiblePane uses the pane default only when no saved state exists', () => {
+        const paneEl = createMockElement('div', {
+            id: 'application-version-pane',
+            dataset: { paneId: 'application-version', defaultCollapsed: 'true' }
+        });
+        const headerEl = createMockElement('div', { className: 'collapsible-header' });
+        paneEl.appendChild(headerEl);
+
+        initCollapsiblePane(paneEl);
+        assert.equal(paneEl.classList.contains('collapsed'), true, 'Application version should be collapsed by default');
+        assert.equal(headerEl.getAttribute('aria-expanded'), 'false');
+
+        setPaneState('application-version', false);
+        initCollapsiblePane(paneEl);
+        assert.equal(paneEl.classList.contains('collapsed'), false, 'Saved expanded state should override the default');
+        assert.equal(headerEl.getAttribute('aria-expanded'), 'true');
     });
 
     await t.test('initAllCollapsiblePanes initializes all matching panes in container or document', () => {

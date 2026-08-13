@@ -15,6 +15,7 @@ import { setupFireFeatureSettings } from './components/FireSettings.js';
 import { setupPropertyPanel, getPropertyFormState, resetPropertyFormState } from './components/Properties.js';
 import { FEATURE_SETTINGS_KEY, normalizeFeatureSettings, applyFeatureVisibility } from './utils/featureFlags.js';
 import { setupPwa } from './pwa.js';
+import { setupReleaseInfo } from './release.js';
 import { setupAssetCatalog } from './components/AssetCatalog.js';
 import { requestNotification } from './components/ConfirmationModal.js';
 import { showToast } from './components/Toast.js';
@@ -154,6 +155,9 @@ async function init() {
     try {
         const demoMode = isDemoModeEnabled();
         setupDemoModeUi(demoMode);
+        void setupReleaseInfo({ checkForUpdates: !demoMode }).catch(error => {
+            console.error('Release information setup failed', error);
+        });
 
         // Keep the integration panel usable even if another optional dashboard
         // bootstrap step fails. The shared asset catalogue is loaded separately
