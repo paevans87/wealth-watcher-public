@@ -24,6 +24,14 @@ test('responsive shell and navigation contracts are present', () => {
     assert.match(indexMarkup, /id="audit-modal"[\s\S]*?role="dialog"\s+aria-modal="true"/);
 });
 
+test('public demo banner is fixed above the page and preserves its layout space', () => {
+    assert.match(stylesheet, /\.demo-mode-banner\s*\{[\s\S]*position:\s*fixed[\s\S]*top:\s*0[\s\S]*left:\s*0[\s\S]*right:\s*0/);
+    assert.match(stylesheet, /body\.demo-mode\s*\{[\s\S]*padding-top:\s*calc\(var\(--demo-banner-height[\s\S]*var\(--demo-app-bar-height/);
+    assert.match(stylesheet, /\.demo-mode \.top-nav\s*\{[\s\S]*position:\s*fixed[\s\S]*top:\s*var\(--demo-banner-height[\s\S]*z-index:\s*100/);
+    assert.match(stylesheet, /\.demo-mode-banner\s*\{[\s\S]*z-index:\s*110/);
+    assert.match(indexMarkup, /class="action-btn demo-main-site-link"\s+href="https:\/\/wealthwatcher\.co\.uk\/"/);
+});
+
 test('high-data pages have explicit mobile containment contracts', () => {
     assert.match(stylesheet, /#forecast-view\s+\.forecast-control-actions\s*\{[\s\S]*flex:\s*0 1 auto/);
     assert.match(stylesheet, /#fire-view\s+\.fire-dashboard\s*>\s*\.grid-container\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);

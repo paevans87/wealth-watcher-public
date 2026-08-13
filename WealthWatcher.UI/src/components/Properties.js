@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../api/apiClient.js';
+import { apiRequest, API_BASE_URL } from '../api/apiClient.js';
 import { store } from '../store/store.js';
 import { requestNotification } from './ConfirmationModal.js';
 import { showToast } from './Toast.js';
@@ -92,7 +92,7 @@ async function confirmPropertyRemoval() {
     if (!property) return;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/properties/${encodeURIComponent(property.id)}`, {
+        const response = await apiRequest(`${API_BASE_URL}/properties/${encodeURIComponent(property.id)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ Archived: true })
@@ -118,7 +118,7 @@ async function confirmPropertyRemoval() {
         console.error(error);
         await requestNotification({
             title: 'Unable to remove property',
-            message: 'There was a problem communicating with the API.'
+            message: error.message || 'There was a problem communicating with the API.'
         });
     }
 }

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../api/apiClient.js';
+import { apiRequest, API_BASE_URL, isDemoMode } from '../api/apiClient.js';
 import { store } from '../store/store.js';
 import { requestConfirmation } from './ConfirmationModal.js';
 import { showToast } from './Toast.js';
@@ -12,6 +12,7 @@ import {
 import { renderFeatureToggle, renderSelectField } from './FormFields.js';
 
 const steps = ['Enable', 'Add Keys', 'Test', 'Pull Accounts', 'Allocate'];
+const DEMO_ONLY_MESSAGE = 'This provider action is unavailable in demo mode. No credentials or live provider accounts are changed.';
 const MARKET_DAYS = [
     { value: 'Monday', label: 'Monday' },
     { value: 'Tuesday', label: 'Tuesday' },
@@ -38,15 +39,44 @@ const escapeHtml = value => String(value ?? '')
     .replaceAll("'", '&#039;');
 
 async function request(path, options = {}) {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    if (isDemoProviderOperation(path, options)) {
+        showDemoOnlyMessage();
+        throw new DemoOnlyOperationError();
+    }
+    const response = await apiRequest(`${API_BASE_URL}${path}`, {
         ...options,
         headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
     });
-    const payload = response.status === 204 ? null : await response.json().catch(() => null);
+    const payload = response.status === 204 || typeof response.json !== 'function'
+        ? null
+        : await response.json().catch(() => null);
     if (!response.ok) {
         throw new Error(payload?.Error || payload?.error || `Request failed (${response.status}).`);
     }
     return payload;
+}
+
+class DemoOnlyOperationError extends Error {
+    constructor() {
+        super(DEMO_ONLY_MESSAGE);
+        this.demoOnly = true;
+    }
+}
+
+function isDemoProviderOperation(path, options = {}) {
+    if (!isDemoMode) return false;
+    const method = String(options.method || 'GET').toUpperCase();
+    const normalizedPath = String(path || '').split('?')[0];
+    return method !== 'GET' && (normalizedPath === '/integrations/settings' || normalizedPath.startsWith('/integrations/'));
+}
+
+function showDemoOnlyMessage() {
+    showToast({
+        title: 'Demo mode',
+        message: DEMO_ONLY_MESSAGE,
+        type: 'info',
+        key: 'demo-provider-operation'
+    });
 }
 
 function descriptorFor(connection) {
@@ -632,6 +662,7 @@ async function enable(providerKey) {
             key: 'integration-enable'
         });
     } catch (error) {
+        if (error?.demoOnly) return;
         showMessage(error.message);
         showToast({
             title: 'Unable to add integration',
@@ -664,6 +695,7 @@ async function saveConnectionName(form) {
             key: 'integration-name'
         });
     } catch (error) {
+        if (error?.demoOnly) return;
         showMessage(error.message);
         showToast({
             title: 'Unable to save integration name',
@@ -698,6 +730,7 @@ async function removeConnection(connectionId) {
             key: 'integration-remove'
         });
     } catch (error) {
+        if (error?.demoOnly) return;
         showMessage(error.message);
         showToast({
             title: 'Unable to remove integration',
@@ -731,6 +764,7 @@ async function saveCredentials(form) {
             key: 'integration-credentials'
         });
     } catch (error) {
+        if (error?.demoOnly) return;
         showMessage(error.message);
         showToast({
             title: 'Unable to save integration credentials',
@@ -809,6 +843,7 @@ async function saveMarketHours(form) {
             key: 'integration-market-hours'
         });
     } catch (error) {
+        if (error?.demoOnly) return;
         showMarketHoursMessage(error.message, 'error');
         showToast({
             title: 'Unable to save market hours',
@@ -958,6 +993,7 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
                 return closeWizard();
             }
         } catch (error) {
+            if (error?.demoOnly) return;
             showMessage(error.message);
             showToast({
                 title: 'Integration action failed',

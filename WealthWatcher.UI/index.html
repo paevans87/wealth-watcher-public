@@ -8,10 +8,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Wealth Watcher</title>
-    <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="apple-touch-icon" href="/icon-192.png">
-    <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="stylesheet" href="style.css?v=24">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    <link rel="icon" href="./icon.png" type="image/png">
+    <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 
@@ -22,6 +22,18 @@
             <div class="boot-log" id="boot-log">> System init...<br></div>
         </div>
     </div>
+
+    <aside id="demo-mode-banner" class="demo-mode-banner" data-demo-banner hidden role="status" aria-live="polite">
+        <div class="demo-mode-copy">
+            <span class="demo-mode-eyebrow">Public demo</span>
+            <strong>Fictional data, running entirely in your browser</strong>
+            <span>Explore the dashboard without an API, database, account, or provider connection.</span>
+        </div>
+        <div class="demo-mode-actions">
+            <a class="action-btn demo-main-site-link" href="https://wealthwatcher.co.uk/">Main site</a>
+            <button id="reset-demo" class="action-btn demo-reset-btn" data-reset-demo type="button">Reset demo</button>
+        </div>
+    </aside>
 
     <div id="custom-tooltip" class="custom-tooltip"></div>
 

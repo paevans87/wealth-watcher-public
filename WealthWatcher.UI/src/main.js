@@ -2,7 +2,7 @@ import { Chart } from 'chart.js/auto';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import flatpickr from 'flatpickr';
 import { store } from './store/store.js';
-import { fetchCached, API_BASE_URL } from './api/apiClient.js';
+import * as apiClient from './api/apiClient.js';
 import { setupRouter, handleRouting } from './router/router.js';
 import { loadDashboard, setupPeriodListeners, setupHourlyRefreshLifecycle, setupDashboardActions } from './pages/Dashboard.js';
 import { setupModals } from './components/Modals.js';
@@ -31,6 +31,100 @@ globalThis.Chart = Chart;
 globalThis.ChartDataLabels = ChartDataLabels;
 globalThis.flatpickr = flatpickr;
 
+const { API_BASE_URL } = apiClient;
+const fetchCached = apiClient.fetchCached;
+
+// Keep this entry point compatible with the current client while allowing the
+// shared request boundary to provide demo fixtures and mutations.
+const apiRequest = (...args) => {
+    if (typeof apiClient.apiRequest === 'function') return apiClient.apiRequest(...args);
+    return apiClient.fetchCached(...args);
+};
+
+function isDemoModeEnabled() {
+    if (typeof apiClient.isDemoMode === 'function') return apiClient.isDemoMode();
+    return apiClient.isDemoMode === true;
+}
+
+async function readApiPayload(result) {
+    if (result && typeof result.json === 'function') return result.json();
+    return result;
+}
+
+function apiResultSucceeded(result, payload) {
+    return result?.ok ?? payload !== null;
+}
+
+function syncDemoChromeOffsets(banner, topNav, demoMode) {
+    const root = document.documentElement;
+    if (!root?.style) return;
+    const bannerBounds = banner?.getBoundingClientRect?.();
+    const bannerHeight = demoMode && banner && !banner.hidden
+        ? Math.ceil(bannerBounds?.height || banner.offsetHeight || 0)
+        : 0;
+    const topNavBounds = topNav?.getBoundingClientRect?.();
+    const topNavHeight = demoMode && topNav
+        ? Math.ceil(topNavBounds?.height || topNav.offsetHeight || 0)
+        : 0;
+    root.style.setProperty('--demo-banner-height', `${bannerHeight}px`);
+    root.style.setProperty('--demo-app-bar-height', `${topNavHeight}px`);
+}
+
+function setupDemoModeUi(demoMode) {
+    document.documentElement.dataset.demoMode = String(demoMode);
+    document.body?.classList.toggle('demo-mode', demoMode);
+
+    const banner = document.querySelector('[data-demo-banner], .demo-banner, #demo-banner, #demo-mode-banner');
+    const topNav = document.querySelector('.top-nav');
+    if (banner) {
+        banner.hidden = !demoMode;
+        banner.dataset.demoMode = String(demoMode);
+        banner.classList.toggle('is-visible', demoMode);
+        banner.setAttribute('aria-hidden', String(!demoMode));
+    }
+    syncDemoChromeOffsets(banner, topNav, demoMode);
+
+    if (demoMode && typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => syncDemoChromeOffsets(banner, topNav, demoMode));
+        if (banner) observer.observe(banner);
+        if (topNav) observer.observe(topNav);
+    }
+
+    if (!demoMode) return;
+
+    document.querySelectorAll(
+        '#btn-force-sync, [data-force-sync], [data-real-sync], [data-integration-entry]'
+    ).forEach(control => {
+        control.disabled = true;
+        control.hidden = true;
+        control.setAttribute('aria-disabled', 'true');
+    });
+
+    const integrations = document.getElementById('integration-settings-pane');
+    if (integrations) {
+        integrations.hidden = true;
+        integrations.setAttribute('aria-hidden', 'true');
+        integrations.querySelectorAll('button, input, select, textarea').forEach(control => {
+            control.disabled = true;
+        });
+    }
+
+    const resetDemo = async () => {
+        store.clearCache();
+        if (typeof apiClient.resetDemoData === 'function') {
+            await apiClient.resetDemoData();
+        }
+        window.location?.reload?.();
+    };
+    window.resetDemo = resetDemo;
+    document.querySelectorAll('[data-reset-demo], [data-demo-reset], #reset-demo, #demo-reset').forEach(control => {
+        control.addEventListener('click', event => {
+            event.preventDefault();
+            void resetDemo();
+        });
+    });
+}
+
 // --- BOOT ANIMATION ---
 function runBootSequence() {
     const log = document.getElementById('boot-log');
@@ -58,14 +152,19 @@ function runBootSequence() {
 async function init() {
     runBootSequence();
     try {
+        const demoMode = isDemoModeEnabled();
+        setupDemoModeUi(demoMode);
+
         // Keep the integration panel usable even if another optional dashboard
         // bootstrap step fails. The shared asset catalogue is loaded separately
         // below, so this initial integration load does not fetch assets twice.
-        setupIntegrations();
-        loadIntegrations({ includeAssets: false });
+        if (!demoMode) {
+            setupIntegrations();
+            loadIntegrations({ includeAssets: false });
+        }
 
-        const setRes = await fetch(`${API_BASE_URL}/settings`);
-        const dbSettings = await setRes.json();
+        const settingsResult = await apiRequest(`${API_BASE_URL}/settings`);
+        const dbSettings = await readApiPayload(settingsResult) || {};
         
         if (dbSettings['wealthWatcherGeneralSettings']) {
             store.state.generalSettings = JSON.parse(dbSettings['wealthWatcherGeneralSettings']);
@@ -120,7 +219,7 @@ async function init() {
         setupDashboardActions({ refresh: refreshDashboardData });
         setupPropertyPanel({ refresh: loadDashboard });
         setupForecast();
-        setupIntegrations({ refresh: refreshDashboardData });
+        if (!demoMode) setupIntegrations({ refresh: refreshDashboardData });
         setupFireFeatureSettings();
         setupBudgetSettings();
         setupRouter();
@@ -192,8 +291,8 @@ window.loadAudits = async function(pageDelta) {
     if (store.state.auditPage < 1) store.state.auditPage = 1;
 
     try {
-        const res = await fetch(`${API_BASE_URL}/audits?page=${store.state.auditPage}&pageSize=10`);
-        const data = normalizeAuditResponse(await res.json());
+        const result = await apiRequest(`${API_BASE_URL}/audits?page=${store.state.auditPage}&pageSize=10`);
+        const data = normalizeAuditResponse(await readApiPayload(result));
         
         const tbody = document.getElementById('audit-tbody');
         tbody.innerHTML = '';
@@ -487,13 +586,14 @@ document.getElementById('add-entry-form')?.addEventListener('submit', async (e) 
             };
         }
 
-        const res = await fetch(endpoint, {
+        const result = await apiRequest(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestPayload)
         });
+        const responsePayload = await readApiPayload(result);
 
-        if (res.ok) {
+        if (apiResultSucceeded(result, responsePayload)) {
             window.closeModal('entry-modal');
             e.target.reset();
             resetPropertyFormState();
@@ -535,7 +635,7 @@ if (document.getElementById('system-boot')) {
     void import('./styles/toast.css');
     void import('flatpickr/dist/flatpickr.min.css');
     void import('flatpickr/dist/themes/dark.css');
-    setupPwa();
+    if (!isDemoModeEnabled()) setupPwa();
     init();
 }
 
