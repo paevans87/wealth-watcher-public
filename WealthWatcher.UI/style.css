@@ -4394,3 +4394,178 @@ body.obfuscated h1 .obfuscate-val {
         width: 8.5rem;
     }
 }
+
+/* --- FINAL NARROW VIEW OVERRIDES --- */
+@media (max-width: 768px) {
+    #history-view .history-summary-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    #history-view .history-summary-card {
+        min-width: 0;
+        padding: 1rem 1.1rem;
+    }
+
+    #history-view .history-summary-label,
+    #history-view .history-summary-detail {
+        overflow-wrap: anywhere;
+    }
+
+    #history-view .history-summary-value {
+        font-size: 1.55rem;
+    }
+
+    #history-view .history-section-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.9rem;
+    }
+
+    #history-view .history-controls {
+        min-width: 0;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    #history-view .history-controls .period-picker {
+        min-width: 0;
+        flex: 1 1 auto;
+        justify-content: space-between;
+    }
+
+    #history-view .history-controls .period-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding-inline: 8px;
+    }
+
+    #history-view .history-trend-toggle {
+        flex: 0 0 auto;
+    }
+
+    #history-view .history-main-chart {
+        height: 360px;
+        min-width: 0;
+        padding-inline: 0.5rem;
+    }
+
+    #history-view .history-chart-key {
+        left: 0.75rem;
+        right: 0.75rem;
+        flex-wrap: wrap;
+        gap: 0.55rem 0.75rem;
+        font-size: 0.65rem;
+        line-height: 1.3;
+    }
+
+    #history-view .history-breakdown-section {
+        margin-top: 1.5rem;
+    }
+
+    #history-view .history-breakdown-section .grid-container {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #history-view .history-card-meta {
+        min-width: 0;
+        flex-wrap: wrap;
+        overflow-wrap: anywhere;
+    }
+
+    #history-view .history-canvas-container {
+        height: 140px;
+    }
+
+    #calendar-view #calendar-grid {
+        min-width: 0;
+        overflow-x: hidden;
+    }
+
+    #calendar-view .calendar-grid-content {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        min-width: 0;
+    }
+
+    #calendar-view .calendar-cell {
+        min-width: 0;
+        min-height: 5.75rem;
+        padding: 0.45rem 0.3rem;
+    }
+
+    #calendar-view .calendar-weekday {
+        min-width: 0;
+        padding: 0.6rem 0.15rem;
+        font-size: 0.62rem;
+    }
+
+    #calendar-view .calendar-day {
+        gap: 0.35rem;
+    }
+
+    #calendar-view .calendar-change {
+        min-width: 0;
+        font-size: 0.68rem;
+    }
+
+    #calendar-view .calendar-change-amount,
+    #calendar-view .calendar-change-percentage {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+}
+
+@media (max-width: 560px) {
+    #history-view .history-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.55rem;
+    }
+
+    #history-view .history-controls .period-picker,
+    #history-view .history-trend-toggle {
+        width: 100%;
+    }
+
+    #history-view .history-trend-toggle {
+        justify-self: start;
+        width: auto;
+    }
+
+    #history-view .history-main-chart {
+        height: 310px;
+    }
+
+    #history-view .history-chart-key {
+        position: static;
+        margin-bottom: 0.75rem;
+    }
+
+    #history-view .history-canvas-container {
+        height: 125px;
+    }
+
+    #calendar-view .calendar-cell {
+        min-height: 4.8rem;
+        padding: 0.35rem 0.15rem;
+    }
+
+    #calendar-view .calendar-weekday {
+        font-size: 0.56rem;
+    }
+
+    #calendar-view .calendar-day-number {
+        font-size: 0.7rem;
+    }
+
+    #calendar-view .calendar-change {
+        font-size: 0.58rem;
+        line-height: 1.15;
+    }
+
+    #calendar-view .calendar-change-percentage {
+        font-size: 0.54rem;
+    }
+}
