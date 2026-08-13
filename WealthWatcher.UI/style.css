@@ -4691,3 +4691,145 @@ body.obfuscated h1 .obfuscate-val {
         overflow-wrap: anywhere;
     }
 }
+
+/* --- SETTINGS NARROW VIEW OVERRIDES --- */
+@media (max-width: 560px) {
+    #settings-view .responsive-grid-2col,
+    #settings-view .collapsible-pane,
+    #settings-view .collapsible-content,
+    #settings-view #general-settings-form,
+    #settings-view #general-settings-controls,
+    #settings-view .catalog-kind-manager,
+    #settings-view .catalog-kind-list {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    #settings-view #general-settings-controls,
+    #settings-view #general-settings-form {
+        width: 100%;
+    }
+
+    #settings-view .settings-toggle-list .feature-toggle {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        white-space: normal;
+    }
+
+    #settings-view .settings-toggle-list .feature-toggle > span:first-child {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    #settings-view .catalog-kind-list {
+        grid-template-columns: minmax(0, 1fr);
+        overflow: hidden;
+    }
+
+    #settings-view .catalog-kind-row,
+    #settings-view .catalog-kind-edit {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #settings-view .catalog-kind-edit {
+        flex-wrap: wrap;
+    }
+
+    #settings-view .catalog-kind-name {
+        min-width: 3rem;
+        flex: 1 1 4.5rem;
+    }
+
+    #settings-view .catalog-kind-code,
+    #settings-view .catalog-kind-group,
+    #settings-view .catalog-kind-count {
+        min-width: 0;
+        max-width: 38%;
+    }
+
+    #settings-view .integration-connections,
+    #settings-view .integration-connection,
+    #settings-view .integration-connection-copy,
+    #settings-view .integration-connection-controls {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #settings-view .integration-connection {
+        width: 100%;
+    }
+
+    #settings-view .integration-connection-copy strong,
+    #settings-view .integration-connection-copy span,
+    #settings-view .integration-connection-copy small {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    #settings-view .integration-connection-controls {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 0.65rem;
+        width: 100%;
+    }
+
+    #settings-view .integration-polling-control,
+    #settings-view .integration-connection-controls .feature-toggle,
+    #settings-view .integration-connection-actions {
+        min-width: 0;
+        max-width: 100%;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    #settings-view .integration-connection-controls .feature-toggle {
+        justify-content: space-between;
+        white-space: normal;
+    }
+
+    #settings-view .integration-connection-actions {
+        flex-wrap: wrap;
+    }
+
+    #settings-view .feature-toggle-track,
+    #settings-view .integration-market-hours,
+    #settings-view .integration-market-hours-panel,
+    #settings-view .integration-market-hours-form,
+    #settings-view .integration-market-hours-description,
+    #settings-view .integration-market-hours-days,
+    #settings-view .integration-market-hours-row {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #settings-view .feature-toggle-track {
+        flex: 0 0 auto;
+    }
+
+    #settings-view .integration-market-hours-form,
+    #settings-view .integration-market-hours-description,
+    #settings-view .integration-market-hours-days,
+    #settings-view .integration-market-hours-row {
+        width: 100%;
+    }
+
+    #settings-view .integration-market-hours-row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #settings-view .integration-market-hours-row > *,
+    #settings-view .integration-market-day-toggle {
+        min-width: 0;
+        width: 100%;
+    }
+
+    #settings-view .integration-market-day-toggle {
+        justify-content: space-between;
+    }
+}
