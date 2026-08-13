@@ -121,9 +121,9 @@ test('FireTracker shows a settings CTA when tracking data is absent', () => {
     assert.equal(elements['fire-header'].hidden, true);
     assert.equal(elements['fire-dashboard'].hidden, true);
     assert.match(elements['fire-empty-state'].innerHTML, /presentation-empty-state-layout/);
-    assert.match(elements['fire-empty-state'].innerHTML, /Static preview/);
+    assert.match(elements['fire-empty-state'].innerHTML, /Illustrative example/);
     assert.match(elements['fire-empty-state'].innerHTML, /tracker-preview/);
-    assert.match(elements['fire-empty-state'].innerHTML, /aria-label="Static preview of a configured FIRE tracker"/);
+    assert.match(elements['fire-empty-state'].innerHTML, /aria-label="Illustrative example of a configured FIRE tracker"/);
     assert.match(elements['fire-empty-state'].innerHTML, /href="#settings\?panel=fire-settings(?:&amp;|&)focus=fire-tracker-settings"/);
     assert.match(elements['fire-empty-state'].innerHTML, /aria-controls="fire-settings-pane"/);
     assert.match(elements['fire-empty-state'].innerHTML, /No tracking data yet/);
@@ -144,4 +144,22 @@ test('FireTracker restores the header and dashboard when tracking data exists', 
     assert.equal(elements['fire-empty-state'].hidden, true);
     assert.equal(elements['fire-header'].hidden, false);
     assert.equal(elements['fire-dashboard'].hidden, false);
+});
+
+test('FireTracker clears stale calculated content before rendering the no-data experience', () => {
+    const elements = setupMockDOM();
+    store.state.categories = { investments: 100000 };
+    renderFireView();
+
+    assert.notEqual(elements['fire-current-assets'].innerText, '');
+    elements['fire-progress-fill'].style.width = '68%';
+
+    store.state.categories = {};
+    renderFireView();
+
+    assert.equal(elements['fire-current-assets'].innerText, '');
+    assert.equal(elements['fire-target-display'].innerText, '');
+    assert.equal(elements['fire-progress-fill'].style.width, '0%');
+    assert.equal(elements['fire-header'].hidden, true);
+    assert.equal(elements['fire-dashboard'].hidden, true);
 });

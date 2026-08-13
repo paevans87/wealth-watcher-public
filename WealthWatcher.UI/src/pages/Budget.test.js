@@ -179,9 +179,9 @@ test('budget overview explains missing configuration and links to settings', () 
     assert.equal(emptyState.id, 'budget-empty-state');
     assert.match(emptyState.className, /catalog-workspace/);
     assert.match(emptyState.innerHTML, /presentation-empty-state-layout/);
-    assert.match(emptyState.innerHTML, /Static preview/);
+    assert.match(emptyState.innerHTML, /Illustrative example/);
     assert.match(emptyState.innerHTML, /budget-preview/);
-    assert.match(emptyState.innerHTML, /aria-label="Static preview of a configured budget overview"/);
+    assert.match(emptyState.innerHTML, /aria-label="Illustrative example of a configured budget overview"/);
     assert.match(emptyState.innerHTML, /href="#settings\?panel=monthly-budget"/);
     assert.match(emptyState.innerHTML, /aria-controls="budget-settings-pane"/);
     assert.match(emptyState.innerHTML, /No budget data yet/);
@@ -209,7 +209,7 @@ test('budget overview shows configured totals and chart, then hides both when cl
 
     loadBudgetView();
 
-    assert.equal(elements.get('budget-empty-state').hidden, true);
+    assert.equal(elements.has('budget-empty-state'), false, 'ready content should not create the no-data experience');
     assert.equal(elements.get('budget-overview-content').hidden, false);
     assert.equal(totalIncome.innerText, '£5,000.00');
     assert.equal(totalBills.innerText, '£2,000.00');
@@ -223,5 +223,10 @@ test('budget overview shows configured totals and chart, then hides both when cl
 
     assert.equal(elements.get('budget-empty-state').hidden, false);
     assert.equal(elements.get('budget-overview-content').hidden, true);
+    assert.equal(totalIncome.innerText, '');
+    assert.equal(totalBills.innerText, '');
+    assert.equal(totalSavings.innerText, '');
+    assert.equal(totalSpend.innerText, '');
+    assert.equal(unallocated.innerText, '');
     assert.equal(chartInstances.at(-1).destroyed, true);
 });

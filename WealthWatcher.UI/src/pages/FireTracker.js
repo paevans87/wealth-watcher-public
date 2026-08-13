@@ -1,5 +1,6 @@
 import { store } from '../store/store.js';
 import { formatter } from '../utils/formatters.js';
+import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 
 export function renderFireView() {
     const targetIncomeInput = document.getElementById('fire-setting-income');
@@ -41,8 +42,15 @@ export function renderFireView() {
     // Calculations
     const categories = store.state.categories || {};
     const hasTrackingData = Object.keys(categories).length > 0;
-    updateTrackerEmptyState(hasTrackingData);
-    if (!hasTrackingData) return;
+    if (hasTrackingData) {
+        setPageStatus('fire-view', PAGE_STATUS.READY);
+        showTrackerReadyState();
+    } else {
+        setPageStatus('fire-view', PAGE_STATUS.EMPTY);
+        clearTrackerReadyState();
+        renderTrackerEmptyState();
+        return;
+    }
 
     let effectiveMonthlyTarget = targetIncome;
     if (includeStatePension) {
@@ -116,7 +124,7 @@ export function renderFireView() {
     }
 }
 
-function updateTrackerEmptyState(hasTrackingData) {
+function showTrackerReadyState() {
     const view = document.getElementById('fire-view');
     if (!view) return;
 
@@ -127,8 +135,39 @@ function updateTrackerEmptyState(hasTrackingData) {
         ? view.querySelector('.fire-dashboard')
         : null;
 
-    if (trackerHeader) trackerHeader.hidden = !hasTrackingData;
-    if (trackerDashboard) trackerDashboard.hidden = !hasTrackingData;
+    if (trackerHeader) trackerHeader.hidden = false;
+    if (trackerDashboard) trackerDashboard.hidden = false;
+
+    const emptyState = document.getElementById('fire-empty-state');
+    if (emptyState) emptyState.hidden = true;
+}
+
+function clearTrackerReadyState() {
+    const view = document.getElementById('fire-view');
+    if (!view) return;
+
+    const trackerHeader = typeof view.querySelector === 'function'
+        ? view.querySelector('header')
+        : null;
+    const trackerDashboard = typeof view.querySelector === 'function'
+        ? view.querySelector('.fire-dashboard')
+        : null;
+    if (trackerHeader) trackerHeader.hidden = true;
+    if (trackerDashboard) trackerDashboard.hidden = true;
+
+    ['fire-target-display', 'fire-current-assets', 'fire-remaining', 'fire-percent',
+        'fire-swr-display', 'fire-target-income', 'fire-current-income', 'fire-current-income-desc']
+        .forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.innerText = '';
+        });
+    const progressFill = document.getElementById('fire-progress-fill');
+    if (progressFill?.style) progressFill.style.width = '0%';
+}
+
+function renderTrackerEmptyState() {
+    const view = document.getElementById('fire-view');
+    if (!view) return;
 
     if (typeof document.createElement !== 'function') return;
 
@@ -144,13 +183,13 @@ function updateTrackerEmptyState(hasTrackingData) {
                     <span class="presentation-empty-kicker">FIRE tracker</span>
                     <h2>Turn progress into momentum.</h2>
                     <p>No tracking data yet. See how close your current portfolio is to your FIRE target, with the assets and windfalls you choose to include.</p>
-                    <p class="presentation-empty-note">Add portfolio data and choose the assets to include in Settings to replace this preview with your live progress.</p>
+                    <p class="presentation-empty-note">Add portfolio data and choose the assets to include in Settings to replace this illustrative example with your live progress.</p>
                     <a class="action-btn" href="#settings?panel=fire-settings&focus=fire-tracker-settings" aria-controls="fire-settings-pane">Open FIRE Settings</a>
                 </div>
-                <div class="presentation-preview tracker-preview" role="img" aria-label="Static preview of a configured FIRE tracker">
+                <div class="presentation-preview tracker-preview" role="img" aria-label="Illustrative example of a configured FIRE tracker">
                     <div class="presentation-preview-header">
                         <div>
-                            <span class="presentation-preview-label">Static preview</span>
+                            <span class="presentation-preview-label">Illustrative example</span>
                             <strong>FIRE progress</strong>
                         </div>
                         <span class="presentation-preview-status">On track</span>
@@ -171,5 +210,5 @@ function updateTrackerEmptyState(hasTrackingData) {
         else view.appendChild(emptyState);
     }
 
-    emptyState.hidden = hasTrackingData;
+    emptyState.hidden = false;
 }

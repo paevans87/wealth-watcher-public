@@ -3,6 +3,7 @@ import { apiRequest, API_BASE_URL } from '../api/apiClient.js';
 import { requestConfirmation, requestNotification } from './ConfirmationModal.js';
 import { showToast } from './Toast.js';
 import { renderCatalogInputField, renderSelectField, escapeHtml } from './FormFields.js';
+import { PAGE_STATUS, setPageStatus } from './PageState.js';
 
 const ASSET_GROUPS_KEY = 'asset-group';
 const ASSET_KINDS_KEY = 'asset-kind';
@@ -12,6 +13,8 @@ let editorState = null;
 let dragState = null;
 let suppressNextAssetClickId = null;
 let suppressNextAssetClickTimer = null;
+let catalogLoadError = null;
+let catalogRefresh = async () => {};
 const catalogState = {
     query: '',
     assetKindId: '',
@@ -49,6 +52,30 @@ async function request(path, options = {}) {
         throw new Error(payload?.Error || payload?.error || `Request failed (${response.status}).`);
     }
     return payload;
+}
+
+function createCatalogRefresh(refresh) {
+    return async (...args) => {
+        try {
+            const result = typeof refresh === 'function' ? await refresh(...args) : undefined;
+            catalogLoadError = null;
+            renderAssetCatalog();
+            return result;
+        } catch (error) {
+            catalogLoadError = error;
+            renderAssetCatalog();
+            throw error;
+        }
+    };
+}
+
+export function renderCatalogLoadError(error) {
+    const message = error?.message || 'There was a problem communicating with the API.';
+    return `<div class="catalog-empty-message catalog-load-error" role="alert">
+        <strong>Unable to load the asset catalogue.</strong>
+        <span>${escapeHtml(message)}</span>
+        <button type="button" class="action-btn" data-catalog-retry>Retry loading catalogue</button>
+    </div>`;
 }
 
 function renderCatalogForms() {
@@ -93,7 +120,8 @@ function renderClassificationEditorFields() {
     target.dataset.rendered = 'true';
 }
 
-export function setupAssetCatalog({ refresh }) {
+export function setupAssetCatalog({ refresh } = {}) {
+    catalogRefresh = createCatalogRefresh(refresh);
     renderCatalogForms();
     renderClassificationEditorFields();
     const assetGroupForm = document.getElementById('asset-group-form');
@@ -102,18 +130,25 @@ export function setupAssetCatalog({ refresh }) {
     if (!assetGroupForm || !assetKindForm || !catalogue || catalogue.dataset.initialized === 'true') return;
 
     catalogue.dataset.initialized = 'true';
-    setupClassificationEditor(refresh);
-    setupAssetDragAndDrop(catalogue, refresh);
+    setupClassificationEditor(catalogRefresh);
+    setupAssetDragAndDrop(catalogue, catalogRefresh);
     setupCatalogControls(catalogue);
 
     [assetGroupForm, assetKindForm].forEach(form => {
         form.addEventListener('submit', async event => {
             event.preventDefault();
-            await addValue(form, refresh);
+            await addValue(form, catalogRefresh);
         });
     });
 
     catalogue.addEventListener('click', event => {
+        const retryTarget = event.target.closest?.('[data-catalog-retry]');
+        if (retryTarget) {
+            event.preventDefault();
+            catalogRefresh().catch(() => {});
+            return;
+        }
+
         const archiveTarget = event.target.closest?.('[data-archive-value]');
         if (archiveTarget) {
             event.preventDefault();
@@ -125,7 +160,7 @@ export function setupAssetCatalog({ refresh }) {
                     name: asset.DisplayName || asset.Name,
                     isAssetGroup: false,
                     isAsset: true
-                }, refresh);
+                }, catalogRefresh);
             } else {
                 const valueInfo = findValue(archiveTarget.dataset.archiveValue);
                 if (valueInfo) {
@@ -136,7 +171,7 @@ export function setupAssetCatalog({ refresh }) {
                         isAssetGroup: groupKey === ASSET_GROUPS_KEY,
                         isAssetKind: groupKey === ASSET_KINDS_KEY,
                         isAsset: false
-                    }, refresh);
+                    }, catalogRefresh);
                 }
             }
             return;
@@ -655,8 +690,29 @@ function renderAssetCatalog() {
     const activeAssets = sortAssets((store.state.assets || []).filter(asset => !asset.ArchivedAt));
     const assets = filterAssets(activeAssets, assetKinds, assetGroups);
     const board = document.getElementById('catalog-board');
+    const catalogue = document.getElementById('asset-catalogue-list');
     const kindList = document.getElementById('asset-kind-list');
     const kindGroupSelect = document.getElementById('asset-kind-group-value');
+    const kindSelect = document.getElementById('asset-kind-value');
+
+    if (catalogLoadError) {
+        setPageStatus(catalogue, PAGE_STATUS.ERROR);
+        if (board) board.innerHTML = renderCatalogLoadError(catalogLoadError);
+        const attention = document.getElementById('catalog-needs-attention');
+        if (attention) attention.innerHTML = '';
+        if (kindList) kindList.innerHTML = '<p class="catalog-empty-message" role="alert">Asset classifications are unavailable until the catalogue reloads.</p>';
+        if (kindGroupSelect) {
+            kindGroupSelect.innerHTML = '<option value="">Catalogue unavailable</option>';
+            kindGroupSelect.disabled = true;
+        }
+        if (kindSelect) {
+            kindSelect.innerHTML = '<option value="">Catalogue unavailable</option>';
+            kindSelect.disabled = true;
+        }
+        return;
+    }
+
+    setPageStatus(catalogue, assets.length > 0 ? PAGE_STATUS.READY : PAGE_STATUS.EMPTY);
 
     renderCatalogFilters(assetKinds, assetGroups);
     updateViewToggle();
@@ -665,13 +721,12 @@ function renderAssetCatalog() {
     if (board) {
         board.classList.toggle('catalog-list-mode', catalogState.view === 'list');
         board.innerHTML = catalogState.view === 'list'
-            ? renderAssetList(assets, assetKinds, assetGroups)
-            : renderBoard(assetGroups, assets);
+            ? renderAssetList(assets, assetKinds, assetGroups, activeAssets)
+            : renderBoard(assetGroups, assets, activeAssets);
     }
     if (kindList) kindList.innerHTML = renderAssetKindManager(assetKinds, assetGroups);
     if (kindGroupSelect) kindGroupSelect.innerHTML = renderAssetGroupOptions(assetGroups);
 
-    const kindSelect = document.getElementById('asset-kind-value');
     if (kindSelect) {
         kindSelect.innerHTML = renderAssetKindOptions(assetKinds);
         kindSelect.disabled = !assetKinds.some(value => !isUnclassifiedAssetKind(value));
@@ -940,9 +995,10 @@ export function renderAssetKindManager(assetKinds, assetGroups) {
     }).join('');
 }
 
-export function renderBoard(assetGroups, assets) {
+export function renderBoard(assetGroups, assets, allAssets = assets) {
     const groups = sortValues(assetGroups);
     const activeAssets = sortAssets(assets);
+    const allActiveAssets = sortAssets(allAssets);
     const assetKinds = getAssetKinds();
     const lanes = groups.map(assetGroup => {
         const groupAssets = activeAssets.filter(asset =>
@@ -953,7 +1009,15 @@ export function renderBoard(assetGroups, assets) {
         return !getAssetGroupForAsset(asset, assetKinds, groups);
     });
     lanes.push(renderUnassignedLane(ungroupedAssets));
-    return `<p id="asset-catalogue-drag-status" class="catalog-drag-status" role="status" aria-live="polite"></p>${lanes.join('')}`;
+    return `<p id="asset-catalogue-drag-status" class="catalog-drag-status" role="status" aria-live="polite"></p>${renderAssetCollectionMessage(allActiveAssets, activeAssets)}${lanes.join('')}`;
+}
+
+function renderAssetCollectionMessage(allAssets, visibleAssets) {
+    if (visibleAssets.length > 0) return '';
+    if (allAssets.length > 0) {
+        return '<p class="catalog-empty-message catalog-list-empty" role="status">No assets match these filters. Clear a filter or search term to see the full catalogue.</p>';
+    }
+    return '<p class="catalog-empty-message catalog-collection-empty" role="status">No assets have been added yet. Use Add Asset to create your first holding.</p>';
 }
 
 function renderAssetGroupLane(assetGroup, assets) {
@@ -1010,9 +1074,8 @@ function renderAsset(asset) {
         </div>`;
 }
 
-function renderAssetList(assets, assetKinds, assetGroups) {
-    if (!assets.length)
-        return '<p class="catalog-empty-message catalog-list-empty">No assets match these filters.</p>';
+function renderAssetList(assets, assetKinds, assetGroups, allAssets = assets) {
+    if (!assets.length) return renderAssetCollectionMessage(sortAssets(allAssets), assets);
 
     const rows = assets.map(asset => {
         const label = asset.DisplayName || asset.Name || 'Unnamed asset';

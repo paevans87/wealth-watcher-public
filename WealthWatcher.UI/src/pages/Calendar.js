@@ -1,6 +1,7 @@
-import { fetchFresh, API_BASE_URL } from '../api/apiClient.js';
+import { fetchFreshStrict, API_BASE_URL } from '../api/apiClient.js';
 import { formatter } from '../utils/formatters.js';
 import { setPageLoading } from '../components/PageLoading.js';
+import { setPageStatus } from '../components/PageState.js';
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -294,9 +295,14 @@ export async function loadCalendarHistory({ year, monthIndex } = {}) {
     const viewDate = new Date();
     const selectedYear = Number.isInteger(year) ? year : viewDate.getFullYear();
     const selectedMonthIndex = Number.isInteger(monthIndex) ? monthIndex : viewDate.getMonth();
-    const response = await fetchFresh(
-        `${API_BASE_URL}/calendar?year=${selectedYear}&month=${selectedMonthIndex + 1}`);
-    if (!response) {
+    let response;
+    try {
+        response = await fetchFreshStrict(
+            `${API_BASE_URL}/calendar?year=${selectedYear}&month=${selectedMonthIndex + 1}`);
+    } catch (error) {
+        throw new Error('Unable to load calendar history.', { cause: error });
+    }
+    if (!response || typeof response !== 'object') {
         throw new Error('Unable to load calendar history.');
     }
 
@@ -348,11 +354,14 @@ let calendarViewState = {
     observedDates: new Set(),
     days: [],
     monthComparison: null,
-    status: 'loading'
+    status: 'loading',
+    error: null
 };
 
 let boundPreviousButton = null;
 let boundNextButton = null;
+let boundCalendarRetryButton = null;
+let calendarRequestId = 0;
 
 function getCalendarElements() {
     if (typeof document === 'undefined') return {};
@@ -622,6 +631,8 @@ function renderCalendarView() {
     const { currentMonth } = calendarViewState;
     if (!currentMonth) return;
 
+    setPageStatus('calendar-view', calendarViewState.status);
+
     const monthLabel = formatMonthLabel(currentMonth);
     if (elements.monthLabel) {
         elements.monthLabel.textContent = monthLabel;
@@ -633,35 +644,62 @@ function renderCalendarView() {
         elements.status.setAttribute('aria-live', 'polite');
     }
 
+    if (calendarViewState.status === 'loading') {
+        updateCalendarEmptyState(true);
+        updateCalendarErrorState(false);
+        renderMonthComparison(elements);
+        if (elements.grid) elements.grid.innerHTML = renderCalendarSkeleton(monthLabel);
+        updateCalendarControls(elements);
+        return;
+    }
+
+    if (calendarViewState.status === 'empty') {
+        clearCalendarResultSurface(elements);
+        updateCalendarEmptyState(false);
+        updateCalendarErrorState(false);
+        updateCalendarControls(elements);
+        return;
+    }
+
+    if (calendarViewState.status === 'error') {
+        clearCalendarResultSurface(elements);
+        updateCalendarEmptyState(true);
+        updateCalendarErrorState(true);
+        updateCalendarControls(elements);
+        return;
+    }
+
+    updateCalendarEmptyState(true);
+    updateCalendarErrorState(false);
     renderMonthComparison(elements);
-
     if (elements.grid) {
-        if (calendarViewState.status === 'loading') {
-            elements.grid.innerHTML = renderCalendarSkeleton(monthLabel);
-        } else {
-            const month = applyServerCalendarDays(buildCalendarMonth(
-                currentMonth.year,
-                currentMonth.monthIndex,
-                calendarViewState.totals,
-                calendarViewState.currentDate,
-                calendarViewState.observedDates
-            ));
+        const month = applyServerCalendarDays(buildCalendarMonth(
+            currentMonth.year,
+            currentMonth.monthIndex,
+            calendarViewState.totals,
+            calendarViewState.currentDate,
+            calendarViewState.observedDates
+        ));
 
-            elements.grid.innerHTML = `
-                <div class="calendar-grid-content" role="grid" aria-label="${monthLabel} daily portfolio changes">
-                    ${renderCalendarWeekdayHeadings()}
-                    ${month.cells.map(renderCalendarCell).join('')}
-                </div>`;
-        }
+        elements.grid.innerHTML = `
+            <div class="calendar-grid-content" role="grid" aria-label="${monthLabel} daily portfolio changes">
+                ${renderCalendarWeekdayHeadings()}
+                ${month.cells.map(renderCalendarCell).join('')}
+            </div>`;
     }
 
     updateCalendarControls(elements);
+}
 
-    if (calendarViewState.status === 'empty' || calendarViewState.status === 'error') {
-        updateCalendarEmptyState(false);
-    } else if (calendarViewState.status === 'ready') {
-        updateCalendarEmptyState(true);
-    }
+function clearCalendarResultSurface(elements) {
+    if (elements.grid) elements.grid.innerHTML = '';
+    if (!elements.monthComparison) return;
+
+    elements.monthComparison.textContent = '';
+    elements.monthComparison.innerHTML = '';
+    elements.monthComparison.className = 'calendar-month-comparison';
+    elements.monthComparison.hidden = true;
+    elements.monthComparison.removeAttribute?.('aria-label');
 }
 
 export function updateCalendarEmptyState(hasCalendarData) {
@@ -676,7 +714,7 @@ export function updateCalendarEmptyState(hasCalendarData) {
     if (typeof document.createElement !== 'function') return;
 
     let emptyState = document.getElementById('calendar-empty-state');
-    if (!emptyState) {
+    if (!emptyState && !hasCalendarData) {
         emptyState = document.createElement('div');
         emptyState.id = 'calendar-empty-state';
         emptyState.className = 'catalog-workspace presentation-empty-state calendar-empty-state';
@@ -690,10 +728,10 @@ export function updateCalendarEmptyState(hasCalendarData) {
                     <p class="presentation-empty-note">Record an asset value or connect an integration in Settings to replace this preview with your live portfolio calendar.</p>
                     <a class="action-btn" href="#settings?panel=asset-catalog&focus=catalog-add-asset-button" aria-controls="asset-catalog-pane">Add your first snapshot</a>
                 </div>
-                <div class="presentation-preview calendar-preview" role="img" aria-label="Static preview of a configured portfolio calendar">
+                <div class="presentation-preview calendar-preview" role="img" aria-label="Illustrative preview of a configured portfolio calendar; not your data">
                     <div class="presentation-preview-header">
                         <div>
-                            <span class="presentation-preview-label">Portfolio movement</span>
+                            <span class="presentation-preview-label">Illustrative preview</span>
                             <strong>August 2026</strong>
                         </div>
                         <span class="presentation-preview-status">Daily view</span>
@@ -724,30 +762,80 @@ export function updateCalendarEmptyState(hasCalendarData) {
     if (emptyState) emptyState.hidden = hasCalendarData;
 }
 
-async function loadCalendarMonth(month) {
+export function updateCalendarErrorState(hasError) {
+    const view = document.getElementById('calendar-view');
+    if (!view) return;
+
+    let errorState = document.getElementById('calendar-error-state');
+    if (!errorState && hasError && typeof document.createElement === 'function') {
+        errorState = document.createElement('div');
+        errorState.id = 'calendar-error-state';
+        errorState.className = 'catalog-workspace presentation-empty-state calendar-error-state';
+        errorState.setAttribute?.('role', 'alert');
+        errorState.innerHTML = `
+            <div class="presentation-empty-state-layout">
+                <div class="presentation-empty-copy">
+                    <span class="presentation-empty-kicker">Calendar unavailable</span>
+                    <h2>We couldn't load your calendar.</h2>
+                    <p>Your portfolio history could not be loaded. Try again, or return later if the problem continues.</p>
+                    <button id="calendar-retry" class="action-btn" type="button">Try again</button>
+                </div>
+            </div>`;
+        const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
+        if (header && typeof view.insertBefore === 'function') {
+            view.insertBefore(errorState, header.nextElementSibling || null);
+        } else if (typeof view.prepend === 'function') view.prepend(errorState);
+        else if (typeof view.appendChild === 'function') view.appendChild(errorState);
+    }
+
+    if (!errorState) return;
+    errorState.hidden = !hasError;
+    const retryButton = errorState.querySelector?.('#calendar-retry');
+    if (retryButton && retryButton !== boundCalendarRetryButton) {
+        retryButton.addEventListener('click', () => {
+            void retryCalendarLoad();
+        });
+        boundCalendarRetryButton = retryButton;
+    }
+
+    if (!hasError) return;
+    const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
+    const panel = view.querySelector?.('.calendar-panel');
+    if (header) header.hidden = true;
+    if (panel) panel.hidden = true;
+}
+
+async function loadCalendarMonth(month, requestId) {
     setPageLoading('calendar-view', true);
     try {
         const timeline = await loadCalendarHistory({
             year: month.year,
             monthIndex: month.monthIndex
         });
+        if (requestId !== calendarRequestId) return timeline;
+
         calendarViewState.totals = timeline.totals;
         calendarViewState.observedDates = timeline.observedDates;
         calendarViewState.days = timeline.days;
         calendarViewState.monthComparison = timeline.monthComparison;
+        const previousEarliestHistoryMonth = calendarViewState.earliestHistoryMonth;
         if (timeline.earliestHistoryDate) {
             const earliest = parseCalendarDateKey(timeline.earliestHistoryDate);
             calendarViewState.earliestHistoryMonth = earliest
                 ? { year: earliest.year, monthIndex: earliest.monthIndex }
                 : null;
         } else {
-            calendarViewState.earliestHistoryMonth = getEarliestHistoryMonth(timeline.totals);
+            calendarViewState.earliestHistoryMonth = getEarliestHistoryMonth(timeline.totals)
+                || previousEarliestHistoryMonth;
         }
-        calendarViewState.status = timeline.totals.size > 0 ? 'ready' : 'empty';
+        calendarViewState.error = null;
+        calendarViewState.status = timeline.totals.size > 0 || calendarViewState.earliestHistoryMonth
+            ? 'ready'
+            : 'empty';
         renderCalendarView();
         return timeline;
     } finally {
-        setPageLoading('calendar-view', false);
+        if (requestId === calendarRequestId) setPageLoading('calendar-view', false);
     }
 }
 
@@ -769,12 +857,45 @@ async function changeCalendarMonth(offset) {
     calendarViewState.observedDates = new Set();
     calendarViewState.days = [];
     calendarViewState.monthComparison = null;
+    calendarViewState.error = null;
+    const requestId = ++calendarRequestId;
     renderCalendarView();
 
     try {
-        return await loadCalendarMonth(targetMonth);
+        return await loadCalendarMonth(targetMonth, requestId);
     } catch (error) {
+        if (requestId !== calendarRequestId) return emptyCalendarTimeline();
         console.error('Error loading calendar month:', error);
+        calendarViewState.error = error;
+        calendarViewState.status = 'error';
+        calendarViewState.totals = new Map();
+        calendarViewState.observedDates = new Set();
+        calendarViewState.days = [];
+        calendarViewState.monthComparison = null;
+        renderCalendarView();
+        return emptyCalendarTimeline();
+    }
+}
+
+async function retryCalendarLoad() {
+    const month = calendarViewState.currentMonth;
+    if (!month) return loadCalendarView({ currentDate: calendarViewState.currentDate });
+
+    const requestId = ++calendarRequestId;
+    calendarViewState.status = 'loading';
+    calendarViewState.error = null;
+    calendarViewState.totals = new Map();
+    calendarViewState.observedDates = new Set();
+    calendarViewState.days = [];
+    calendarViewState.monthComparison = null;
+    renderCalendarView();
+
+    try {
+        return await loadCalendarMonth(month, requestId);
+    } catch (error) {
+        if (requestId !== calendarRequestId) return emptyCalendarTimeline();
+        console.error('Error retrying calendar view:', error);
+        calendarViewState.error = error;
         calendarViewState.status = 'error';
         renderCalendarView();
         return emptyCalendarTimeline();
@@ -798,6 +919,7 @@ function bindCalendarControls(elements) {
 export async function loadCalendarView({ currentDate } = {}) {
     const viewDate = getValidCurrentDate(currentDate);
     const currentBrowserMonth = getMonthFromDate(viewDate);
+    const requestId = ++calendarRequestId;
 
     calendarViewState = {
         currentDate: viewDate,
@@ -808,7 +930,8 @@ export async function loadCalendarView({ currentDate } = {}) {
         observedDates: new Set(),
         days: [],
         monthComparison: null,
-        status: 'loading'
+        status: 'loading',
+        error: null
     };
 
     const elements = getCalendarElements();
@@ -816,11 +939,17 @@ export async function loadCalendarView({ currentDate } = {}) {
     renderCalendarView();
 
     try {
-        const timeline = await loadCalendarMonth(currentBrowserMonth);
+        const timeline = await loadCalendarMonth(currentBrowserMonth, requestId);
         return timeline;
     } catch (error) {
+        if (requestId !== calendarRequestId) return emptyCalendarTimeline();
         console.error('Error loading calendar view:', error);
+        calendarViewState.error = error;
         calendarViewState.status = 'error';
+        calendarViewState.totals = new Map();
+        calendarViewState.observedDates = new Set();
+        calendarViewState.days = [];
+        calendarViewState.monthComparison = null;
         renderCalendarView();
         return emptyCalendarTimeline();
     }

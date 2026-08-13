@@ -3,6 +3,7 @@ import { saveDbSettings } from '../api/apiClient.js';
 import { formatter } from '../utils/formatters.js';
 import { isFeatureEnabled, setFeatureEnabled } from '../utils/featureFlags.js';
 import { showToast } from '../components/Toast.js';
+import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 import {
     closeAssetTypeaheads,
     getAssetTypeaheadState,
@@ -62,10 +63,13 @@ export function loadBudgetView(viewMode = null) {
     
     const budgetSettings = ensureBudgetSettings();
     const hasBudgetData = hasConfiguredBudgetData(budgetSettings);
-    updateBudgetEmptyState(hasBudgetData);
-    if (!hasBudgetData) {
-        budgetChartInstance?.destroy();
-        budgetChartInstance = null;
+    if (hasBudgetData) {
+        setPageStatus('budget-view', PAGE_STATUS.READY);
+        showBudgetReadyState();
+    } else {
+        setPageStatus('budget-view', PAGE_STATUS.EMPTY);
+        clearBudgetReadyState();
+        renderBudgetEmptyState();
         return;
     }
     
@@ -299,10 +303,40 @@ function hasConfiguredBudgetData(budgetSettings) {
         .some(category => Array.isArray(budgetSettings?.[category]) && budgetSettings[category].length > 0);
 }
 
-function updateBudgetEmptyState(hasBudgetData) {
+function showBudgetReadyState() {
+    const emptyState = document.getElementById('budget-empty-state');
+    if (emptyState) emptyState.hidden = true;
+    const overviewContent = document.getElementById('budget-overview-content');
+    if (overviewContent) overviewContent.hidden = false;
+}
+
+function clearBudgetReadyState() {
+    budgetChartInstance?.destroy();
+    budgetChartInstance = null;
+    currentChartView = 'overview';
+
+    const overviewContent = document.getElementById('budget-overview-content');
+    if (overviewContent) overviewContent.hidden = true;
+
+    ['budget-total-income', 'budget-total-bills', 'budget-total-savings', 'budget-total-spend', 'budget-unallocated']
+        .forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.innerText = '';
+                if (element.style) element.style.color = '';
+            }
+        });
+
+    const backBtn = document.getElementById('budget-chart-back-btn');
+    if (backBtn?.style) backBtn.style.display = 'none';
+
+    const chart = document.getElementById('budgetChart');
+    if (chart && 'innerHTML' in chart) chart.innerHTML = '';
+}
+
+function renderBudgetEmptyState() {
     const view = document.getElementById('budget-view');
     if (!view) return;
-    const overviewContent = document.getElementById('budget-overview-content');
 
     let emptyState = document.getElementById('budget-empty-state');
     if (!emptyState) {
@@ -316,13 +350,13 @@ function updateBudgetEmptyState(hasBudgetData) {
                     <span class="presentation-empty-kicker">Monthly allocation</span>
                     <h2>Give every pound a clear job.</h2>
                     <p>No budget data yet. Bring income, bills, savings and spending together in one calm monthly view, then use the breakdown to see where your money is going.</p>
-                    <p class="presentation-empty-note">Add your first budget item in Settings and this preview will become your live allocation overview.</p>
+                    <p class="presentation-empty-note">Add your first budget item in Settings and this illustrative example will become your live allocation overview.</p>
                     <a class="action-btn" href="#settings?panel=monthly-budget" aria-controls="budget-settings-pane">Open Budget Settings</a>
                 </div>
-                <div class="presentation-preview budget-preview" role="img" aria-label="Static preview of a configured budget overview">
+                <div class="presentation-preview budget-preview" role="img" aria-label="Illustrative example of a configured budget overview">
                     <div class="presentation-preview-header">
                         <div>
-                            <span class="presentation-preview-label">Static preview</span>
+                            <span class="presentation-preview-label">Illustrative example</span>
                             <strong>Budget overview</strong>
                         </div>
                         <span class="presentation-preview-status">Monthly</span>
@@ -351,8 +385,7 @@ function updateBudgetEmptyState(hasBudgetData) {
         else view.appendChild(emptyState);
     }
 
-    emptyState.hidden = hasBudgetData;
-    if (overviewContent) overviewContent.hidden = !hasBudgetData;
+    emptyState.hidden = false;
 }
 
 export function populateBudgetSettings() {

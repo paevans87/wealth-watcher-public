@@ -455,3 +455,22 @@ test('account allocation uses a searchable asset typeahead', async () => {
         integrationAssets.length = 0;
     }
 });
+
+test('integration load failures remain actionable and distinct from a valid empty connection list', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+        throw new Error('Integration service unavailable.');
+    };
+
+    try {
+        await loadIntegrations();
+
+        const connections = elements.get('integration-connections').innerHTML;
+        assert.match(connections, /role="alert"/);
+        assert.match(connections, /Integration service unavailable\./);
+        assert.match(connections, /data-integration-retry/);
+        assert.doesNotMatch(connections, /No integrations are enabled yet/);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
