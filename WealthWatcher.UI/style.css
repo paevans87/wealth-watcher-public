@@ -4568,4 +4568,126 @@ body.obfuscated h1 .obfuscate-val {
     #calendar-view .calendar-change-percentage {
         font-size: 0.54rem;
     }
+
+    .presentation-empty-state-layout {
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .presentation-empty-state-layout::before,
+    .presentation-empty-state-layout::after,
+    .presentation-preview::before,
+    .presentation-preview.budget-preview::after,
+    .presentation-preview.forecast-preview::after,
+    .presentation-preview.tracker-preview::after {
+        display: none;
+    }
+
+    .presentation-empty-copy,
+    .presentation-preview,
+    .presentation-preview.budget-preview,
+    .presentation-preview.forecast-preview,
+    .presentation-preview.tracker-preview {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .budget-preview-summary,
+    .budget-preview-breakdown,
+    .forecast-preview-metrics,
+    .forecast-preview-chart,
+    .forecast-preview-legend,
+    .tracker-preview-main,
+    .tracker-preview-stats {
+        min-width: 0;
+    }
+
+    .budget-preview-stat strong,
+    .forecast-preview-metrics strong,
+    .tracker-preview-copy > strong,
+    .tracker-preview-stats strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+/* --- FORECAST / TRACKER / BUDGET MOBILE VARIANTS --- */
+@media (max-width: 768px) {
+    #forecast-view .forecast-control-actions {
+        flex: 0 1 auto;
+    }
+
+    #forecast-view .forecast-strategy-field {
+        flex: 0 1 auto;
+    }
+
+    #forecast-view .forecast-summary-card,
+    #forecast-view .forecast-main-chart,
+    #fire-view .fire-progress-card,
+    #fire-view .fire-dashboard > .grid-container .card,
+    #budget-view #budget-overview-content > .card {
+        min-height: 0;
+    }
+
+    #fire-view .fire-progress-card {
+        padding: 1.25rem;
+    }
+
+    #fire-view .fire-progress-container {
+        margin-top: 0.9rem;
+    }
+
+    #fire-view .fire-dashboard > .grid-container {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0.75rem;
+        margin-top: 0.75rem !important;
+    }
+
+    #fire-view .fire-dashboard > .grid-container .card {
+        padding: 1rem;
+    }
+
+    #budget-view #budget-overview-content > div:first-child {
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 0.75rem !important;
+    }
+
+    #budget-view #budget-overview-content > div:first-child .card {
+        min-height: 0;
+        padding: 1rem !important;
+    }
+
+    #budget-view #budget-overview-content > .card {
+        padding: 1rem;
+    }
+
+    #budget-view #budget-overview-content > .card > div {
+        height: 360px !important;
+    }
+}
+
+@media (max-width: 560px) {
+    #forecast-view .forecast-main-chart {
+        height: 360px;
+        min-height: 360px;
+    }
+
+    #forecast-view .forecast-chart-canvas {
+        min-height: 210px;
+    }
+
+    #fire-view .fire-target-label {
+        display: block;
+        margin: 0.25rem 0 0;
+    }
+
+    #budget-view #budget-overview-content > .card > div {
+        height: 300px !important;
+    }
+
+    .budget-preview-stat span {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
 }
