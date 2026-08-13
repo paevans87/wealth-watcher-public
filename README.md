@@ -90,6 +90,12 @@ Compose configuration is supplied through a private `.env` file. The supported v
 
 Provider setup guidance is in [WealthWatcher.Api/Integrations/docs/adding-integrations.md](WealthWatcher.Api/Integrations/docs/adding-integrations.md). Never place provider credentials in source code, issue reports, screenshots, logs, or committed configuration.
 
+## Marketing-site analytics
+
+The public landing page can use Microsoft Clarity after visitor consent. Clarity is not included in the self-hosted dashboard and does not receive dashboard or financial data. To enable it for GitHub Pages, add `CLARITY_PROJECT_ID` as an environment variable on the repository's `github-pages` Actions environment. The Pages workflow injects the value at deploy time; leave it unset to keep Clarity disabled for forks and local previews.
+
+The Clarity project ID is a public browser identifier, not a secret. Keeping it out of source prevents other builds from reporting into the project. Never add Clarity API credentials or other private keys to the frontend.
+
 ## Verify changes
 
 From the repository root:
