@@ -15,6 +15,15 @@ export function setupRouter() {
     window.addEventListener('hashchange', handleRouting);
 }
 
+function syncActiveNavState() {
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.removeAttribute('aria-current');
+        if (link.classList.contains('active')) {
+            link.setAttribute('aria-current', 'page');
+        }
+    });
+}
+
 /**
  * Reads the optional settings target from a direct settings hash link.
  * Examples: #settings?panel=monthly-budget and
@@ -76,6 +85,7 @@ export function handleRouting() {
         if (window.location.hash !== '#dashboard') {
             window.location.hash = '#dashboard';
         }
+        syncActiveNavState();
         updateHourlyRefreshLifecycle({ immediate: true });
         return;
     }
@@ -147,5 +157,6 @@ export function handleRouting() {
         if(navDashboard) navDashboard.classList.add('active');
     }
 
+    syncActiveNavState();
     updateHourlyRefreshLifecycle({ immediate: route === '#dashboard' });
 }
