@@ -99,6 +99,25 @@ test('Unclassified remains visible as a system type but is absent from manual se
     assert.match(options, /Investments/);
 });
 
+test('Asset Type cards keep the name separate from wrapping metadata', async () => {
+    const manager = renderAssetKindManager(assetKinds, assetGroups);
+    const stylesheet = await readFile(new URL('../../style.css', import.meta.url), 'utf8');
+    const editRule = stylesheet.match(/\.catalog-kind-edit\s*\{([^}]*)\}/)?.[1] || '';
+    const metaRule = stylesheet.match(/\.catalog-kind-meta\s*\{([^}]*)\}/g)?.find(rule => rule.includes('flex-wrap')) || '';
+    const rowHoverRule = stylesheet.match(/\.catalog-kind-row:hover,\s*\.catalog-kind-row:focus-within\s*\{([^}]*)\}/)?.[1] || '';
+    const editHoverRule = stylesheet.match(/\.catalog-kind-edit:hover,\s*\.catalog-kind-edit:focus-visible\s*\{([^}]*)\}/)?.[1] || '';
+
+    assert.match(manager, /class="catalog-kind-primary"/);
+    assert.match(manager, /class="catalog-kind-meta"/);
+    assert.match(manager, /class="catalog-kind-group">Liquid<\/span>/);
+    assert.doesNotMatch(manager, /Default:/);
+    assert.match(editRule, /flex-direction:\s*column/);
+    assert.match(metaRule, /flex-wrap:\s*wrap/);
+    assert.match(stylesheet, /\.catalog-kind-name\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    assert.match(rowHoverRule, /background:\s*rgba\(103,\s*232,\s*249,\s*0\.06\)/);
+    assert.match(editHoverRule, /background:\s*transparent/);
+});
+
 test('drag/drop move changes only the Asset Group', async () => {
     const originalAssets = store.state.assets;
     const originalFetch = globalThis.fetch;

@@ -951,19 +951,23 @@ export function renderAssetKindManager(assetKinds, assetGroups) {
 
     return values.map(value => {
         const label = value.DisplayName || value.Key || value.Code;
-        const groupLabel = groupsById.get(String(value.ParentValueId)) || 'No default Group';
+        const groupLabel = groupsById.get(String(value.ParentValueId)) || 'No Group';
         const valueId = String(value.Id);
         const isSystemKind = isUnclassifiedAssetKind(value);
         const assetCount = getAssetKindMappingCount(valueId);
         return `
             <div class="catalog-kind-row" data-edit-value="${escapeHtml(valueId)}"${isSystemKind ? ' data-system-kind="true"' : ''}>
                 <button type="button" class="catalog-kind-edit" data-edit-value="${escapeHtml(valueId)}" aria-label="Edit Type ${escapeHtml(label)}${isSystemKind ? ' (system type)' : ''}">
-                    <span class="catalog-value-dot" style="background:${getSafeColor(value.Color)}"></span>
-                    <span class="catalog-kind-name">${escapeHtml(label)}</span>
-                    <span class="catalog-kind-code">${escapeHtml(value.Key || value.Code || '')}</span>
-                    <span class="catalog-kind-group">Default: ${escapeHtml(groupLabel)}</span>
-                    <span class="catalog-kind-count">${formatAssetCount(assetCount)}</span>
-                    ${isSystemKind ? '<span class="catalog-kind-system">System Type</span>' : ''}
+                    <span class="catalog-kind-primary">
+                        <span class="catalog-value-dot" style="background:${getSafeColor(value.Color)}"></span>
+                        <span class="catalog-kind-name">${escapeHtml(label)}</span>
+                    </span>
+                    <span class="catalog-kind-meta">
+                        <span class="catalog-kind-code">${escapeHtml(value.Key || value.Code || '')}</span>
+                        <span class="catalog-kind-group">${escapeHtml(groupLabel)}</span>
+                        <span class="catalog-kind-count">${formatAssetCount(assetCount)}</span>
+                        ${isSystemKind ? '<span class="catalog-kind-system">System Type</span>' : ''}
+                    </span>
                 </button>
                 ${isSystemKind ? '' : `<button type="button" class="catalog-inline-archive" data-archive-value="${escapeHtml(valueId)}" aria-label="Archive Type ${escapeHtml(label)}" title="Archive Type">&times;</button>`}
             </div>`;
