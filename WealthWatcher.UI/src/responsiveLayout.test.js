@@ -29,6 +29,7 @@ test('high-data pages have explicit mobile containment contracts', () => {
     assert.match(stylesheet, /#fire-view\s+\.fire-dashboard\s*>\s*\.grid-container\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     assert.match(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*div:first-child\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     assert.match(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*\.card\s*>\s*div\s*\{[\s\S]*height:\s*300px/);
+    assert.match(stylesheet, /@media\s*\(min-width:\s*769px\)[\s\S]*\.property-table-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(90px,\s*1\.25fr\)/);
 });
 
 test('settings controls and integrations cannot establish a narrow-screen min-content width', () => {
