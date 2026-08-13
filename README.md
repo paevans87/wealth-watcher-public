@@ -92,9 +92,9 @@ Provider setup guidance is in [WealthWatcher.Api/Integrations/docs/adding-integr
 
 ## Marketing-site analytics
 
-The public landing page can use Microsoft Clarity after visitor consent. Clarity is not included in the self-hosted dashboard and does not receive dashboard or financial data. To enable it for GitHub Pages, add `CLARITY_PROJECT_ID` as an environment variable on the repository's `github-pages` Actions environment. The Pages workflow injects the value at deploy time; leave it unset to keep Clarity disabled for forks and local previews.
+The public landing page can use Microsoft Clarity and Google Analytics 4 after visitor consent. Neither service is included in the self-hosted dashboard or receives dashboard or financial data. To enable them for GitHub Pages, add `CLARITY_PROJECT_ID` and/or `GA4_MEASUREMENT_ID` as variables on the repository's `github-pages` Actions environment. The Pages workflow injects the values at deploy time; leave them unset to keep analytics disabled for forks and local previews.
 
-The Clarity project ID is a public browser identifier, not a secret. Keeping it out of source prevents other builds from reporting into the project. Never add Clarity API credentials or other private keys to the frontend.
+The Clarity project ID and GA4 Measurement ID are public browser identifiers, not secrets. Keeping them out of source prevents other builds from reporting into the owner's projects. Never add Clarity API credentials, Google service-account credentials, or other private keys to the frontend.
 
 ## Verify changes
 
