@@ -10,10 +10,23 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script src="clarity-config.js"></script>
+    <script src="clarity.js" defer></script>
 </head>
 <body>
     <div class="ambient ambient-one" aria-hidden="true"></div>
     <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <aside id="clarity-consent" class="clarity-consent" hidden aria-labelledby="clarity-consent-title">
+        <div class="clarity-consent-copy">
+            <h2 id="clarity-consent-title">Help improve WealthWatcher</h2>
+            <p>We use optional Microsoft Clarity analytics on this public page to understand which content is useful. It is never loaded in the self-hosted dashboard and does not receive your financial data.</p>
+        </div>
+        <div class="clarity-consent-actions">
+            <button id="clarity-consent-decline" class="clarity-consent-secondary" type="button">No thanks</button>
+            <button id="clarity-consent-accept" class="button button-primary" type="button">Allow analytics</button>
+        </div>
+    </aside>
 
     <header class="site-header">
         <a class="brand" href="#top" aria-label="WealthWatcher home">
@@ -155,6 +168,7 @@
                     <h2>Built to live <em>with</em> your setup.</h2>
                     <p>WealthWatcher is designed as a local-first application. Run the API, browser UI, and PostgreSQL database on a machine or trusted network you control. Saved integration credentials are protected before they are stored.</p>
                     <p class="privacy-caution">This is an early-stage, single-user project. Keep it local unless you add the authentication and network controls needed for a public deployment.</p>
+                    <p class="privacy-analytics-note">Optional Clarity analytics applies only to this public landing page. Use the analytics preferences control in the footer to change your choice.</p>
                 </div>
                 <div class="privacy-list">
                     <div><span class="check-mark">✓</span><span><b>Docker Compose ready</b><small>Start the full stack with one command.</small></span></div>
@@ -179,7 +193,7 @@
     <footer class="site-footer shell">
         <a class="brand footer-brand" href="#top"><span class="brand-mark brand-mark-small" aria-hidden="true"><span class="brand-ring"></span><span class="brand-bar brand-bar-one"></span><span class="brand-bar brand-bar-two"></span><span class="brand-bar brand-bar-three"></span></span><span>WealthWatcher</span></a>
         <span>Open source personal finance, built for your own machine.</span>
-        <div class="footer-links"><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT licence</a><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">Contribute</a></div>
+        <div class="footer-links"><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT licence</a><a href="https://github.com/paevans87/wealth-watcher-public/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">Contribute</a><button id="clarity-consent-manage" class="footer-link-button" type="button" hidden>Analytics preferences</button></div>
     </footer>
 </body>
 </html>

@@ -28,6 +28,16 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
+      - name: Configure Clarity project
+        env:
+          CLARITY_PROJECT_ID: ${{ vars.CLARITY_PROJECT_ID }}
+        run: |
+          if [[ -n "$CLARITY_PROJECT_ID" && ! "$CLARITY_PROJECT_ID" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "CLARITY_PROJECT_ID contains unsupported characters" >&2
+            exit 1
+          fi
+          printf "window.WEALTH_WATCHER_CLARITY_CONFIG = Object.freeze({ projectId: '%s' });\n" "$CLARITY_PROJECT_ID" > github_pages/clarity-config.js
+
       - name: Upload landing page artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
