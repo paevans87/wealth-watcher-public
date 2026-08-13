@@ -4833,3 +4833,21 @@ body.obfuscated h1 .obfuscate-val {
         justify-content: space-between;
     }
 }
+
+/* Keep the dense property summary inside its desktop card. */
+@media (min-width: 769px) {
+    .property-table {
+        min-width: 0;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    .property-table-row {
+        min-width: 0;
+        grid-template-columns: minmax(90px, 1.25fr) repeat(3, minmax(72px, 1fr)) minmax(8rem, auto);
+    }
+
+    .property-table-row > * {
+        min-width: 0;
+    }
+}
