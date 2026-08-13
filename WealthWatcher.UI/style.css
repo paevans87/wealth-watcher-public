@@ -4851,3 +4851,144 @@ body.obfuscated h1 .obfuscate-val {
         min-width: 0;
     }
 }
+
+/* Keep Budget configuration controls readable on narrow screens. */
+@media (max-width: 560px) {
+    #budget-settings-pane .budget-entry-row {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+        gap: 0.65rem;
+        padding: 0.85rem;
+    }
+
+    #budget-settings-pane .budget-entry-row > .catalog-field,
+    #budget-settings-pane .budget-entry-row > .catalog-add-button {
+        width: 100%;
+        min-width: 0;
+    }
+
+    #budget-settings-pane .budget-entry-row > .catalog-add-button {
+        justify-content: center;
+    }
+
+    #budget-settings-pane .table-container {
+        overflow-x: hidden !important;
+    }
+
+    #budget-settings-pane .budget-table {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        table-layout: fixed;
+    }
+
+    #budget-settings-pane .budget-table th,
+    #budget-settings-pane .budget-table td {
+        min-width: 0;
+        padding: 0.55rem 0.4rem !important;
+        font-size: 0.72rem;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    #budget-settings-pane .budget-table .asset-typeahead-search,
+    #budget-settings-pane .budget-table .integration-asset-search {
+        width: 100%;
+        min-width: 0;
+    }
+
+    #budget-settings-pane .budget-table[data-budget-category="income"] th:nth-child(1),
+    #budget-settings-pane .budget-table[data-budget-category="bills"] th:nth-child(1),
+    #budget-settings-pane .budget-table[data-budget-category="spend"] th:nth-child(1),
+    #budget-settings-pane .budget-table[data-budget-category="income"] td:nth-child(1),
+    #budget-settings-pane .budget-table[data-budget-category="bills"] td:nth-child(1),
+    #budget-settings-pane .budget-table[data-budget-category="spend"] td:nth-child(1) {
+        width: 45%;
+    }
+
+    #budget-settings-pane .budget-table[data-budget-category="income"] th:nth-child(2),
+    #budget-settings-pane .budget-table[data-budget-category="bills"] th:nth-child(2),
+    #budget-settings-pane .budget-table[data-budget-category="spend"] th:nth-child(2),
+    #budget-settings-pane .budget-table[data-budget-category="income"] td:nth-child(2),
+    #budget-settings-pane .budget-table[data-budget-category="bills"] td:nth-child(2),
+    #budget-settings-pane .budget-table[data-budget-category="spend"] td:nth-child(2) {
+        width: 40%;
+    }
+
+    #budget-settings-pane .budget-table[data-budget-category="income"] th:nth-child(3),
+    #budget-settings-pane .budget-table[data-budget-category="bills"] th:nth-child(3),
+    #budget-settings-pane .budget-table[data-budget-category="spend"] th:nth-child(3) {
+        width: 15% !important;
+    }
+
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(1) { width: 24%; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(2) { width: 15%; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(3) { width: 27%; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(4) { width: 23%; }
+    #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(5) { width: 11% !important; }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) thead {
+        display: none;
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) tbody {
+        display: grid;
+        gap: 0.65rem;
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.45rem 0.65rem;
+        padding: 0.75rem;
+        border: 1px solid rgba(148, 163, 184, 0.16) !important;
+        border-radius: 10px;
+        background: rgba(30, 41, 59, 0.42);
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row td {
+        display: grid;
+        grid-template-columns: max-content minmax(0, 1fr);
+        align-items: center;
+        gap: 0.45rem;
+        width: auto;
+        padding: 0.15rem 0 !important;
+        border: 0;
+        text-align: left !important;
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row td::before {
+        content: attr(data-label);
+        color: var(--text-muted);
+        font-size: 0.64rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row td:nth-child(n + 3),
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-row-actions,
+    #budget-settings-pane .budget-table[data-budget-category="savings"]:has(.budget-item-row) .budget-item-row td {
+        grid-column: 1 / -1;
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row td.budget-row-actions {
+        display: flex;
+        justify-content: flex-end;
+        width: 100%;
+        padding-top: 0.55rem !important;
+        border-top: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-row-actions::before {
+        display: none;
+    }
+
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row .asset-typeahead,
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row .integration-asset-typeahead,
+    #budget-settings-pane .budget-table:has(.budget-item-row) .budget-item-row .integration-select {
+        width: 100%;
+        min-width: 0;
+    }
+}

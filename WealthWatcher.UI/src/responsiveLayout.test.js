@@ -32,6 +32,15 @@ test('high-data pages have explicit mobile containment contracts', () => {
     assert.match(stylesheet, /@media\s*\(min-width:\s*769px\)[\s\S]*\.property-table-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(90px,\s*1\.25fr\)/);
 });
 
+test('mobile Budget configuration uses contained controls and card rows', () => {
+    assert.match(indexMarkup, /<table class="budget-table" data-budget-category="income"/);
+    assert.match(indexMarkup, /<table class="budget-table" data-budget-category="savings"/);
+    assert.match(stylesheet, /@media\s*\(max-width:\s*560px\)[\s\S]*#budget-settings-pane\s+\.budget-entry-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    assert.match(stylesheet, /#budget-settings-pane\s+\.table-container\s*\{[\s\S]*overflow-x:\s*hidden\s*!important/);
+    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table\s*\{[\s\S]*table-layout:\s*fixed/);
+    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table:has\(\.budget-item-row\)\s+\.budget-item-row\s*\{[\s\S]*display:\s*grid/);
+});
+
 test('settings controls and integrations cannot establish a narrow-screen min-content width', () => {
     assert.match(stylesheet, /#settings-view\s+\.settings-toggle-list\s+\.feature-toggle\s*\{[\s\S]*width:\s*100%[\s\S]*min-width:\s*0/);
     assert.match(stylesheet, /#settings-view\s+\.catalog-kind-list\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
