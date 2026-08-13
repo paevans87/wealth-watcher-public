@@ -11,7 +11,7 @@
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="apple-touch-icon" href="/icon-192.png">
     <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="stylesheet" href="style.css?v=21">
+    <link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 
@@ -839,7 +839,7 @@
                         <form id="budget-settings-form">
                             <h5 style="color: var(--cyan); margin-bottom: 0.5rem; font-size: 1rem;">Income Sources</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table" style="width: 100%; text-align: left; border-collapse: collapse;">
+                                <table class="budget-table" data-budget-category="income" style="width: 100%; text-align: left; border-collapse: collapse;">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
@@ -855,7 +855,7 @@
 
                             <h5 style="color: #ef4444; margin-bottom: 0.5rem; font-size: 1rem;">Bills (Needs)</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table">
+                                <table class="budget-table" data-budget-category="bills">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
@@ -871,7 +871,7 @@
 
                             <h5 style="color: #10b981; margin-bottom: 0.5rem; font-size: 1rem;">Savings (Future)</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table">
+                                <table class="budget-table" data-budget-category="savings">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>
@@ -889,7 +889,7 @@
 
                             <h5 style="color: #8b5cf6; margin-bottom: 0.5rem; font-size: 1rem;">Spend (Wants)</h5>
                             <div class="table-container" style="max-height: 200px; overflow: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; margin-bottom: 1rem;">
-                                <table class="budget-table">
+                                <table class="budget-table" data-budget-category="spend">
                                     <thead>
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
                                             <th style="padding: 0.75rem 0.5rem; font-weight: 600; font-size: 0.85rem; color: #a0aec0;">Name</th>

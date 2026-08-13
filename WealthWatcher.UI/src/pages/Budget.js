@@ -393,6 +393,7 @@ function renderBudgetTable(tbodyId, array, color, removeFnName) {
     
     array.forEach((item, index) => {
         const tr = document.createElement('tr');
+        tr.className = 'budget-item-row';
         tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
         const assetCell = tbodyId === 'budget-savings-tbody'
             ? renderBudgetAssetCell(item, index)
@@ -401,11 +402,11 @@ function renderBudgetTable(tbodyId, array, color, removeFnName) {
             ? renderBudgetCadenceCell(item, index)
             : '';
         tr.innerHTML = `
-            <td style="padding: 0.75rem 0.5rem;">${item.name}</td>
-            <td style="padding: 0.75rem 0.5rem; text-align: right; color: ${color};" class="obfuscate-val">£${parseFloat(item.amount).toLocaleString('en-GB', {minimumFractionDigits: 2})}</td>
+            <td data-label="Name" style="padding: 0.75rem 0.5rem;">${item.name}</td>
+            <td data-label="Amount" style="padding: 0.75rem 0.5rem; text-align: right; color: ${color};" class="obfuscate-val">£${parseFloat(item.amount).toLocaleString('en-GB', {minimumFractionDigits: 2})}</td>
             ${assetCell}
             ${cadenceCell}
-            <td style="padding: 0.75rem 0.5rem; text-align: center;">
+            <td data-label="" class="budget-row-actions" style="padding: 0.75rem 0.5rem; text-align: center;">
                 <button type="button" class="action-btn icon-only" onclick="${removeFnName}(${index})" style="background: transparent; color: #ef4444; border: none; cursor: pointer; padding: 4px;">&times;</button>
             </td>
         `;
@@ -417,7 +418,7 @@ function renderBudgetAssetCell(item, index) {
     const selectedAsset = (store.state.assets || []).find(asset =>
         String(asset.Id) === String(item.assetId || ''));
     const selectedAssetName = selectedAsset?.DisplayName || '';
-    return `<td style="padding: 0.5rem;">
+    return `<td data-label="Forecast asset" style="padding: 0.5rem;">
         ${renderAssetTypeahead({
             id: `budget-${index}`,
             selectedAssetId: item.assetId || '',
@@ -439,7 +440,7 @@ function renderBudgetCadenceCell(item, index) {
         <option value="monthly" ${cadence === 'monthly' ? 'selected' : ''}>Monthly</option>
         <option value="quarterly" ${cadence === 'quarterly' ? 'selected' : ''}>Quarterly</option>
         <option value="annually" ${cadence === 'annually' ? 'selected' : ''}>Annually</option>`;
-    return `<td style="padding: 0.5rem;">
+    return `<td data-label="Cadence" style="padding: 0.5rem;">
         ${renderSelectField({
             id: `budget-cadence-${index}`,
             ariaLabel: `Cadence for ${item.name || 'saving'}`,
