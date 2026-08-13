@@ -656,6 +656,72 @@ function renderCalendarView() {
     }
 
     updateCalendarControls(elements);
+
+    if (calendarViewState.status === 'empty' || calendarViewState.status === 'error') {
+        updateCalendarEmptyState(false);
+    } else if (calendarViewState.status === 'ready') {
+        updateCalendarEmptyState(true);
+    }
+}
+
+export function updateCalendarEmptyState(hasCalendarData) {
+    const view = document.getElementById('calendar-view');
+    if (!view) return;
+
+    const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
+    const panel = view.querySelector?.('.calendar-panel');
+    if (header) header.hidden = !hasCalendarData;
+    if (panel) panel.hidden = !hasCalendarData;
+
+    if (typeof document.createElement !== 'function') return;
+
+    let emptyState = document.getElementById('calendar-empty-state');
+    if (!emptyState) {
+        emptyState = document.createElement('div');
+        emptyState.id = 'calendar-empty-state';
+        emptyState.className = 'catalog-workspace presentation-empty-state calendar-empty-state';
+        emptyState.setAttribute?.('role', 'status');
+        emptyState.innerHTML = `
+            <div class="presentation-empty-state-layout">
+                <div class="presentation-empty-copy">
+                    <span class="presentation-empty-kicker">Daily movement</span>
+                    <h2>See the days that move you forward.</h2>
+                    <p>No calendar data yet. Once your portfolio has a few recorded snapshots, daily gains and losses will become easy to spot.</p>
+                    <p class="presentation-empty-note">Record an asset value or connect an integration in Settings to replace this preview with your live portfolio calendar.</p>
+                    <a class="action-btn" href="#settings?panel=asset-catalog&focus=catalog-add-asset-button" aria-controls="asset-catalog-pane">Add your first snapshot</a>
+                </div>
+                <div class="presentation-preview calendar-preview" role="img" aria-label="Static preview of a configured portfolio calendar">
+                    <div class="presentation-preview-header">
+                        <div>
+                            <span class="presentation-preview-label">Portfolio movement</span>
+                            <strong>August 2026</strong>
+                        </div>
+                        <span class="presentation-preview-status">Daily view</span>
+                    </div>
+                    <div class="calendar-preview-summary">
+                        <div><span>Month comparison</span><strong class="calendar-preview-positive">↑ +£8,420</strong></div>
+                        <div><span>Compared with July</span><strong class="calendar-preview-positive">+2.0%</strong></div>
+                    </div>
+                    <div class="calendar-preview-grid" aria-hidden="true">
+                        <span class="calendar-preview-weekday">Mon</span><span class="calendar-preview-weekday">Tue</span><span class="calendar-preview-weekday">Wed</span><span class="calendar-preview-weekday">Thu</span><span class="calendar-preview-weekday">Fri</span><span class="calendar-preview-weekday">Sat</span><span class="calendar-preview-weekday">Sun</span>
+                        <i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-neutral"><b>1</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-positive-cell"><b>2</b><small>+0.8%</small></i>
+                        <i class="calendar-preview-cell calendar-preview-positive-cell"><b>3</b><small>+1.2%</small></i><i class="calendar-preview-cell calendar-preview-negative-cell"><b>4</b><small>−0.4%</small></i><i class="calendar-preview-cell calendar-preview-neutral"><b>5</b><small>0.0%</small></i><i class="calendar-preview-cell calendar-preview-positive-cell"><b>6</b><small>+0.6%</small></i><i class="calendar-preview-cell calendar-preview-positive-cell"><b>7</b><small>+0.3%</small></i><i class="calendar-preview-cell calendar-preview-negative-cell"><b>8</b><small>−0.7%</small></i><i class="calendar-preview-cell calendar-preview-positive-cell"><b>9</b><small>+0.5%</small></i>
+                        <i class="calendar-preview-cell calendar-preview-neutral"><b>10</b><small>0.0%</small></i><i class="calendar-preview-cell calendar-preview-positive-cell"><b>11</b><small>+0.9%</small></i><i class="calendar-preview-cell calendar-preview-positive-cell"><b>12</b><small>+0.4%</small></i><i class="calendar-preview-cell calendar-preview-negative-cell"><b>13</b><small>−0.2%</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>14</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>15</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>16</b><small>—</small></i>
+                        <i class="calendar-preview-cell calendar-preview-unavailable"><b>17</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>18</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>19</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>20</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>21</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>22</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>23</b><small>—</small></i>
+                        <i class="calendar-preview-cell calendar-preview-unavailable"><b>24</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>25</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>26</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>27</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>28</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>29</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-unavailable"><b>30</b><small>—</small></i>
+                        <i class="calendar-preview-cell calendar-preview-unavailable"><b>31</b><small>—</small></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i><i class="calendar-preview-cell calendar-preview-muted"></i>
+                    </div>
+                    <div class="calendar-preview-legend"><span><i class="preview-dot preview-dot-positive"></i>Portfolio gain</span><span><i class="preview-dot preview-dot-negative"></i>Portfolio loss</span><span><i class="preview-dot preview-dot-unavailable"></i>No snapshot</span></div>
+                </div>
+            </div>`;
+        if (header && typeof view.insertBefore === 'function') {
+            view.insertBefore(emptyState, header.nextElementSibling || null);
+        } else if (typeof view.prepend === 'function') view.prepend(emptyState);
+        else if (typeof view.insertBefore === 'function') view.insertBefore(emptyState, view.firstChild || null);
+        else if (typeof view.appendChild === 'function') view.appendChild(emptyState);
+    }
+
+    if (emptyState) emptyState.hidden = hasCalendarData;
 }
 
 async function loadCalendarMonth(month) {
