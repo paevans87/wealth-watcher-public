@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+
+const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
+const [indexMarkup, stylesheet] = await Promise.all([
+    readFile(path.join(sourceDirectory, '..', 'index.html'), 'utf8'),
+    readFile(path.join(sourceDirectory, '..', 'style.css'), 'utf8')
+]);
+
+test('responsive shell and navigation contracts are present', () => {
+    assert.match(stylesheet, /html\s*\{[\s\S]*overflow-x:\s*clip/);
+    assert.match(stylesheet, /\.asset-group-section:not\(\[open\]\)\s*>\s*\.grid-container/);
+    assert.match(stylesheet, /#calendar-view\s+\.calendar-grid-content\s*\{[\s\S]*grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\)/);
+    assert.match(stylesheet, /\.presentation-empty-state-layout\s*\{[\s\S]*overflow:\s*hidden/);
+
+    for (const label of ['Dashboard', 'History', 'Calendar', 'Forecast', 'Tracker', 'Budget', 'Settings']) {
+        assert.match(indexMarkup, new RegExp(`<a[^>]+aria-label="${label}"`));
+    }
+
+    assert.match(indexMarkup, /id="entry-modal"[\s\S]*?role="dialog"\s+aria-modal="true"/);
+    assert.match(indexMarkup, /id="audit-modal"[\s\S]*?role="dialog"\s+aria-modal="true"/);
+});
+
+test('high-data pages have explicit mobile containment contracts', () => {
+    assert.match(stylesheet, /#forecast-view\s+\.forecast-control-actions\s*\{[\s\S]*flex:\s*0 1 auto/);
+    assert.match(stylesheet, /#fire-view\s+\.fire-dashboard\s*>\s*\.grid-container\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    assert.match(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*div:first-child\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    assert.match(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*\.card\s*>\s*div\s*\{[\s\S]*height:\s*300px/);
+});
+
+test('settings controls and integrations cannot establish a narrow-screen min-content width', () => {
+    assert.match(stylesheet, /#settings-view\s+\.settings-toggle-list\s+\.feature-toggle\s*\{[\s\S]*width:\s*100%[\s\S]*min-width:\s*0/);
+    assert.match(stylesheet, /#settings-view\s+\.catalog-kind-list\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    assert.match(stylesheet, /#settings-view\s+\.integration-connection\s*\{[\s\S]*width:\s*100%/);
+    assert.match(stylesheet, /#settings-view\s+\.integration-market-hours-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+});
