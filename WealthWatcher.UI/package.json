@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:demo": "vite build --mode demo",
+    "prepare-release": "node ../scripts/release-notes.mjs generate --output WealthWatcher.UI/public/release.json",
+    "dev": "npm run prepare-release && vite",
+    "build": "npm run prepare-release && vite build",
+    "build:demo": "npm run prepare-release && vite build --mode demo",
     "preview": "vite preview",
     "test": "node --test \"src/**/*.test.js\""
   },

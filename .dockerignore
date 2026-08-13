@@ -1,0 +1,13 @@
+.git
+.github
+**/node_modules
+**/bin
+**/obj
+**/dist
+config
+data
+github_pages
+WealthWatcher.Api
+WealthWatcher.Api.Tests
+*.user
+*.suo

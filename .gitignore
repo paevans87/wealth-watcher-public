@@ -13,6 +13,9 @@ dist/
 /config/
 /config/keys/
 
+# Generated release metadata bundled into the UI image
+/WealthWatcher.UI/public/release.json
+
 # MacOS
 .DS_Store
 

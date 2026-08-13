@@ -39,10 +39,16 @@
 
     <nav class="top-nav">
         <div class="nav-brand">
-            <a href="#dashboard" style="display: flex; align-items: center; color: inherit; text-decoration: none;">
-                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" style="margin-right: 8px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                Wealth Watcher
-            </a>
+            <div class="nav-brand-copy">
+                <a href="#dashboard" class="nav-brand-title-link">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                    <span>Wealth Watcher</span>
+                </a>
+                <a href="#settings?panel=application-version" class="nav-brand-version" id="app-bar-version" hidden aria-label="View application version and release notes">
+                    <span id="app-bar-version-number">Version unavailable</span>
+                    <span id="app-bar-update-status" class="release-update-badge" hidden>Update available</span>
+                </a>
+            </div>
             <button class="action-btn icon-only brand-obfuscate" onclick="toggleObfuscate()" id="obfuscate-btn" type="button" title="Enable privacy mode" aria-label="Enable privacy mode" aria-pressed="false">
                 <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             </button>
@@ -609,6 +615,44 @@
             </header>
 
             <div class="responsive-grid-2col" style="gap: 1.5rem;">
+                <!-- Application version and release notes -->
+                <div class="card glass-panel collapsible-pane collapsed full-width-col release-info-pane" id="application-version-pane" data-pane-id="application-version" data-default-collapsed="true" data-pane-helper-title="Stay current with the application release." data-pane-helper-description="Review the installed version, release notes, and whether a newer Docker image release is available.">
+                    <div class="collapsible-header">
+                        <div class="release-info-heading">
+                            <h4 class="section-title">Application</h4>
+                            <span class="release-version-summary" id="release-update-status" role="status" aria-live="polite">Loading version…</span>
+                        </div>
+                        <div class="collapsible-header-actions">
+                            <span class="collapsible-indicator" aria-label="Toggle Application version and release notes">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="release-info-grid">
+                            <div>
+                                <span class="release-info-label">Installed version</span>
+                                <strong id="release-current-version">Loading…</strong>
+                            </div>
+                            <div>
+                                <span class="release-info-label">Release date</span>
+                                <strong id="release-current-date">—</strong>
+                            </div>
+                        </div>
+                        <p id="release-update-details" class="release-update-details">Release information will appear here when the application starts.</p>
+                        <div class="release-info-actions">
+                            <button type="button" class="action-btn" id="release-check-button">Check for updates</button>
+                            <a class="action-btn release-link-button" id="release-link" href="https://github.com/paevans87/wealth-watcher-public/releases" target="_blank" rel="noreferrer noopener">View release details</a>
+                            <span id="release-check-message" class="release-check-message" role="status" aria-live="polite"></span>
+                        </div>
+                        <div class="release-notes-header">
+                            <h5>Release notes <span id="release-notes-version"></span></h5>
+                            <span>Updates require a manual Docker deployment.</span>
+                        </div>
+                        <div id="release-notes" class="release-notes" aria-live="polite"></div>
+                    </div>
+                </div>
+
                 <!-- General Settings -->
                 <div class="card glass-panel collapsible-pane full-width-col" id="general-settings-pane" data-pane-id="general-settings" data-pane-helper-title="Shape your dashboard" data-pane-helper-description="Choose what appears on the dashboard and how your portfolio history is presented.">
                     <div class="collapsible-header">

@@ -46,6 +46,23 @@ export function getSettingsPanelTarget(hash = '') {
 }
 
 /**
+ * Removes a one-time settings panel target after it has been revealed.
+ * This prevents the deep-link from overriding the pane's saved state on refresh.
+ * @param {string} hash
+ * @returns {boolean} True when the settings query was consumed.
+ */
+export function clearSettingsPanelQuery(hash = '') {
+    const [route, query = ''] = String(hash || '').split('?');
+    if (route !== '#settings' || !query) return false;
+
+    const history = globalThis.window?.history;
+    if (typeof history?.replaceState !== 'function') return false;
+
+    history.replaceState(history.state ?? null, '', route);
+    return true;
+}
+
+/**
  * Expands a settings pane requested by a direct route and scrolls to an
  * optional subsection. The anchor remains the accessible navigation control;
  * this helper only reveals the requested destination after routing.
@@ -149,7 +166,10 @@ export function handleRouting() {
         populateForecastSettings();
         populateBudgetSettings();
         initAllCollapsiblePanes(settingsView);
-        revealSettingsPanel(getSettingsPanelTarget(hash));
+        const settingsPanelTarget = getSettingsPanelTarget(hash);
+        if (revealSettingsPanel(settingsPanelTarget)) {
+            clearSettingsPanelQuery(hash);
+        }
     } else {
         const dashboardView = document.getElementById('dashboard-view');
         const navDashboard = document.getElementById('nav-dashboard');
