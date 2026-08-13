@@ -38,6 +38,16 @@ jobs:
           fi
           printf "window.WEALTH_WATCHER_CLARITY_CONFIG = Object.freeze({ projectId: '%s' });\n" "$CLARITY_PROJECT_ID" > github_pages/clarity-config.js
 
+      - name: Configure GA4 measurement ID
+        env:
+          GA4_MEASUREMENT_ID: ${{ vars.GA4_MEASUREMENT_ID }}
+        run: |
+          if [[ -n "$GA4_MEASUREMENT_ID" && ! "$GA4_MEASUREMENT_ID" =~ ^G-[A-Za-z0-9]+$ ]]; then
+            echo "GA4_MEASUREMENT_ID must start with G- and contain only letters and numbers" >&2
+            exit 1
+          fi
+          printf "window.WEALTH_WATCHER_GA4_CONFIG = Object.freeze({ measurementId: '%s' });\n" "$GA4_MEASUREMENT_ID" > github_pages/ga4-config.js
+
       - name: Upload landing page artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
