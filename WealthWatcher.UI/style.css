@@ -137,8 +137,9 @@ body.demo-mode {
     justify-content: space-between;
     align-items: center;
     padding: 1rem 2rem;
-    background: rgba(15, 23, 42, 0.8);
-    backdrop-filter: blur(12px);
+    background: #0f172a;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border-bottom: 1px solid var(--card-border);
     position: sticky;
     top: 0;
