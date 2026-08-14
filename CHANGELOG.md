@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented here.
 
-The latest stable release is `v0.2.0`. Changes that have not yet been released are grouped under `Unreleased`.
+The latest stable release is `v0.3.0`. Changes that have not yet been released are grouped under `Unreleased`.
+
+## 0.3.0 - 2026-08-14
+
+- Make the browser-only demo banner and app bar opaque, visible, and consistently layered.
+- Improve mobile containment for high-data views and budget controls, with responsive layout regression coverage.
+- Publish tagged stable images with a moving `latest` alias for the latest successful release.
 
 ## 0.2.0 - 2026-08-13
 
