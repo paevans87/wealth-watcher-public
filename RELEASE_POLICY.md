@@ -48,6 +48,7 @@ Successful pushes to `main` and version tags publish the API and web container i
 The image tags follow this policy:
 
 - `main` is a moving development image published from successful pushes to the development branch.
+- `latest` is a moving alias published only from successful version-tagged releases and identifies the latest stable release.
 - `sha-<full-commit-sha>` identifies an immutable source commit and is suitable for rollback or reproducible deployment.
 - `vMAJOR.MINOR.PATCH` identifies a tagged application release.
 
