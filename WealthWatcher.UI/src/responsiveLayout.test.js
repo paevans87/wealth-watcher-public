@@ -29,9 +29,13 @@ test('responsive shell and navigation contracts are present', () => {
 
 test('public demo banner is fixed above the page and preserves its layout space', () => {
     assert.match(stylesheet, /\.demo-mode-banner\s*\{[\s\S]*position:\s*fixed[\s\S]*top:\s*0[\s\S]*left:\s*0[\s\S]*right:\s*0/);
+    assert.match(stylesheet, /\.demo-mode-banner\s*\{[\s\S]*background:\s*transparent[\s\S]*border-bottom:\s*0[\s\S]*box-shadow:\s*none/);
+    assert.match(stylesheet, /html:not\(\[data-demo-mode="true"\]\)\s+\.demo-mode-banner\s*\{\s*display:\s*none;\s*\}/);
     assert.match(stylesheet, /body\.demo-mode\s*\{[\s\S]*padding-top:\s*calc\(var\(--demo-banner-height[\s\S]*var\(--demo-app-bar-height/);
     assert.match(stylesheet, /\.demo-mode \.top-nav\s*\{[\s\S]*position:\s*fixed[\s\S]*top:\s*var\(--demo-banner-height[\s\S]*z-index:\s*100/);
     assert.match(stylesheet, /\.demo-mode-banner\s*\{[\s\S]*z-index:\s*110/);
+    assert.match(indexMarkup, /<html\s+lang="en"\s+data-demo-mode="false">/);
+    assert.match(indexMarkup, /<aside id="demo-mode-banner" class="demo-mode-banner" data-demo-banner\s+role="status"/);
     assert.match(indexMarkup, /class="action-btn demo-main-site-link"\s+href="https:\/\/wealthwatcher\.co\.uk\/"/);
 });
 

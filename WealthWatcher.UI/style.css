@@ -2,8 +2,8 @@
 
 .demo-mode-banner {
     align-items: center;
-    background: linear-gradient(90deg, rgba(34, 211, 238, 0.13), rgba(16, 185, 129, 0.1));
-    border-bottom: 1px solid rgba(34, 211, 238, 0.3);
+    background: transparent;
+    border-bottom: 0;
     color: var(--text-primary, #f8fafc);
     display: flex;
     gap: 1rem;
@@ -15,8 +15,10 @@
     right: 0;
     width: 100%;
     z-index: 110;
-    box-shadow: 0 4px 18px rgba(2, 6, 23, 0.24);
+    box-shadow: none;
 }
+
+html:not([data-demo-mode="true"]) .demo-mode-banner { display: none; }
 
 .demo-mode-banner[hidden] { display: none; }
 
