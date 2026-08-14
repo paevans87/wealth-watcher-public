@@ -82,7 +82,7 @@ docker compose pull api web
 docker compose up -d --no-build --remove-orphans
 ```
 
-For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.1.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
+For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.2.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
 
 ### Release notes and updates
 
@@ -133,7 +133,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Vulnerabi
 
 Original project code and documentation are released under the [MIT License](LICENSE). Third-party packages, Docker images, provider APIs, provider data, names, logos, and other external material remain subject to their own terms; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLICY.md). The initial public release is planned as `v0.1.0`; the UI package remains private and is not published as an npm library.
+Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLICY.md). The current stable release is `v0.2.0`; the UI package remains private and is not published as an npm library.
 
 The project owner retains sole responsibility for merge decisions, release approval, and changing the release boundary.
 

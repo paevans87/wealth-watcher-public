@@ -9,14 +9,21 @@ import {
 } from './release-notes.mjs';
 
 test('the current release notes follow the required format', async () => {
-    const manifest = await validateRelease({ tag: 'v0.1.0' });
+    const manifest = await validateRelease({ tag: 'v0.2.0' });
 
-    assert.equal(manifest.version, '0.1.0');
-    assert.equal(manifest.tag, 'v0.1.0');
+    assert.equal(manifest.version, '0.2.0');
+    assert.equal(manifest.tag, 'v0.2.0');
     assert.equal(manifest.schemaVersion, 1);
     assert.equal(manifest.requiresMigration, false);
-    assert.equal(manifest.requiresConfigurationChange, false);
-    assert.match(manifest.notesMarkdown, /^# Wealth Watcher v0\.1\.0/m);
+    assert.equal(manifest.requiresConfigurationChange, true);
+    assert.match(manifest.notesMarkdown, /^# Wealth Watcher v0\.2\.0/m);
+});
+
+test('release validation rejects a tag that does not match the application version', async () => {
+    await assert.rejects(
+        () => validateRelease({ tag: 'v0.1.0' }),
+        /Git tag v0\.1\.0 does not match application version 0\.2\.0/
+    );
 });
 
 test('release notes require every standard section', () => {

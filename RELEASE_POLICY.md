@@ -1,11 +1,11 @@
 # Release policy
 
-This policy applies to the planned public Wealth Watcher repository and its self-managed, local/trusted-network application boundary.
+This policy applies to the public Wealth Watcher repository and its self-managed, local/trusted-network application boundary.
 
 ## Versioning
 
 - Use Semantic Versioning for application releases.
-- The first public release is `0.1.0`, published with the annotated Git tag `v0.1.0`.
+- The first public release was `0.1.0`, published with the annotated Git tag `v0.1.0`; the current stable release is `0.2.0`, published with `v0.2.0`.
 - While the major version is `0`, a minor release may still contain breaking changes. Release notes must call out migrations, configuration changes, and upgrade risks.
 - Move to `1.0.0` only when the application, data migrations, deployment procedure, and support expectations are considered stable.
 - `main` is the development branch. The latest tagged release is the supported release; support is best-effort with no service-level agreement.
@@ -37,6 +37,8 @@ The body must contain a level-one title and the following level-two sections: `H
 
 The CI release-metadata job validates the format on every change and validates the exact `vMAJOR.MINOR.PATCH` match on tag pushes. Tagged images are not published when that validation fails. The tag workflow uses the validated Markdown body to create or refresh the matching GitHub Release.
 
+Before creating a release tag, update `WealthWatcher.UI/package.json` and `WealthWatcher.UI/package-lock.json`, add the matching release note, and run `node scripts/release-notes.mjs validate --tag vMAJOR.MINOR.PATCH`. Create the tag only after that versioned commit is on `main`; a tag created before the package version changes will build an image with stale UI metadata and will fail the tag workflow.
+
 The UI build converts the validated current note into bundled `release.json` metadata. The application displays that metadata in Settings and checks the latest stable GitHub Release for an available update. This check is informational only; it never modifies Docker services.
 
 ## Container images and local Docker deployment
@@ -53,7 +55,7 @@ The Git tag and source archive remain the release identity. Image digests should
 
 ## UI package
 
-`WealthWatcher.UI` is an application bundle, not a reusable npm library. Its package remains marked `private` and is not published to npm. Its package version is the application release source of truth, beginning at `0.1.0`; release-note and tag validation keep build metadata consistent with the application release.
+`WealthWatcher.UI` is an application bundle, not a reusable npm library. Its package remains marked `private` and is not published to npm. Its package version is the application release source of truth; release-note and tag validation keep build metadata consistent with the application release.
 
 ## Support and security
 
