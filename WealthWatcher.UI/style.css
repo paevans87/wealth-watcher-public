@@ -3408,16 +3408,13 @@ body.obfuscated h1 .obfuscate-val {
 }
 
 #settings-view .collapsible-pane {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(8, 47, 73, 0.42));
+    border-color: rgba(34, 211, 238, 0.28);
     min-height: 0;
 }
 
 #settings-view .collapsible-content {
     margin-top: 1rem;
-}
-
-.release-info-pane {
-    border-color: rgba(34, 211, 238, 0.28);
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(8, 47, 73, 0.42));
 }
 
 .release-info-heading {
