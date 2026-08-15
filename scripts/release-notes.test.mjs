@@ -14,7 +14,7 @@ test('the current release notes follow the required format', async () => {
     assert.equal(manifest.version, '0.4.0');
     assert.equal(manifest.tag, 'v0.4.0');
     assert.equal(manifest.schemaVersion, 1);
-    assert.equal(manifest.requiresMigration, false);
+    assert.equal(manifest.requiresMigration, true);
     assert.equal(manifest.requiresConfigurationChange, false);
     assert.match(manifest.notesMarkdown, /^# Wealth Watcher v0\.4\.0/m);
 });
