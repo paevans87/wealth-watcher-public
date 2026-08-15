@@ -903,6 +903,13 @@ public static class EndpointExtensions
             CancellationToken cancellationToken) =>
         {
             var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+            // JSON null is valid for nullable collection values even though
+            // the request model exposes non-null defaults. Normalize it at
+            // the HTTP boundary so malformed persisted/client payloads are
+            // handled as an ordinary validation failure instead of a 500.
+            request.Contributions ??= [];
+            request.Windfalls ??= [];
+            request.IncludedAssets ??= [];
             var cacheKey = CacheKeys.Forecast(request, today);
             try
             {

@@ -20,6 +20,7 @@ import { setupAssetCatalog } from './components/AssetCatalog.js';
 import { requestNotification } from './components/ConfirmationModal.js';
 import { showToast } from './components/Toast.js';
 import { normalizeAuditResponse, renderAuditRows } from './components/AuditLog.js';
+import { parseJsonObject } from './utils/persistedSettings.js';
 import {
     getAssetTypeaheadState,
     renderAssetTypeahead,
@@ -171,16 +172,18 @@ async function init() {
         const dbSettings = await readApiPayload(settingsResult) || {};
         
         if (dbSettings['wealthWatcherGeneralSettings']) {
-            store.state.generalSettings = JSON.parse(dbSettings['wealthWatcherGeneralSettings']);
+            store.state.generalSettings = parseJsonObject(dbSettings['wealthWatcherGeneralSettings']);
         }
         if (dbSettings[FEATURE_SETTINGS_KEY]) {
-            store.state.featureSettings = normalizeFeatureSettings(JSON.parse(dbSettings[FEATURE_SETTINGS_KEY]));
+            store.state.featureSettings = normalizeFeatureSettings(
+                parseJsonObject(dbSettings[FEATURE_SETTINGS_KEY])
+            );
         } else {
             store.state.featureSettings = normalizeFeatureSettings();
         }
         applyFeatureVisibility();
         if (dbSettings['wealthWatcherForecastSettings']) {
-            const forecastSettings = JSON.parse(dbSettings['wealthWatcherForecastSettings']);
+            const forecastSettings = parseJsonObject(dbSettings['wealthWatcherForecastSettings']);
             store.state.forecastSettings = {
                 dateOfBirth: forecastSettings.dateOfBirth || '',
                 annualReturn: forecastSettings.annualReturn ?? 4,
@@ -189,14 +192,14 @@ async function init() {
             };
         }
         if (dbSettings['wealthWatcherFireSettings']) {
-            store.state.fireSettings = JSON.parse(dbSettings['wealthWatcherFireSettings']);
+            store.state.fireSettings = parseJsonObject(dbSettings['wealthWatcherFireSettings']);
         }
         if (dbSettings['wealthWatcherBudgetSettings']) {
-            let budget = JSON.parse(dbSettings['wealthWatcherBudgetSettings']);
-            if (!budget.bills) budget.bills = [];
-            if (!budget.savings) budget.savings = [];
-            if (!budget.spend) budget.spend = [];
-            if (!budget.income) budget.income = [];
+            let budget = parseJsonObject(dbSettings['wealthWatcherBudgetSettings']);
+            if (!Array.isArray(budget.bills)) budget.bills = [];
+            if (!Array.isArray(budget.savings)) budget.savings = [];
+            if (!Array.isArray(budget.spend)) budget.spend = [];
+            if (!Array.isArray(budget.income)) budget.income = [];
             budget.savings = budget.savings.map(item => ({
                 ...item,
                 id: item.id || globalThis.crypto?.randomUUID?.() || `saving-${Date.now()}-${Math.random().toString(16).slice(2)}`,
