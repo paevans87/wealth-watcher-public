@@ -502,23 +502,23 @@
                     </select>
                 </div>
                 <div class="form-group typeahead-container" id="entry-asset-picker">
-                    <label>Name</label>
+                    <label for="entry-name">Name</label>
                     <div id="entry-asset-picker-control"></div>
                 </div>
                 <div class="form-group">
-                    <label>Value (£)</label>
+                    <label for="entry-value">Value (£)</label>
                     <input type="number" id="entry-value" step="0.01" required placeholder="0.00">
                 </div>
                 <div class="form-group" id="mortgage-group" style="display:none;">
-                    <label>Mortgage Amount Remaining (£)</label>
+                    <label for="entry-mortgage">Mortgage Amount Remaining (£)</label>
                     <input type="number" id="entry-mortgage" step="0.01" placeholder="0.00">
                 </div>
                 <div class="form-group" id="invested-group" style="display:none;">
-                    <label>Total Deposits / Invested Capital (£)</label>
+                    <label for="entry-invested">Total Deposits / Invested Capital (£)</label>
                     <input type="number" id="entry-invested" step="0.01" placeholder="0.00">
                 </div>
                 <div class="form-group">
-                    <label>Date</label>
+                    <label for="entry-date">Date</label>
                     <input type="text" id="entry-date" class="flatpickr-input" placeholder="Select Date" required>
                 </div>
                 <button type="submit" class="submit-btn" id="entry-submit-btn">Save Entry</button>
@@ -800,11 +800,11 @@
                                 <h5 class="fire-settings-section-title">Tracker settings</h5>
                                 <form id="fire-settings-form">
                             <div class="form-group">
-                                <label>Target Monthly Income (£)</label>
+                                <label for="fire-setting-income">Target Monthly Income (£)</label>
                                 <input type="text" class="currency-input" id="fire-setting-income" required placeholder="4,000.00">
                             </div>
                             <div class="form-group">
-                                <label>Safe Withdrawal Rate (%)</label>
+                                <label for="fire-setting-swr">Safe Withdrawal Rate (%)</label>
                                 <input type="number" id="fire-setting-swr" step="0.1" required placeholder="4.0">
                             </div>
                             <div class="form-group">
@@ -855,15 +855,15 @@
                                 <h5 class="fire-settings-section-title">Forecast settings</h5>
                                 <form id="forecast-settings-form">
                                     <div class="form-group">
-                                        <label>Date of Birth</label>
+                                        <label for="forecast-setting-dob">Date of Birth</label>
                                         <input type="text" id="forecast-setting-dob" class="flatpickr-input" placeholder="Select Date of Birth">
                                     </div>
                                     <div class="form-group">
-                                        <label>Expected Annual Market Return (%)</label>
+                                        <label for="forecast-setting-return">Expected Annual Market Return (%)</label>
                                         <input type="number" id="forecast-setting-return" step="0.1" required>
                                     </div>
                                     <div class="form-group">
-                                        <label>Expected Monthly Contribution (£)</label>
+                                        <label for="forecast-setting-contribution">Expected Monthly Contribution (£)</label>
                                         <input type="number" id="forecast-setting-contribution" step="1" required>
                                     </div>
                                     <div class="form-group forecast-strategy-field">

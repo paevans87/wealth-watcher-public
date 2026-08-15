@@ -30,6 +30,20 @@ public sealed class EndpointExtensionsTests
     }
 
     [Fact]
+    public async Task Forecast_endpoint_normalizes_null_collections_before_validation()
+    {
+        await using var host = await ForecastHost.CreateAsync(
+            [new CashEntry("Current account", AssetKindCodes.Cash, 100m, new DateOnly(2026, 8, 11), TimeOnly.MinValue)]
+        );
+
+        var response = await host.PostForecastPayloadAsync(
+            "{\"Target\":100,\"IncludedAssets\":null,\"Contributions\":null,\"Windfalls\":null}");
+
+        Assert.Equal(StatusCodes.Status400BadRequest, response.StatusCode);
+        Assert.NotNull(response.Body);
+    }
+
+    [Fact]
     public async Task Calendar_endpoint_returns_one_month_payload_with_historic_and_current_values()
     {
         var asset = new Asset { DisplayName = "Current account" };
@@ -963,6 +977,26 @@ public sealed class EndpointExtensionsTests
                 throw new InvalidOperationException($"{context.Response.StatusCode}: {await error.ReadToEndAsync()}");
             }
             return await JsonDocument.ParseAsync(context.Response.Body);
+        }
+
+        public async Task<EndpointResponse> PostForecastPayloadAsync(string json)
+        {
+            var context = new DefaultHttpContext { RequestServices = app.Services };
+            context.Request.Method = HttpMethods.Post;
+            context.Request.ContentType = "application/json";
+            context.Request.Body = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+            context.Request.ContentLength = context.Request.Body.Length;
+            context.Response.Body = new MemoryStream();
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Features.Set<IHttpRequestBodyDetectionFeature>(new RequestBodyDetectionFeature());
+
+            await forecastEndpoint.RequestDelegate!(context);
+
+            context.Response.Body.Position = 0;
+            JsonDocument? responseBody = context.Response.Body.Length == 0
+                ? null
+                : await JsonDocument.ParseAsync(context.Response.Body);
+            return new EndpointResponse(context.Response.StatusCode, responseBody);
         }
 
         public async Task<JsonDocument> GetAggregateAsync(
