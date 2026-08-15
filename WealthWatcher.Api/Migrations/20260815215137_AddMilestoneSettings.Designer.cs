@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WealthWatcher.Api.Data;
@@ -11,9 +12,11 @@ using WealthWatcher.Api.Data;
 namespace WealthWatcher.Api.Migrations
 {
     [DbContext(typeof(WealthDbContext))]
-    partial class WealthDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260815215137_AddMilestoneSettings")]
+    partial class AddMilestoneSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -19,6 +19,7 @@ export const DEMO_API_CONTRACT = Object.freeze([
     { method: 'GET', path: '/api/wealth/investments/aggregate' },
     { method: 'GET', path: '/api/wealth/current-observations' },
     { method: 'POST', path: '/api/settings', body: { wealthWatcherGeneralSettings: JSON.stringify({ showSparklines: true }) } },
+    { method: 'POST', path: '/api/settings', body: { wealthWatcherMilestoneSettings: JSON.stringify({ targets: [500000, 600000] }) } },
     { method: 'POST', path: '/api/sync' },
     { method: 'POST', path: '/api/wealth', body: { Type: 'cash', AssetId: 'asset-cash', Name: 'Emergency Cash', Value: 32000, Date: '2026-08-13', Time: '12:00:00' } },
     { method: 'POST', path: '/api/properties', body: { Name: 'Demo Rental', Value: 275000, Mortgage: 160000, Date: '2026-08-13', Time: '12:00:00' } },

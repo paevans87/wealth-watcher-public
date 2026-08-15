@@ -982,6 +982,7 @@ public static class EndpointExtensions
                 ["wealthWatcherFeatureSettings"] = preference.FeatureJson,
                 ["wealthWatcherForecastSettings"] = preference.ForecastJson,
                 ["wealthWatcherFireSettings"] = preference.FireJson,
+                ["wealthWatcherMilestoneSettings"] = preference.MilestoneJson,
                 ["wealthWatcherBudgetSettings"] = budget
             });
         });
@@ -994,6 +995,14 @@ public static class EndpointExtensions
             CancellationToken cancellationToken) =>
         {
             logger.LogInformation("Updating {Count} user settings", settings.Count);
+
+            string? normalizedMilestoneJson = null;
+            if (settings.TryGetValue("wealthWatcherMilestoneSettings", out var milestoneJson))
+            {
+                if (!MilestoneSettingsPolicy.TryNormalize(milestoneJson, out normalizedMilestoneJson, out var milestoneError))
+                    return Results.BadRequest(new { Error = milestoneError });
+            }
+
             var preference = await db.AppPreferences.FindAsync(1);
             if (preference is null)
             {
@@ -1016,6 +1025,9 @@ public static class EndpointExtensions
                         break;
                     case "wealthWatcherFireSettings":
                         preference.FireJson = NormalizeJson(pair.Value);
+                        break;
+                    case "wealthWatcherMilestoneSettings":
+                        preference.MilestoneJson = normalizedMilestoneJson!;
                         break;
                     case "wealthWatcherBudgetSettings":
                         await ReplaceBudgetSettingsAsync(db, pair.Value);

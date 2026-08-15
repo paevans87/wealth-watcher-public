@@ -136,6 +136,8 @@
         </div>
     </header>
 
+    <section id="milestones-dashboard-card" class="card glass-panel full-width-col milestones-dashboard-card" data-page-content hidden aria-live="polite"></section>
+
     <div id="dashboard-skeleton" class="dashboard-skeleton" data-page-skeleton hidden aria-hidden="true">
         <section class="asset-group-section lane-section">
             <span class="skeleton skeleton-section-title"></span>
@@ -664,6 +666,33 @@
                     <div class="collapsible-content">
                         <form id="general-settings-form" class="settings-toggle-list">
                             <div id="general-settings-controls"></div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Milestones Settings -->
+                <div class="card glass-panel collapsible-pane full-width-col" id="milestones-settings-pane" data-pane-id="milestones" data-pane-helper-title="Break your wealth goal into reachable steps." data-pane-helper-description="Enable Milestones and add the checkpoints you want the dashboard to track next.">
+                    <div class="collapsible-header">
+                        <h4 class="section-title">Milestones</h4>
+                        <div class="collapsible-header-actions">
+                            <div id="milestones-setting-enabled-toggle"></div>
+                            <span class="collapsible-indicator" aria-label="Toggle Milestones settings">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="collapsible-content">
+                        <p class="milestones-settings-intro">Add one or more positive GBP targets. The dashboard will show progress from your latest achieved target to the next target above your current Holistic Net Worth.</p>
+                        <form id="milestone-settings-form" class="milestones-settings-form">
+                            <div id="milestone-target-list" class="milestone-target-list" aria-label="Configured wealth milestones"></div>
+                            <div class="milestone-add-row">
+                                <label class="milestone-target-field" for="milestone-new-target">
+                                    <span>New milestone target (£)</span>
+                                    <input id="milestone-new-target" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="500000" aria-describedby="milestone-settings-error">
+                                </label>
+                                <button type="button" class="action-btn" data-milestone-add>Add milestone</button>
+                            </div>
+                            <p id="milestone-settings-error" class="milestone-settings-message" role="status" aria-live="polite" hidden></p>
                         </form>
                     </div>
                 </div>

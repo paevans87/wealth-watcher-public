@@ -39,7 +39,7 @@ function reset() {
     element('nav-forecast');
     requests = [];
     saveSucceeds = true;
-    store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: true };
+    store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: true, milestones: false };
 }
 
 test('missing feature flags use their configured defaults', () => {
@@ -47,7 +47,8 @@ test('missing feature flags use their configured defaults', () => {
         fire: true,
         tracker: true,
         forecast: true,
-        budget: true
+        budget: true,
+        milestones: false
     });
     store.state.featureSettings = {};
     assert.equal(isFeatureEnabled('budget'), true);
@@ -100,13 +101,14 @@ test('feature changes update the cache, nav, and database setting', async () => 
         fire: true,
         tracker: true,
         forecast: true,
-        budget: false
+        budget: false,
+        milestones: false
     });
     assert.equal(element('nav-budget').hidden, true);
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, 'http://localhost:5000/api/settings');
     assert.deepEqual(JSON.parse(requests[0].options.body), {
-        [FEATURE_SETTINGS_KEY]: '{"fire":true,"tracker":true,"forecast":true,"budget":false}'
+        [FEATURE_SETTINGS_KEY]: '{"fire":true,"tracker":true,"forecast":true,"budget":false,"milestones":false}'
     });
 });
 
@@ -119,7 +121,8 @@ test('failed feature persistence restores the previous cache and nav state', asy
         fire: true,
         tracker: true,
         forecast: true,
-        budget: true
+        budget: true,
+        milestones: false
     });
     assert.equal(element('nav-budget').hidden, false);
 });
