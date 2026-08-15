@@ -12,6 +12,7 @@ import { initAllCollapsiblePanes } from './components/CollapsiblePane.js';
 import { setupBudgetSettings } from './pages/Budget.js';
 import { loadIntegrations, setupIntegrations } from './components/Integrations.js';
 import { setupFireFeatureSettings } from './components/FireSettings.js';
+import { MILESTONE_SETTINGS_KEY, normalizeMilestoneSettings, setupMilestoneSettings } from './components/Milestones.js';
 import { setupPropertyPanel, getPropertyFormState, resetPropertyFormState } from './components/Properties.js';
 import { FEATURE_SETTINGS_KEY, normalizeFeatureSettings, applyFeatureVisibility } from './utils/featureFlags.js';
 import { setupPwa } from './pwa.js';
@@ -182,6 +183,13 @@ async function init() {
             store.state.featureSettings = normalizeFeatureSettings();
         }
         applyFeatureVisibility();
+        if (dbSettings[MILESTONE_SETTINGS_KEY]) {
+            store.state.milestoneSettings = normalizeMilestoneSettings(
+                parseJsonObject(dbSettings[MILESTONE_SETTINGS_KEY])
+            );
+        } else {
+            store.state.milestoneSettings = { targets: [] };
+        }
         if (dbSettings['wealthWatcherForecastSettings']) {
             const forecastSettings = parseJsonObject(dbSettings['wealthWatcherForecastSettings']);
             store.state.forecastSettings = {
@@ -229,6 +237,7 @@ async function init() {
         if (!demoMode) setupIntegrations({ refresh: refreshDashboardData });
         setupFireFeatureSettings();
         setupBudgetSettings();
+        setupMilestoneSettings();
         setupRouter();
         setupHourlyRefreshLifecycle();
         setupCurrencyInputs();

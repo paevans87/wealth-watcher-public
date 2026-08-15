@@ -14,13 +14,41 @@ test.beforeEach(() => {
 test('representative reads return response-like, coherent demo data', async () => {
     const settings = await handleDemoRequest('/api/settings');
     assert.equal(settings.ok, true);
-    assert.equal(typeof (await settings.json()).wealthWatcherGeneralSettings, 'string');
+    const settingsPayload = await settings.json();
+    assert.equal(typeof settingsPayload.wealthWatcherGeneralSettings, 'string');
+    assert.equal(settingsPayload.wealthWatcherMilestoneSettings, '{"targets":[]}');
 
     const dashboard = await handleDemoRequest('http://localhost:5000/api/dashboard?period=1M');
     const payload = await dashboard.json();
     assert.equal(dashboard.status, 200);
     assert.ok(payload.Categories.length >= 3);
     assert.ok(payload.Categories.every(category => category.Aggregate.Data.length > 0));
+});
+
+test('milestone settings persist through the demo contract and reset cleanly', async () => {
+    const write = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+            wealthWatcherMilestoneSettings: JSON.stringify({ targets: [600000, 500000] })
+        })
+    });
+    assert.equal(write.ok, true);
+    assert.equal(await write.text(), '');
+
+    const settings = await (await handleDemoRequest('/api/settings')).json();
+    assert.deepEqual(JSON.parse(settings.wealthWatcherMilestoneSettings), { targets: [500000, 600000] });
+
+    const invalid = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+            wealthWatcherMilestoneSettings: JSON.stringify({ targets: [500000, 500000] })
+        })
+    });
+    assert.equal(invalid.status, 400);
+
+    resetDemoState();
+    const resetSettings = await (await handleDemoRequest('/api/settings')).json();
+    assert.deepEqual(JSON.parse(resetSettings.wealthWatcherMilestoneSettings), { targets: [] });
 });
 
 test('seed data provides dense history across the past year and a bit', () => {

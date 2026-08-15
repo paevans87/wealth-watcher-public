@@ -211,7 +211,8 @@ function seedState() {
     return {
         settings: {
             wealthWatcherGeneralSettings: json({ showZeroValuesOnDashboard: false, showZeroValuesOnHistory: false, showSparklines: true }),
-            wealthWatcherFeatureSettings: json({ fire: true, tracker: true, forecast: true, budget: true }),
+            wealthWatcherFeatureSettings: json({ fire: true, tracker: true, forecast: true, budget: true, milestones: false }),
+            wealthWatcherMilestoneSettings: json({ targets: [] }),
             wealthWatcherForecastSettings: json({ dateOfBirth: '1990-06-15', annualReturn: 4, monthlyContribution: 1500, forecastStrategy: 'fire-default' }),
             wealthWatcherFireSettings: json({ targetIncome: 4000, swr: 4, includeStatePension: false, statePensionAmount: 12547, includeWindfalls: false, expectedWindfalls: 0, includedAssets: ['investments', 'pensions', 'property'] }),
             wealthWatcherBudgetSettings: json({
@@ -263,7 +264,14 @@ function loadStoredState() {
     if (!storage) return seedState();
     try {
         const raw = storage.getItem(DEMO_STORAGE_KEY);
-        return raw ? { ...seedState(), ...JSON.parse(raw) } : seedState();
+        if (!raw) return seedState();
+        const seeded = seedState();
+        const stored = JSON.parse(raw);
+        return {
+            ...seeded,
+            ...stored,
+            settings: { ...seeded.settings, ...(stored.settings || {}) }
+        };
     } catch {
         return seedState();
     }
@@ -580,7 +588,43 @@ function findIntegration(id) {
     return demoState.integrations.find(item => String(item.Id) === String(id));
 }
 
+function normalizeDemoMilestoneSettings(value) {
+    let parsed;
+    try {
+        parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    } catch {
+        throw new Error('Milestone settings must be valid JSON.');
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.targets)) {
+        throw new Error('Milestone targets must be an array.');
+    }
+
+    const targets = parsed.targets.map(target => Number(target));
+    if (targets.some(target => !Number.isFinite(target) || target <= 0)) {
+        throw new Error('Milestone targets must be greater than £0.');
+    }
+    if (targets.length > 50) throw new Error('You can configure up to 50 milestones.');
+
+    const normalized = targets.map(target => Number(target.toFixed(2))).sort((left, right) => left - right);
+    if (normalized.some((target, index) => index > 0 && target === normalized[index - 1])) {
+        throw new Error('Milestone targets must be unique.');
+    }
+    if (targets.some(target => Math.abs(target * 100 - Math.round(target * 100)) > 1e-8)) {
+        throw new Error('Milestone targets can have no more than two decimal places.');
+    }
+    return json({ targets: normalized });
+}
+
 function mutateSettings(body) {
+    if (Object.prototype.hasOwnProperty.call(body, 'wealthWatcherMilestoneSettings')) {
+        try {
+            body.wealthWatcherMilestoneSettings = normalizeDemoMilestoneSettings(body.wealthWatcherMilestoneSettings);
+        } catch (error) {
+            return error.message;
+        }
+    }
+
     Object.entries(body).forEach(([key, value]) => {
         demoState.settings[key] = typeof value === 'string' ? value : json(value);
         try {
@@ -590,11 +634,12 @@ function mutateSettings(body) {
             if (key === 'wealthWatcherForecastSettings') store.state.forecastSettings = parsed;
             if (key === 'wealthWatcherFireSettings') store.state.fireSettings = parsed;
             if (key === 'wealthWatcherBudgetSettings') store.state.budgetSettings = parsed;
+            if (key === 'wealthWatcherMilestoneSettings') store.state.milestoneSettings = parsed;
         } catch {
             // Settings are persisted as opaque JSON strings by the real API.
         }
     });
-    return clone(demoState.settings);
+    return null;
 }
 
 function handleGet(path, searchParams) {
@@ -712,7 +757,11 @@ function portfolioTotalAtDate(date) {
 }
 
 function handleWrite(path, method, body, searchParams) {
-    if (path === '/settings' && method === 'POST') return response(mutateSettings(body));
+    if (path === '/settings' && method === 'POST') {
+        const error = mutateSettings(body);
+        if (error) return errorResponse(error, 400);
+        return response();
+    }
     if (path === '/sync' && method === 'POST') {
         createAudit('Demo sync completed.', 'Demo sync', 0);
         return response({ Succeeded: true, Message: 'Demo data synchronized successfully.', LastSyncDateTime: new Date().toISOString() });
