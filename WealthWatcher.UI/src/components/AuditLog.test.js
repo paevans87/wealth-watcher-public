@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeAuditResponse } from './AuditLog.js';
+import { normalizeAuditResponse, renderAuditRows } from './AuditLog.js';
+
+function createDomNode(tagName) {
+    return {
+        tagName: tagName.toUpperCase(),
+        className: '',
+        textContent: '',
+        children: [],
+        appendChild(child) {
+            this.children.push(child);
+            return child;
+        }
+    };
+}
 
 test('normalizes the current sync audit response into renderable rows', () => {
     const result = normalizeAuditResponse({
@@ -47,4 +60,34 @@ test('accepts camel-case responses and preserves detailed string statuses', () =
     assert.equal(result.rows[0].status, 'Partial / 1 warning');
     assert.equal(result.rows[0].statusClass, 'Partial');
     assert.equal(result.rows[0].logMessage, 'Completed with a warning');
+});
+
+test('renders audit data as text instead of executable HTML', () => {
+    const originalDocument = globalThis.document;
+    globalThis.document = { createElement: createDomNode };
+    const tbody = {
+        innerHTML: 'stale markup',
+        children: [],
+        appendChild(row) {
+            this.children.push(row);
+        }
+    };
+
+    try {
+        renderAuditRows(tbody, [{
+            startTime: '2026-08-05T19:06:45.877026Z',
+            providerName: '<img src=x onerror=alert(1)>',
+            status: 'Success',
+            statusClass: 'Success',
+            recordsAdded: 1,
+            logMessage: '</td><script>alert(1)</script>'
+        }]);
+
+        assert.equal(tbody.innerHTML, '');
+        assert.equal(tbody.children.length, 1);
+        assert.equal(tbody.children[0].children[1].textContent, '<img src=x onerror=alert(1)>');
+        assert.equal(tbody.children[0].children[4].textContent, '</td><script>alert(1)</script>');
+    } finally {
+        globalThis.document = originalDocument;
+    }
 });

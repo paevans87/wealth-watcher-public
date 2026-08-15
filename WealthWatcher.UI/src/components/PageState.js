@@ -1,3 +1,5 @@
+import { escapeHtml } from '../utils/html.js';
+
 export const PAGE_STATUS = Object.freeze({
     LOADING: 'loading',
     READY: 'ready',
@@ -22,15 +24,6 @@ export function getPageStatus(viewOrId) {
         ? (typeof document !== 'undefined' ? document.getElementById(viewOrId) : null)
         : viewOrId;
     return view?.dataset?.pageStatus || null;
-}
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
 }
 
 export function renderPageError(target, {

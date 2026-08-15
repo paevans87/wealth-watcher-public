@@ -4,6 +4,7 @@ import { requestConfirmation, requestNotification } from './ConfirmationModal.js
 import { showToast } from './Toast.js';
 import { renderCatalogInputField, renderSelectField, escapeHtml } from './FormFields.js';
 import { PAGE_STATUS, setPageStatus } from './PageState.js';
+import { safeCssColor } from '../utils/html.js';
 
 const ASSET_GROUPS_KEY = 'asset-group';
 const ASSET_KINDS_KEY = 'asset-kind';
@@ -983,7 +984,7 @@ export function renderAssetKindManager(assetKinds, assetGroups) {
         return `
             <div class="catalog-kind-row" data-edit-value="${escapeHtml(valueId)}"${isSystemKind ? ' data-system-kind="true"' : ''}>
                 <button type="button" class="catalog-kind-edit" data-edit-value="${escapeHtml(valueId)}" aria-label="Edit Type ${escapeHtml(label)}${isSystemKind ? ' (system type)' : ''}">
-                    <span class="catalog-value-dot" style="background:${getSafeColor(value.Color)}"></span>
+                    <span class="catalog-value-dot" style="background:${safeCssColor(value.Color)}"></span>
                     <span class="catalog-kind-name">${escapeHtml(label)}</span>
                     <span class="catalog-kind-code">${escapeHtml(value.Key || value.Code || '')}</span>
                     <span class="catalog-kind-group">Default: ${escapeHtml(groupLabel)}</span>
@@ -1027,7 +1028,7 @@ function renderAssetGroupLane(assetGroup, assets) {
         <section class="catalog-lane" aria-label="${escapeHtml(label)} asset group">
             <div class="catalog-lane-header">
                 <button class="catalog-lane-title" type="button" data-edit-value="${escapeHtml(valueId)}" aria-label="Edit asset group ${escapeHtml(label)}">
-                    <span class="catalog-value-dot" style="background:${getSafeColor(assetGroup.Color)}"></span>
+                    <span class="catalog-value-dot" style="background:${safeCssColor(assetGroup.Color)}"></span>
                     <span>${escapeHtml(label)}</span>
                 </button>
                 <span class="catalog-lane-count">${formatAssetCount(assets.length)}</span>
@@ -1066,7 +1067,7 @@ function renderAsset(asset) {
     const valueId = String(asset.Id);
     return `
         <div class="catalog-asset catalog-value-pill" data-edit-value="${escapeHtml(valueId)}" data-asset-id="${escapeHtml(valueId)}" role="button" tabindex="0" draggable="true" aria-grabbed="false" aria-label="Edit asset ${escapeHtml(label)}. Drag to move it to another Group.">
-            <span class="catalog-value-dot" style="background:${getSafeColor(kind?.Color || asset.Color)}"></span>
+            <span class="catalog-value-dot" style="background:${safeCssColor(kind?.Color || asset.Color)}"></span>
             <span class="catalog-asset-name">${escapeHtml(label)}</span>
             <span class="catalog-asset-kind">${escapeHtml(kindLabel)}</span>
             <button type="button" class="catalog-inline-move" data-move-asset="${escapeHtml(valueId)}" aria-label="Move asset ${escapeHtml(label)}" title="Move asset">↔</button>
@@ -1087,7 +1088,7 @@ function renderAssetList(assets, assetKinds, assetGroups, allAssets = assets) {
         const needsAttention = isUnclassifiedAssetKind(kind);
         return `
             <div class="catalog-list-row${needsAttention ? ' catalog-list-row-attention' : ''}" data-edit-value="${escapeHtml(valueId)}" role="button" tabindex="0" aria-label="Edit asset ${escapeHtml(label)}">
-                <span class="catalog-list-asset"><span class="catalog-value-dot" style="background:${getSafeColor(kind?.Color || asset.Color)}"></span><strong>${escapeHtml(label)}</strong></span>
+                <span class="catalog-list-asset"><span class="catalog-value-dot" style="background:${safeCssColor(kind?.Color || asset.Color)}"></span><strong>${escapeHtml(label)}</strong></span>
                 <span class="catalog-list-type">${escapeHtml(kindLabel)}</span>
                 <span class="catalog-list-group">${escapeHtml(groupLabel)}</span>
                 <span class="catalog-list-status">${needsAttention ? 'Needs attention' : 'Ready'}</span>
@@ -1280,7 +1281,7 @@ function openValueEditor(valueId, options = {}) {
 
         setEditorValue('classification-edit-name', value.DisplayName || value.Key);
         setEditorValue('classification-edit-order', Number(value.DisplayOrder) || 0);
-        setEditorValue('classification-edit-color', getSafeColor(value.Color));
+        setEditorValue('classification-edit-color', safeCssColor(value.Color));
         setEditorText('classification-edit-save', 'Save changes');
         setEditorVisible('classification-edit-order-field', true);
         setEditorVisible('classification-edit-color-field', true);
@@ -1352,8 +1353,4 @@ function setEditorValue(id, value) {
 function setEditorVisible(id, visible) {
     const element = document.getElementById(id);
     if (element) element.hidden = !visible;
-}
-
-function getSafeColor(color) {
-    return /^#[0-9a-f]{6}$/i.test(String(color || '')) ? color : '#64748b';
 }

@@ -16,6 +16,7 @@ import {
     renderFeatureToggle,
     renderSelectField
 } from '../components/FormFields.js';
+import { escapeHtml, safeCssColor } from '../utils/html.js';
 
 let budgetChartInstance = null;
 let budgetSaveTimer;
@@ -47,7 +48,7 @@ function renderBudgetEntryForms() {
                     label: 'Amount (£)',
                     placeholder: '0.00'
                 })}
-                <button class="action-btn catalog-add-button" type="button" id="${buttonId}" onclick="${action}()">${buttonLabel}</button>
+                <button class="action-btn catalog-add-button" type="button" id="${buttonId}" data-budget-add="${action}">${buttonLabel}</button>
             </div>`;
         target.dataset.rendered = 'true';
     });
@@ -400,10 +401,10 @@ export function populateBudgetSettings() {
     const form = document.getElementById('budget-settings-form');
     if (form) closeAssetTypeaheads(form);
     
-    renderBudgetTable('budget-income-tbody', budgetSettings.income, 'var(--cyan)', 'removeBudgetIncome');
-    renderBudgetTable('budget-bills-tbody', budgetSettings.bills, '#ef4444', 'removeBudgetBill');
-    renderBudgetTable('budget-savings-tbody', budgetSettings.savings, '#10b981', 'removeBudgetSaving');
-    renderBudgetTable('budget-spend-tbody', budgetSettings.spend, '#8b5cf6', 'removeBudgetSpend');
+    renderBudgetTable('budget-income-tbody', budgetSettings.income, '#06b6d4', 'income');
+    renderBudgetTable('budget-bills-tbody', budgetSettings.bills, '#ef4444', 'bills');
+    renderBudgetTable('budget-savings-tbody', budgetSettings.savings, '#10b981', 'savings');
+    renderBudgetTable('budget-spend-tbody', budgetSettings.spend, '#8b5cf6', 'spend');
 }
 
 function updateBudgetDisabledDescription() {
@@ -419,10 +420,11 @@ function updateBudgetDisabledDescription() {
     }
 }
 
-function renderBudgetTable(tbodyId, array, color, removeFnName) {
+function renderBudgetTable(tbodyId, array, color, category) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
+    const safeColor = safeCssColor(color);
     
     array.forEach((item, index) => {
         const tr = document.createElement('tr');
@@ -435,12 +437,12 @@ function renderBudgetTable(tbodyId, array, color, removeFnName) {
             ? renderBudgetCadenceCell(item, index)
             : '';
         tr.innerHTML = `
-            <td data-label="Name" style="padding: 0.75rem 0.5rem;">${item.name}</td>
-            <td data-label="Amount" style="padding: 0.75rem 0.5rem; text-align: right; color: ${color};" class="obfuscate-val">£${parseFloat(item.amount).toLocaleString('en-GB', {minimumFractionDigits: 2})}</td>
+            <td data-label="Name" style="padding: 0.75rem 0.5rem;">${escapeHtml(item.name)}</td>
+            <td data-label="Amount" style="padding: 0.75rem 0.5rem; text-align: right; color: ${safeColor};" class="obfuscate-val">£${parseFloat(item.amount).toLocaleString('en-GB', {minimumFractionDigits: 2})}</td>
             ${assetCell}
             ${cadenceCell}
             <td data-label="" class="budget-row-actions" style="padding: 0.75rem 0.5rem; text-align: center;">
-                <button type="button" class="action-btn icon-only" onclick="${removeFnName}(${index})" style="background: transparent; color: #ef4444; border: none; cursor: pointer; padding: 4px;">&times;</button>
+                <button type="button" class="action-btn icon-only" data-budget-remove="${category}" data-budget-index="${index}" style="background: transparent; color: #ef4444; border: none; cursor: pointer; padding: 4px;">&times;</button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -565,6 +567,28 @@ export function setupBudgetSettings() {
     // Add/remove actions save automatically; prevent Enter from submitting the form.
     form.addEventListener('submit', (event) => {
         event.preventDefault();
+    });
+
+    const addActions = {
+        addBudgetIncome: () => addBudgetItem('income', 'new-income-name', 'new-income-amount'),
+        addBudgetBills: () => addBudgetItem('bills', 'new-bills-name', 'new-bills-amount'),
+        addBudgetSavings: () => addBudgetItem('savings', 'new-savings-name', 'new-savings-amount'),
+        addBudgetSpend: () => addBudgetItem('spend', 'new-spend-name', 'new-spend-amount')
+    };
+    form.addEventListener('click', (event) => {
+        const addButton = event.target?.closest?.('[data-budget-add]');
+        if (addButton) {
+            event.preventDefault();
+            addActions[addButton.dataset.budgetAdd]?.();
+            return;
+        }
+
+        const removeButton = event.target?.closest?.('[data-budget-remove]');
+        if (!removeButton) return;
+        const category = removeButton.dataset.budgetRemove;
+        const index = Number(removeButton.dataset.budgetIndex);
+        if (!['income', 'bills', 'savings', 'spend'].includes(category) || !Number.isInteger(index) || index < 0) return;
+        removeBudgetItem(category, index);
     });
 
     form.addEventListener('change', (event) => {

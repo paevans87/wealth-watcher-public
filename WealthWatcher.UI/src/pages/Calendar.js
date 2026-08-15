@@ -1,5 +1,6 @@
 import { fetchFreshStrict, API_BASE_URL } from '../api/apiClient.js';
 import { formatter } from '../utils/formatters.js';
+import { escapeHtml } from '../utils/html.js';
 import { setPageLoading } from '../components/PageLoading.js';
 import { setPageStatus } from '../components/PageState.js';
 
@@ -485,7 +486,7 @@ function renderMonthComparison(elements) {
             <span class="calendar-month-comparison-amount obfuscate-val">${formatted.amount}</span>
             <span class="calendar-month-comparison-percentage obfuscate-val">${formatted.percentage}</span>
         </span>
-        <span class="calendar-month-comparison-label">vs ${previousMonthLabel}</span>`;
+        <span class="calendar-month-comparison-label">vs ${escapeHtml(previousMonthLabel)}</span>`;
     elements.monthComparison.className = `calendar-month-comparison calendar-month-comparison-${formatted.direction}`;
     elements.monthComparison.setAttribute(
         'aria-label',
@@ -499,7 +500,8 @@ function renderCalendarCell(cell) {
         return '<div class="calendar-cell calendar-placeholder" aria-hidden="true"></div>';
     }
 
-    const dayLabel = `<time class="calendar-day-number" datetime="${cell.dateKey}">${cell.day}</time>`;
+    const safeDateKey = escapeHtml(cell.dateKey);
+    const dayLabel = `<time class="calendar-day-number" datetime="${safeDateKey}">${escapeHtml(cell.day)}</time>`;
     if (!cell.change.available) {
         const unavailableReason = cell.isFuture
             ? 'Future date'
@@ -510,9 +512,9 @@ function renderCalendarCell(cell) {
                     : 'No wealth data';
 
         return `
-            <div class="calendar-cell calendar-day calendar-day-unavailable" role="gridcell" data-date="${cell.dateKey}" aria-label="${cell.dateKey}: ${unavailableReason}">
+            <div class="calendar-cell calendar-day calendar-day-unavailable" role="gridcell" data-date="${safeDateKey}" aria-label="${safeDateKey}: ${escapeHtml(unavailableReason)}">
                 ${dayLabel}
-                <span class="calendar-change-unavailable" aria-label="${unavailableReason}">—</span>
+                <span class="calendar-change-unavailable" aria-label="${escapeHtml(unavailableReason)}">—</span>
             </div>`;
     }
 
@@ -524,7 +526,7 @@ function renderCalendarCell(cell) {
             : 'calendar-change-neutral';
 
     return `
-        <div class="calendar-cell calendar-day calendar-day-${cell.state}" role="gridcell" data-date="${cell.dateKey}" aria-label="${cell.dateKey}: ${formattedChange.amount}, ${formattedChange.percentage}">
+        <div class="calendar-cell calendar-day calendar-day-${cell.state}" role="gridcell" data-date="${safeDateKey}" aria-label="${safeDateKey}: ${formattedChange.amount}, ${formattedChange.percentage}">
             ${dayLabel}
             <div class="calendar-change ${changeClass}">
                 <span class="calendar-change-amount obfuscate-val">${formattedChange.amount}</span>
@@ -559,7 +561,7 @@ function renderCalendarSkeleton(monthLabel) {
     ).join('');
 
     return `
-        <div class="calendar-grid-content calendar-skeleton-grid" role="grid" aria-label="${monthLabel} daily portfolio changes loading">
+        <div class="calendar-grid-content calendar-skeleton-grid" role="grid" aria-label="${escapeHtml(monthLabel)} daily portfolio changes loading">
             ${renderCalendarWeekdayHeadings()}
             ${cells}
         </div>`;
@@ -682,7 +684,7 @@ function renderCalendarView() {
         ));
 
         elements.grid.innerHTML = `
-            <div class="calendar-grid-content" role="grid" aria-label="${monthLabel} daily portfolio changes">
+            <div class="calendar-grid-content" role="grid" aria-label="${escapeHtml(monthLabel)} daily portfolio changes">
                 ${renderCalendarWeekdayHeadings()}
                 ${month.cells.map(renderCalendarCell).join('')}
             </div>`;

@@ -93,6 +93,50 @@ public sealed class IntegrationServiceTests
     }
 
     [Fact]
+    public async Task Provider_failure_details_are_not_returned_or_persisted()
+    {
+        var options = new DbContextOptionsBuilder<WealthDbContext>()
+            .UseInMemoryDatabase($"integration-security-tests-{Guid.NewGuid():N}")
+            .Options;
+        await using var db = new WealthDbContext(options);
+        var provider = DataProtectionProvider.Create("wealth-watcher-integration-security-tests");
+        var service = CreateService(
+            db,
+            new IntegrationRegistry([new TestAdapter(throwOnPull: true)]),
+            new IntegrationCredentialProtector(provider));
+
+        var connection = await service.CreateConnectionAsync("test", "Security test connection");
+        await service.SaveCredentialsAsync(connection.Id, new Dictionary<string, string> { ["apiKey"] = "secret" });
+        await service.DiscoverAccountsAsync(connection.Id);
+        var account = await db.IntegrationAccounts.SingleAsync();
+        var asset = new Asset { DisplayName = "Security test asset" };
+        db.Assets.Add(asset);
+        await db.SaveChangesAsync();
+        await service.AllocateAccountAsync(connection.Id, account.Id, asset.Id);
+
+        var sync = await service.SyncAsync(connection.Id);
+
+        Assert.NotNull(sync);
+        Assert.False(sync!.Succeeded);
+        Assert.Equal(IntegrationSecurityMessages.SyncFailed, sync.Message);
+        Assert.DoesNotContain("provider.example", sync.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-token", sync.Message, StringComparison.Ordinal);
+
+        var storedConnection = await db.IntegrationConnections.SingleAsync();
+        Assert.Equal(IntegrationSecurityMessages.SyncFailed, storedConnection.LastError);
+        var run = await db.SyncRuns.SingleAsync();
+        Assert.Equal(IntegrationSecurityMessages.SyncFailed, run.LogMessage);
+        Assert.DoesNotContain("provider.example", run.LogMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-token", run.LogMessage, StringComparison.Ordinal);
+
+        storedConnection.LastError = "provider.example returned secret-token";
+        await db.SaveChangesAsync();
+        var connectionResponse = Assert.Single(await service.GetConnectionsAsync());
+        Assert.Equal(IntegrationSecurityMessages.ConnectionOperationFailed, connectionResponse.LastError);
+        Assert.DoesNotContain("provider.example", connectionResponse.LastError, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Replacing_a_connection_and_reallocating_the_same_asset_does_not_duplicate_the_value()
     {
         var options = new DbContextOptionsBuilder<WealthDbContext>()
@@ -415,7 +459,8 @@ public sealed class IntegrationServiceTests
         string? snapshotNameSuffix = null,
         bool includeCash = false,
         string providerKey = "test",
-        DateTimeOffset? observedAt = null) : IIntegrationAdapter
+        DateTimeOffset? observedAt = null,
+        bool throwOnPull = false) : IIntegrationAdapter
     {
         public string Key => providerKey;
 
@@ -446,6 +491,9 @@ public sealed class IntegrationServiceTests
             CancellationToken cancellationToken)
         {
             PullCount++;
+            if (throwOnPull)
+                throw new InvalidOperationException("provider.example returned secret-token for account SIPP with value £1234.56");
+
             return Task.FromResult(CreatePullResult(snapshotNameSuffix, includeCash, observedAt));
         }
 

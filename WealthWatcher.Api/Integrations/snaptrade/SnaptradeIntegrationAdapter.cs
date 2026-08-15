@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using WealthWatcher.Api.Models;
+using WealthWatcher.Api.Services;
 
 namespace WealthWatcher.Api.Integrations;
 
@@ -130,13 +131,12 @@ public sealed class SnaptradeIntegrationAdapter : IIntegrationAdapter
                     Value = cash,
                     ObservedAt = observedAt
                 });
-                result.Summaries.Add(
-                    $"{account.DisplayName}: {details.TotalValue.Value:0.##} total, {cash:0.##} undeployed cash, {positions.Count} position(s)");
+                result.Summaries.Add($"{positions.Count} position(s) and cash balance pulled.");
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                result.Errors.Add($"{account.DisplayName}: {exception.Message}");
-                logger.LogWarning(exception, "SnapTrade pull failed for account {AccountId}.", account.ExternalId);
+                result.Errors.Add(IntegrationSecurityMessages.ProviderAccountPullFailed);
+                logger.LogWarning("SnapTrade pull failed for a provider account.");
             }
         }
 

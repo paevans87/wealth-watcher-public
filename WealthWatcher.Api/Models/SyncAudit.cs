@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using WealthWatcher.Api.Services;
 
 namespace WealthWatcher.Api.Models;
 
@@ -54,7 +55,7 @@ public sealed class SyncAuditResponse
         EndTime = run.EndTime,
         Status = run.Status.ToString(),
         RecordsAdded = run.RecordsAdded,
-        LogMessage = run.LogMessage
+        LogMessage = IntegrationSecurityMessages.AuditMessage(run.Status)
     };
 }
 

@@ -151,6 +151,23 @@ test('budget settings render existing rows when the settings panel is initialise
     assert.match(incomeBody.children[0].innerHTML, /4,160\.00/);
 });
 
+test('budget rows escape imported names and use delegated actions', () => {
+    reset();
+    const incomeBody = createElement('budget-income-tbody');
+    elements.set('budget-income-tbody', incomeBody);
+    store.state.budgetSettings.income = [{
+        name: '<img src=x onerror=alert(1)>',
+        amount: 4160
+    }];
+
+    setupBudgetSettings();
+
+    const markup = incomeBody.children[0].innerHTML;
+    assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
+    assert.match(markup, /data-budget-remove="income"/);
+    assert.doesNotMatch(markup, /<img|onclick=/);
+});
+
 test('forecast asset uses the searchable asset typeahead in savings rows', () => {
     reset();
     const savingsBody = createElement('budget-savings-tbody');

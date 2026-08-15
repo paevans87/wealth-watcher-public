@@ -2,6 +2,7 @@ import { store } from '../store/store.js';
 import { fetchFreshStrict, API_BASE_URL } from '../api/apiClient.js';
 import { setPageLoading } from '../components/PageLoading.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
+import { escapeHtml, safeCssColor } from '../utils/html.js';
 
 let historyChartInstances = [];
 let historySnapshot = null;
@@ -129,8 +130,8 @@ export function buildHistorySnapshot(results) {
     const categoryDatasets = categoryDefinitions.map(cat => ({
         id: cat.Id,
         label: cat.Label,
-        borderColor: cat.Color || '#06b6d4',
-        backgroundColor: hexToRgba(cat.Color || '#06b6d4', 0.16),
+        borderColor: safeCssColor(cat.Color, '#06b6d4'),
+        backgroundColor: hexToRgba(safeCssColor(cat.Color, '#06b6d4'), 0.16),
         dataMap: new Map(),
         fullData: [],
         lastRecordedValue: null,
@@ -448,7 +449,7 @@ function renderCategoryCharts(visible) {
         const displayChange = change !== null && shouldIncludeHistoryValue(change) ? change : null;
         const total = visible.totalData[visible.totalData.length - 1] || 0;
         const share = latest !== null && total > 0 ? latest / total : null;
-        const accent = dataset.borderColor;
+        const accent = safeCssColor(dataset.borderColor, '#06b6d4');
 
         const card = document.createElement('div');
         card.className = 'card glass-panel history-chart-card';
@@ -456,7 +457,7 @@ function renderCategoryCharts(visible) {
             <div class="history-card-header" style="--history-accent: ${accent}">
                 <div class="history-card-title">
                     <span class="history-card-dot" aria-hidden="true"></span>
-                    <h4>${dataset.label}</h4>
+                    <h4>${escapeHtml(dataset.label)}</h4>
                 </div>
                 <span class="history-card-share obfuscate-val">${formatShare(share)}</span>
             </div>

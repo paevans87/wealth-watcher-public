@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using WealthWatcher.Api.Models;
+using WealthWatcher.Api.Services;
 
 namespace WealthWatcher.Api.Integrations;
 
@@ -101,7 +102,7 @@ public sealed class Trading212IntegrationAdapter : IIntegrationAdapter
         return new IntegrationTestResult
         {
             Succeeded = true,
-            Message = $"Connected to Trading 212 account {account.DisplayName} ({account.Currency}).",
+            Message = "Connected to Trading 212.",
             Accounts = [account]
         };
     }
@@ -146,13 +147,13 @@ public sealed class Trading212IntegrationAdapter : IIntegrationAdapter
                     Positions = positions
                 });
                 result.Summaries.Add(enableXray
-                    ? $"{account.DisplayName}: {positions.Count} position(s), {value:0.00} position value"
-                    : $"{account.DisplayName}: account balance pulled (X-Ray disabled)");
+                    ? $"{positions.Count} position(s) pulled."
+                    : "Account balance pulled (X-Ray disabled).");
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                result.Errors.Add($"{account.DisplayName}: {exception.Message}");
-                logger.LogWarning(exception, "Trading 212 pull failed for account {AccountId}.", account.ExternalId);
+                result.Errors.Add(IntegrationSecurityMessages.ProviderAccountPullFailed);
+                logger.LogWarning("Trading 212 pull failed for a provider account.");
             }
         }
 

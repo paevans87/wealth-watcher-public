@@ -19,7 +19,7 @@ import { setupReleaseInfo } from './release.js';
 import { setupAssetCatalog } from './components/AssetCatalog.js';
 import { requestNotification } from './components/ConfirmationModal.js';
 import { showToast } from './components/Toast.js';
-import { normalizeAuditResponse } from './components/AuditLog.js';
+import { normalizeAuditResponse, renderAuditRows } from './components/AuditLog.js';
 import {
     getAssetTypeaheadState,
     renderAssetTypeahead,
@@ -299,23 +299,7 @@ window.loadAudits = async function(pageDelta) {
         const data = normalizeAuditResponse(await readApiPayload(result));
         
         const tbody = document.getElementById('audit-tbody');
-        tbody.innerHTML = '';
-        
-        data.rows.forEach(a => {
-            const parsedTime = a.startTime ? new Date(a.startTime) : null;
-            const time = parsedTime && !Number.isNaN(parsedTime.getTime())
-                ? parsedTime.toLocaleString()
-                : '—';
-            tbody.innerHTML += `
-                <tr>
-                    <td>${time}</td>
-                    <td>${a.providerName}</td>
-                    <td class="status-${a.statusClass}">${a.status}</td>
-                    <td>${a.recordsAdded}</td>
-                    <td>${a.logMessage}</td>
-                </tr>
-            `;
-        });
+        renderAuditRows(tbody, data.rows);
 
         const pageCount = Math.max(1, Math.ceil(data.total / data.pageSize));
         document.getElementById('audit-page-info').innerText = `Page ${store.state.auditPage} of ${pageCount}`;
