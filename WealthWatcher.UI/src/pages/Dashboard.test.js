@@ -207,6 +207,61 @@ test('Dashboard shows an accessible Unclassified banner only above the threshold
     }
 });
 
+test('Dashboard escapes dynamic labels and rejects invalid card colors', async () => {
+    const originals = {
+        categories: store.state.CATEGORIES,
+        settings: store.state.generalSettings,
+        groups: store.state.classificationGroups,
+        assets: store.state.assets,
+        period: store.state.currentPeriod
+    };
+
+    try {
+        elements.clear();
+        store.clearCache();
+        chartConfigurations = [];
+        store.state.currentPeriod = '1M';
+        store.state.generalSettings = { showZeroValuesOnDashboard: true, showSparklines: true };
+        store.state.classificationGroups = [];
+        store.state.assets = [];
+        store.state.CATEGORIES = [{
+            Id: 'unsafe',
+            Label: '<img src=x onerror=alert(1)>',
+            Color: 'red; background: url(javascript:alert(1))'
+        }];
+        mockApiResponses = {
+            '/wealth/unsafe/aggregate?period=1M': {
+                Data: [{ Time: '2026-01-01', Value: 100, Invested: 100 }],
+                IsManual: true,
+                LatestBreakdown: { '<script>alert(1)</script>': 100 }
+            },
+            '/wealth/unsafe/aggregate?period=YTD': {
+                Data: [{ Time: '2026-01-01', Value: 100, Invested: 100 }]
+            }
+        };
+
+        await loadDashboard({ force: true });
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        const markup = elements.get('liquid-grid').innerHTML;
+        assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
+        assert.match(markup, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+        assert.doesNotMatch(markup, /<img|<script|javascript:|onmouseenter=|onmouseleave=/);
+        assert.equal(chartConfigurations.at(-1)?.data?.datasets?.[0]?.borderColor, '#06b6d4');
+    } finally {
+        store.clearCache();
+        store.state.CATEGORIES = originals.categories;
+        store.state.generalSettings = originals.settings;
+        store.state.classificationGroups = originals.groups;
+        store.state.assets = originals.assets;
+        store.state.currentPeriod = originals.period;
+        mockApiResponses = {};
+        chartConfigurations = [];
+        fetchRequests = [];
+        updateHourlyRefreshLifecycle();
+    }
+});
+
 test('Dashboard period selection reloads aggregates for 1H', async () => {
     const originalPeriod = store.state.currentPeriod;
     const originalCategories = store.state.CATEGORIES;
@@ -933,7 +988,7 @@ test('Dashboard optional AssetGroup handling for Bonds', async (t) => {
 
         assert.doesNotMatch(elements.get('lane-sections').innerHTML, /Unassigned assets/);
         assert.doesNotMatch(elements.get('lane-sections').innerHTML, /Liquid Assets|Illiquid Assets/);
-        assert.ok(liquidGridHtml.includes('NS&I'), 'Bonds entry should be rendered in unassigned assets');
+        assert.ok(liquidGridHtml.includes('NS&amp;I'), 'Bonds entry should be rendered in unassigned assets');
         assert.equal(elements.get('liquid-total').innerText, '£550.00', 'Unassigned total should include bonds');
     });
 
@@ -974,7 +1029,7 @@ test('Dashboard optional AssetGroup handling for Bonds', async (t) => {
         const liquidGridHtml = elements.get('liquid-grid').innerHTML;
 
         assert.ok(liquidGridHtml.includes('Bank Account'), 'Cash entry rendered in liquid grid');
-        assert.ok(liquidGridHtml.includes('NS&I'), 'Bonds entry rendered in liquid grid');
+        assert.ok(liquidGridHtml.includes('NS&amp;I'), 'Bonds entry rendered in liquid grid');
         assert.equal(elements.get('liquid-total').innerText, '£1,550.00', 'Liquid total should sum cash and bonds');
     });
 });

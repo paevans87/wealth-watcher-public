@@ -61,3 +61,37 @@ export function normalizeAuditResponse(response) {
         })
     };
 }
+
+function formatAuditTime(startTime) {
+    const parsedTime = startTime ? new Date(startTime) : null;
+    return parsedTime && !Number.isNaN(parsedTime.getTime())
+        ? parsedTime.toLocaleString()
+        : '—';
+}
+
+function appendAuditCell(documentRef, row, value, className = '') {
+    const cell = documentRef.createElement('td');
+    if (className) cell.className = className;
+    cell.textContent = String(value ?? '');
+    row.appendChild(cell);
+}
+
+export function renderAuditRows(tbody, rows = []) {
+    if (!tbody) return null;
+    tbody.innerHTML = '';
+
+    const documentRef = tbody.ownerDocument || globalThis.document;
+    if (!documentRef?.createElement) return tbody;
+
+    rows.forEach(audit => {
+        const row = documentRef.createElement('tr');
+        appendAuditCell(documentRef, row, formatAuditTime(audit.startTime));
+        appendAuditCell(documentRef, row, audit.providerName);
+        appendAuditCell(documentRef, row, audit.status, `status-${String(audit.statusClass || 'Unknown').replace(/[^a-zA-Z0-9_-]/g, '-')}`);
+        appendAuditCell(documentRef, row, audit.recordsAdded);
+        appendAuditCell(documentRef, row, audit.logMessage);
+        tbody.appendChild(row);
+    });
+
+    return tbody;
+}

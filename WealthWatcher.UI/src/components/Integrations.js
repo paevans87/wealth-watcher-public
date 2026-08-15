@@ -11,6 +11,7 @@ import {
 } from './AssetTypeahead.js';
 import { renderFeatureToggle, renderSelectField } from './FormFields.js';
 import { PAGE_STATUS, setPageStatus } from './PageState.js';
+import { escapeHtml } from '../utils/html.js';
 
 const steps = ['Enable', 'Add Keys', 'Test', 'Pull Accounts', 'Allocate'];
 const DEMO_ONLY_MESSAGE = 'This provider action is unavailable in demo mode. No credentials or live provider accounts are changed.';
@@ -33,13 +34,6 @@ let refreshDashboardData = async () => {};
 let lastWizardTrigger = null;
 let integrationLoadState = { status: 'idle', error: null };
 let lastIntegrationLoadOptions = {};
-
-const escapeHtml = value => String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 
 async function request(path, options = {}) {
     if (isDemoProviderOperation(path, options)) {
@@ -244,7 +238,7 @@ function renderConnections() {
             ? `${connection.Accounts.filter(account => isAccountAllocationComplete(account, connection)).length}/${connection.Accounts.length} accounts allocated`
             : 'No accounts discovered';
         return `
-            <article class="integration-connection" data-connection-id="${connection.Id}">
+            <article class="integration-connection" data-connection-id="${escapeHtml(connection.Id)}">
                 <div class="integration-connection-copy">
                     <strong>${escapeHtml(connection.DisplayName)}</strong>
                     <span>${escapeHtml(descriptor?.DisplayName || connection.ProviderKey)} · ${escapeHtml(statusLabel(connection.Status))}</span>
@@ -253,7 +247,7 @@ function renderConnections() {
                 <div class="integration-connection-controls">
                     <label class="integration-polling-control">
                         <span>Poll every</span>
-                        <input class="integration-number-input" type="number" min="${descriptor?.MinimumPollingIntervalMinutes || 1}" step="1" value="${connection.PollingIntervalMinutes}" data-integration-polling="${connection.Id}" aria-label="Polling interval for ${escapeHtml(connection.DisplayName)}">
+                        <input class="integration-number-input" type="number" min="${escapeHtml(descriptor?.MinimumPollingIntervalMinutes || 1)}" step="1" value="${escapeHtml(connection.PollingIntervalMinutes)}" data-integration-polling="${escapeHtml(connection.Id)}" aria-label="Polling interval for ${escapeHtml(connection.DisplayName)}">
                         <span>minutes</span>
                     </label>
                     ${renderFeatureToggle({
@@ -277,8 +271,8 @@ function renderConnections() {
                         }
                     })}
                     <div class="integration-connection-actions">
-                        <button type="button" class="action-btn" data-integration-manage="${connection.Id}">Manage</button>
-                        <button type="button" class="action-btn integration-remove-btn" data-integration-remove="${connection.Id}" aria-label="Remove ${escapeHtml(connection.DisplayName)}">Remove</button>
+                        <button type="button" class="action-btn" data-integration-manage="${escapeHtml(connection.Id)}">Manage</button>
+                        <button type="button" class="action-btn integration-remove-btn" data-integration-remove="${escapeHtml(connection.Id)}" aria-label="Remove ${escapeHtml(connection.DisplayName)}">Remove</button>
                     </div>
                 </div>
             </article>
@@ -305,7 +299,7 @@ function renderCatalog() {
                 <strong>${escapeHtml(descriptor.DisplayName)}</strong>
                 <p>${escapeHtml(descriptor.Description)}</p>
             </div>
-            <button type="button" class="action-btn" data-integration-enable="${descriptor.Key}">${instanceCount ? 'Add another' : 'Enable'}</button>
+            <button type="button" class="action-btn" data-integration-enable="${escapeHtml(descriptor.Key)}">${instanceCount ? 'Add another' : 'Enable'}</button>
         </article>`;
     }).join('');
 }
@@ -486,10 +480,10 @@ function renderAccountAllocation(account, connection) {
             },
             emptyChoiceLabel: 'Create a new asset…'
         });
-        return `<div class="integration-allocation-slot" data-account-allocation-role="${role}" data-account-initial-asset-id="${escapeHtml(selectedAssetId)}" data-account-allocation-cleared="false">
+        return `<div class="integration-allocation-slot" data-account-allocation-role="${escapeHtml(role)}" data-account-initial-asset-id="${escapeHtml(selectedAssetId)}" data-account-allocation-cleared="false">
             <div class="integration-allocation-label"><strong>${roleLabel}</strong><small>${roleDescription}</small></div>
             ${assetTypeahead}
-            <input type="text" data-account-new-asset="${accountId}" data-account-allocation-role="${role}" placeholder="New asset name" value="${hasAsset ? '' : escapeHtml(defaultName)}" ${hasAsset ? 'hidden' : ''}>
+            <input type="text" data-account-new-asset="${escapeHtml(accountId)}" data-account-allocation-role="${escapeHtml(role)}" placeholder="New asset name" value="${hasAsset ? '' : escapeHtml(defaultName)}" ${hasAsset ? 'hidden' : ''}>
             ${renderSelectField({
                 className: 'integration-select',
                 ariaLabel: `New ${roleLabel.toLowerCase()} Asset Kind`,
@@ -501,11 +495,11 @@ function renderAccountAllocation(account, connection) {
                     'data-account-allocation-role': role
                 }
             })}
-            <span class="integration-allocation-status" data-account-allocation-status="${accountId}" data-account-allocation-role="${role}" ${hasAsset ? '' : 'hidden'}>Allocated to ${escapeHtml(selectedAssetName)}</span>
-            <button type="button" class="action-btn integration-clear-allocation" data-account-allocation-clear="${accountId}" data-account-allocation-role="${role}" aria-label="Remove ${roleLabel.toLowerCase()} allocation" ${hasAsset ? '' : 'hidden'}>Remove allocation</button>
+            <span class="integration-allocation-status" data-account-allocation-status="${escapeHtml(accountId)}" data-account-allocation-role="${escapeHtml(role)}" ${hasAsset ? '' : 'hidden'}>Allocated to ${escapeHtml(selectedAssetName)}</span>
+            <button type="button" class="action-btn integration-clear-allocation" data-account-allocation-clear="${escapeHtml(accountId)}" data-account-allocation-role="${escapeHtml(role)}" aria-label="Remove ${escapeHtml(roleLabel.toLowerCase())} allocation" ${hasAsset ? '' : 'hidden'}>Remove allocation</button>
         </div>`;
     }).join('');
-    return `<div class="integration-account" data-account-id="${account.Id}">
+    return `<div class="integration-account" data-account-id="${escapeHtml(account.Id)}">
         <div class="integration-account-summary"><strong>${escapeHtml(account.DisplayName)}</strong><small>${escapeHtml(account.AccountType)}${account.Currency ? ` · ${escapeHtml(account.Currency)}` : ''}</small></div>
         <div class="integration-account-allocations">${slots}</div>
     </div>`;

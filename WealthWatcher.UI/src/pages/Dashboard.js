@@ -6,6 +6,7 @@ import { requestConfirmation, requestNotification } from '../components/Confirma
 import { showToast } from '../components/Toast.js';
 import { setPageLoading } from '../components/PageLoading.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
+import { escapeHtml, safeCssColor } from '../utils/html.js';
 import pluralize from 'pluralize';
 
 let charts = {};
@@ -930,13 +931,14 @@ function updateGlobalHeader(total, past, contributors) {
         
         const renderDriver = (c) => {
             const sign = c.delta > 0 ? '+' : '';
+            const color = safeCssColor(c.color, '#06b6d4');
             let tooltip = '';
             if (c.deltaInvested !== 0) {
                 const organicDelta = c.delta - c.deltaInvested;
-                tooltip = ` title="Deposits: ${formatter.format(c.deltaInvested)} | Market: ${organicDelta >= 0 ? '+' : ''}${formatter.format(organicDelta)}"`;
+                tooltip = ` title="${escapeHtml(`Deposits: ${formatter.format(c.deltaInvested)} | Market: ${organicDelta >= 0 ? '+' : ''}${formatter.format(organicDelta)}`)}"`;
             }
-            return `<span class="insight-pill" style="color: ${c.color}; border: 1px solid ${c.color}30; background-color: ${c.color}15;"${tooltip}>
-                        ${c.name}
+            return `<span class="insight-pill" style="color: ${color}; border: 1px solid ${color}30; background-color: ${color}15;"${tooltip}>
+                        ${escapeHtml(c.name)}
                         <span class="obfuscate-val" style="opacity: 0.8; margin-left: 6px; font-weight: 400;">${sign}${formatter.format(c.delta)}</span>
                     </span>`;
         };
@@ -981,29 +983,12 @@ function updateGlobalHeader(total, past, contributors) {
                 const segment = document.createElement('div');
                 segment.className = 'prop-segment';
                 segment.style.width = `${width}%`;
-                segment.style.backgroundColor = c.color;
+                segment.style.backgroundColor = safeCssColor(c.color, '#06b6d4');
                 segment.title = `${c.name}: ${formatter.format(c.currentVal)}`;
                 propBar.appendChild(segment);
             }
         });
     }
-}
-
-function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, character => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-    }[character]));
-}
-
-function escapeText(value) {
-    return String(value ?? '').replace(/[<>]/g, character => ({
-        '<': '&lt;',
-        '>': '&gt;'
-    }[character]));
 }
 
 function getPropertyField(property, name, fallback = 0) {
@@ -1152,7 +1137,7 @@ function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSyn
             });
             breakdownHtml += `
                 <div class="breakdown-item${showSparklines ? '' : ' no-sparkline'}">
-                    <span class="breakdown-name" title="${escapeHtml(name)}">${escapeText(name)}</span>
+                    <span class="breakdown-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
                     <span class="breakdown-val obfuscate-val">${formatter.format(val)}</span>
                     ${sparkline}
                     ${renderDashboardEntryAction({ categoryId: cat.Id, name, value: val })}
@@ -1192,26 +1177,28 @@ function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSyn
     const calculatedPercentage = safePastVal !== 0 ? (safeDelta / safePastVal) * 100 : 0;
     const deltaPercentage = Number.isFinite(calculatedPercentage) ? calculatedPercentage : 0;
     const deltaSign = safeDelta >= 0 ? '+' : '';
-    const displayLabel = cat.Id === 'property' ? 'Properties' : cat.Label;
+    const displayLabel = cat.Id === 'property' ? 'Properties' : String(cat.Label || cat.Id || 'Assets');
+    const cardColor = safeCssColor(cat.Color, '#06b6d4');
+    const lastSyncLabel = `Last Synced: ${lastSync ? lastSync.toLocaleString() : 'Never'}`;
     const addLabel = `Add ${getDashboardAssetName(cat)}`;
     const cardActions = `
         <div class="card-header-actions dashboard-card-actions" data-dashboard-card-actions>
-            <button type="button" class="property-action-btn asset-entry-action card-entry-btn" data-dashboard-action="entry" data-category-id="${escapeHtml(cat.Id)}" data-entry-name="" data-entry-value="" aria-label="${escapeHtml(addLabel)}" title="${escapeHtml(addLabel)}">${escapeText(addLabel)}</button>
+            <button type="button" class="property-action-btn asset-entry-action card-entry-btn" data-dashboard-action="entry" data-category-id="${escapeHtml(cat.Id)}" data-entry-name="" data-entry-value="" aria-label="${escapeHtml(addLabel)}" title="${escapeHtml(addLabel)}">${escapeHtml(addLabel)}</button>
         </div>`;
     const headerLayout = `grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'heading actions'${showSparklines ? " 'chart chart'" : ''};`;
 
     const cardHtml = `
-        <div class="card glass-panel" data-cat="${cat.Id}">
+        <div class="card glass-panel" data-cat="${escapeHtml(cat.Id)}">
             <div class="card-header dashboard-card-header${showSparklines ? '' : ' no-sparkline'}" data-dashboard-card-header style="${headerLayout}">
                 <div class="card-heading">
                     <span class="card-label">
-                        ${displayLabel}
-                        <div class="freshness-badge ${freshClass}" onmouseenter="window.showTooltip(event, 'Last Synced: ${lastSync ? lastSync.toLocaleString() : 'Never'}')" onmouseleave="window.hideTooltip()"></div>
+                        ${escapeHtml(displayLabel)}
+                        <div class="freshness-badge ${freshClass}" title="${escapeHtml(lastSyncLabel)}"></div>
                     </span>
                     <div class="card-delta ${safeDelta < 0 ? 'neg' : ''} obfuscate-val">${deltaSign}${formatter.format(safeDelta)} (${deltaPercentage.toFixed(2)}%)</div>
                 </div>
                 ${cardActions}
-                ${showSparklines ? `<div class="mini-chart-container" aria-label="${escapeHtml(displayLabel)} trend"><canvas id="chart-${cat.Id}"></canvas></div>` : ''}
+                ${showSparklines ? `<div class="mini-chart-container" aria-label="${escapeHtml(displayLabel)} trend"><canvas id="chart-${escapeHtml(cat.Id)}"></canvas></div>` : ''}
             </div>
             <div class="card-value obfuscate-val">${formatter.format(currentVal)}</div>
             ${breakdownHtml}
@@ -1230,7 +1217,7 @@ function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSyn
                 labels: history.map(h => h.Time),
                 datasets: [{
                     data: history.map(h => h.Value),
-                    borderColor: cat.Color, borderWidth: 2, backgroundColor: 'transparent',
+                    borderColor: cardColor, borderWidth: 2, backgroundColor: 'transparent',
                     pointRadius: 0, pointHoverRadius: 4, tension: 0.4
                 }]
             },
@@ -1348,7 +1335,7 @@ function renderSparkline(values, color, label) {
         const y = height - padding - ((value - min) / range) * (height - padding * 2);
         return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
-    return `<svg class="breakdown-sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)}" preserveAspectRatio="none"><polyline points="${points}" fill="none" stroke="${escapeHtml(color || '#06b6d4')}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>`;
+    return `<svg class="breakdown-sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)}" preserveAspectRatio="none"><polyline points="${points}" fill="none" stroke="${safeCssColor(color, '#06b6d4')}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline></svg>`;
 }
 
 function formatHourlyInterval(bucketStart, timeZone) {
@@ -1433,9 +1420,9 @@ function renderXrayChart() {
             const color = colors[i % colors.length];
             const value = values[i];
             legendHtml += `
-                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: #a1a1aa; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" title="${label}: ${formatter.format(value)}">
-                    <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background-color: ${color}; flex-shrink: 0;"></span>
-                    <span style="overflow: hidden; text-overflow: ellipsis;">${label}</span>
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: #a1a1aa; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;" title="${escapeHtml(label)}: ${formatter.format(value)}">
+                    <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background-color: ${safeCssColor(color)}; flex-shrink: 0;"></span>
+                    <span style="overflow: hidden; text-overflow: ellipsis;">${escapeHtml(label)}</span>
                 </div>
             `;
         });

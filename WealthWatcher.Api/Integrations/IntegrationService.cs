@@ -152,7 +152,7 @@ public sealed class IntegrationService(
         {
             var result = await adapter.TestAsync(BuildContext(connection), cancellationToken);
             connection.LastTestedAt = DateTimeOffset.UtcNow;
-            connection.LastError = result.Succeeded ? null : result.Message;
+            connection.LastError = result.Succeeded ? null : IntegrationSecurityMessages.TestFailed;
             connection.Status = result.Succeeded
                 ? IntegrationConnectionStatus.Tested
                 : IntegrationConnectionStatus.Error;
@@ -162,20 +162,24 @@ public sealed class IntegrationService(
             return new IntegrationOperationResponse
             {
                 Succeeded = result.Succeeded,
-                Message = result.Message,
+                Message = result.Succeeded ? "Integration test succeeded." : IntegrationSecurityMessages.TestFailed,
                 Accounts = result.Accounts
             };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             connection.LastTestedAt = DateTimeOffset.UtcNow;
-            connection.LastError = exception.Message;
+            connection.LastError = IntegrationSecurityMessages.TestFailed;
             connection.Status = IntegrationConnectionStatus.Error;
             connection.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
-            logger.LogWarning(exception, "Integration test failed for provider {ProviderCode} connection {ConnectionId}.",
+            logger.LogWarning("Integration test failed for provider {ProviderCode} connection {ConnectionId}.",
                 connection.IntegrationProvider.Code, connection.Id);
-            return new IntegrationOperationResponse { Succeeded = false, Message = exception.Message };
+            return new IntegrationOperationResponse
+            {
+                Succeeded = false,
+                Message = IntegrationSecurityMessages.TestFailed
+            };
         }
     }
 
@@ -241,12 +245,16 @@ public sealed class IntegrationService(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             connection.Status = IntegrationConnectionStatus.Error;
-            connection.LastError = exception.Message;
+            connection.LastError = IntegrationSecurityMessages.AccountDiscoveryFailed;
             connection.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
-            logger.LogWarning(exception, "Account discovery failed for provider {ProviderCode} connection {ConnectionId}.",
+            logger.LogWarning("Account discovery failed for provider {ProviderCode} connection {ConnectionId}.",
                 connection.IntegrationProvider.Code, connection.Id);
-            return new IntegrationOperationResponse { Succeeded = false, Message = exception.Message };
+            return new IntegrationOperationResponse
+            {
+                Succeeded = false,
+                Message = IntegrationSecurityMessages.AccountDiscoveryFailed
+            };
         }
     }
 
@@ -609,7 +617,7 @@ public sealed class IntegrationService(
                     candidate.ExternalId.Equals(snapshot.AccountExternalId, StringComparison.OrdinalIgnoreCase));
                 if (account is null)
                 {
-                    result.Errors.Add($"{snapshot.Name}: account was not mapped.");
+                    result.Errors.Add(IntegrationSecurityMessages.UnmappedProviderValue);
                     continue;
                 }
 
@@ -617,7 +625,7 @@ public sealed class IntegrationService(
                 var accountMapping = account.AssetMappings.FirstOrDefault(mapping => mapping.Role == allocationRole);
                 if (accountMapping is null)
                 {
-                    result.Errors.Add($"{snapshot.Name}: {allocationRole.ToString().ToLowerInvariant()} asset allocation is missing.");
+                    result.Errors.Add(IntegrationSecurityMessages.MissingAssetAllocation);
                     continue;
                 }
 
@@ -625,7 +633,7 @@ public sealed class IntegrationService(
                                      IsCashSnapshot(snapshot);
                 if (isCashSnapshot && !isSnapTrade)
                 {
-                    result.Errors.Add($"{snapshot.Name}: cash snapshots are only supported for SnapTrade integrations.");
+                    result.Errors.Add(IntegrationSecurityMessages.UnsupportedCashValue);
                     continue;
                 }
 
@@ -648,7 +656,7 @@ public sealed class IntegrationService(
                 var asset = await db.Assets.FindAsync([mappedAssetId], cancellationToken);
                 if (asset is null || asset.ArchivedAt.HasValue)
                 {
-                    result.Errors.Add($"{snapshot.Name}: mapped asset is unavailable.");
+                    result.Errors.Add(IntegrationSecurityMessages.MappedAssetUnavailable);
                     continue;
                 }
 
@@ -728,37 +736,48 @@ public sealed class IntegrationService(
                     await InvalidateCurrentWealthAsync(cancellationToken);
             }
             connection.LastSyncedAt = DateTimeOffset.UtcNow;
-            connection.LastError = result.Errors.Count == 0 ? null : string.Join(" | ", result.Errors);
-            connection.Status = result.Errors.Count == 0
+            var safeErrors = result.Errors
+                .Select(IntegrationSecurityMessages.SanitizeSyncError)
+                .ToList();
+            var hasErrors = safeErrors.Count > 0;
+            var syncMessage = hasErrors
+                ? $"{IntegrationSecurityMessages.SyncCompletedWithWarnings} {persisted} record(s) added."
+                : $"{IntegrationSecurityMessages.SyncCompleted} {persisted} record(s) added.";
+            connection.LastError = hasErrors ? IntegrationSecurityMessages.ConnectionOperationFailed : null;
+            connection.Status = !hasErrors
                 ? IntegrationConnectionStatus.Active
                 : IntegrationConnectionStatus.Error;
             connection.UpdatedAt = DateTimeOffset.UtcNow;
             run.EndTime = DateTimeOffset.UtcNow;
             run.RecordsAdded = persisted;
-            run.Status = result.Errors.Count == 0 ? SyncRunStatus.Success : SyncRunStatus.Partial;
-            run.LogMessage = string.Join(" ", result.Summaries.Concat(result.Errors.Select(error => $"Error: {error}")));
+            run.Status = !hasErrors ? SyncRunStatus.Success : SyncRunStatus.Partial;
+            run.LogMessage = syncMessage;
             await db.SaveChangesAsync(cancellationToken);
 
             return new IntegrationSyncResponse
             {
-                Succeeded = result.Errors.Count == 0,
-                Message = run.LogMessage,
+                Succeeded = !hasErrors,
+                Message = syncMessage,
                 RecordsProcessed = persisted,
-                Errors = result.Errors
+                Errors = safeErrors
             };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            connection.LastError = exception.Message;
+            connection.LastError = IntegrationSecurityMessages.SyncFailed;
             connection.Status = IntegrationConnectionStatus.Error;
             connection.UpdatedAt = DateTimeOffset.UtcNow;
             run.EndTime = DateTimeOffset.UtcNow;
             run.Status = SyncRunStatus.Failed;
-            run.LogMessage = exception.Message;
+            run.LogMessage = IntegrationSecurityMessages.SyncFailed;
             await db.SaveChangesAsync(cancellationToken);
-            logger.LogError(exception, "Integration sync failed for provider {ProviderCode} connection {ConnectionId}.",
+            logger.LogError("Integration sync failed for provider {ProviderCode} connection {ConnectionId}.",
                 connection.IntegrationProvider.Code, connection.Id);
-            return new IntegrationSyncResponse { Succeeded = false, Message = exception.Message };
+            return new IntegrationSyncResponse
+            {
+                Succeeded = false,
+                Message = IntegrationSecurityMessages.SyncFailed
+            };
         }
     }
 
@@ -884,7 +903,9 @@ public sealed class IntegrationService(
         OnlyPollDuringMarketTimes = connection.OnlyPollDuringMarketTimes,
         LastTestedAt = connection.LastTestedAt,
         LastSyncedAt = connection.LastSyncedAt,
-        LastError = connection.LastError,
+        LastError = string.IsNullOrWhiteSpace(connection.LastError)
+            ? null
+            : IntegrationSecurityMessages.ConnectionOperationFailed,
         HasCredentials = !string.IsNullOrWhiteSpace(connection.CredentialsCiphertext),
         Options = ParseOptions(connection.OptionsJson),
         Accounts = connection.Accounts.Select(ToResponse).ToList()

@@ -216,8 +216,7 @@ public static class EndpointExtensions
             var requestedKindCode = string.IsNullOrWhiteSpace(dto.AssetKindCode)
                 ? dto.Type
                 : dto.AssetKindCode;
-            logger.LogInformation("Received manual entry for {AssetKind}: {Name} with value {Value}",
-                requestedKindCode, dto.Name, dto.Value);
+            logger.LogInformation("Received manual wealth entry for {AssetKind}.", requestedKindCode);
             var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
             var entryDate = dto.Date == default ? DateOnly.FromDateTime(nowUtc) : dto.Date;
             var entryTime = dto.Time == default ? TimeOnly.FromDateTime(nowUtc) : dto.Time;

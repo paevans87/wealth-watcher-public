@@ -1,4 +1,5 @@
 import { store } from '../store/store.js';
+import { escapeHtml } from '../utils/html.js';
 
 const TYPEAHEAD_SELECTOR = '[data-asset-typeahead]';
 const SEARCH_SELECTOR = '[data-asset-typeahead-search]';
@@ -12,14 +13,7 @@ const optionHandlers = new WeakSet();
 const handledChoiceEvents = new WeakSet();
 const handledPointerChoices = new WeakSet();
 
-export function escapeAssetTypeaheadHtml(value) {
-    return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
-}
+export const escapeAssetTypeaheadHtml = escapeHtml;
 
 function renderAttributes(attributes = {}) {
     return Object.entries(attributes)

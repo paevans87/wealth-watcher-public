@@ -91,7 +91,12 @@ globalThis.fetch = async (url, options) => {
 };
 
 const { normalizeGeneralSettings, store } = await import('../store/store.js');
-const { populateFireSettings, populateGeneralSettings, saveFireSettings } = await import('./Modals.js');
+const {
+    populateFireSettings,
+    populateGeneralSettings,
+    renderWindfallsTable,
+    saveFireSettings
+} = await import('./Modals.js');
 
 function reset() {
     elements.clear();
@@ -213,4 +218,21 @@ test('general settings use positive zero-value controls and migrate legacy dashb
     assert.equal(elements.get('general-setting-show-zero-values-dashboard').checked, false);
     assert.equal(elements.get('general-setting-show-zero-values-history').checked, true);
     assert.equal(elements.get('general-setting-show-sparklines').checked, false);
+});
+
+test('windfall rows escape imported values and avoid inline event handlers', () => {
+    reset();
+    window.tempWindfalls = [{
+        Name: '<img src=x onerror=alert(1)>',
+        Amount: 1000,
+        ExpectedDate: '</td><script>alert(1)</script>',
+        IncludeInCalculation: true
+    }];
+
+    renderWindfallsTable();
+
+    const markup = elements.get('windfalls-tbody').children[0].innerHTML;
+    assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
+    assert.match(markup, /&lt;\/td&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    assert.doesNotMatch(markup, /<img|<script|onchange=|onclick=/);
 });

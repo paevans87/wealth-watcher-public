@@ -204,6 +204,39 @@ test('history values use the shared class-based obfuscation styling', async () =
     window.isObfuscated = false;
 });
 
+test('history cards escape category labels and reject invalid accent colors', async () => {
+    const originalCategories = store.state.CATEGORIES;
+    const originalSettings = store.state.generalSettings;
+
+    try {
+        store.clearCache();
+        store.state.generalSettings = { showZeroValuesOnHistory: true };
+        store.state.CATEGORIES = [{
+            Id: 'unsafe',
+            Label: '<img src=x onerror=alert(1)>',
+            Color: 'red; background: url(javascript:alert(1))'
+        }];
+        historyResponses.set('/wealth/unsafe/aggregate', {
+            Data: [
+                { Time: '2024-01-01', Value: 100 },
+                { Time: '2026-01-01', Value: 200 }
+            ]
+        });
+
+        await loadHistoryView();
+
+        const markup = elements.get('history-grid').children.at(-1).innerHTML;
+        assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/);
+        assert.match(markup, /--history-accent: #06b6d4/);
+        assert.doesNotMatch(markup, /<img|<script|javascript:/);
+    } finally {
+        historyResponses.clear();
+        store.clearCache();
+        store.state.CATEGORIES = originalCategories;
+        store.state.generalSettings = originalSettings;
+    }
+});
+
 test('history filters zero values at the data boundary while preserving aligned category data', () => {
     store.state.CATEGORIES = [
         { Id: 'pensions', Label: 'Pensions', Color: '#8b5cf6' },

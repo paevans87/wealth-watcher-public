@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WealthWatcher.Api.Data;
 using WealthWatcher.Api.Extensions;
 using WealthWatcher.Api.Models;
+using WealthWatcher.Api.Services;
 using Xunit;
 
 namespace WealthWatcher.Api.Tests;
@@ -78,7 +79,7 @@ public sealed class SyncAuditEndpointTests
         Assert.Equal("ISA", latest.GetProperty("ProviderName").GetString());
         Assert.Equal("Failed", latest.GetProperty("Status").GetString());
         Assert.Equal(0, latest.GetProperty("RecordsAdded").GetInt32());
-        Assert.Equal("Credentials expired.", latest.GetProperty("LogMessage").GetString());
+        Assert.Equal(IntegrationSecurityMessages.SyncFailed, latest.GetProperty("LogMessage").GetString());
         Assert.False(latest.TryGetProperty("ConnectionDisplayNameSnapshot", out _));
 
         var older = audits[1];

@@ -10,6 +10,7 @@ import {
     renderDateInputField,
     renderFeatureToggle
 } from './FormFields.js';
+import { escapeHtml } from '../utils/html.js';
 
 let generalSaveTimer;
 let fireSaveTimer;
@@ -344,20 +345,41 @@ export function populateFireSettings() {
     }
 }
 
+function setupWindfallTableInteractions(tbody) {
+    if (!tbody?.addEventListener || tbody.dataset.windfallInteractionsInit === 'true') return;
+    tbody.dataset.windfallInteractionsInit = 'true';
+
+    tbody.addEventListener('change', event => {
+        const toggle = event.target?.closest?.('[data-windfall-toggle]');
+        if (!toggle) return;
+        const index = Number(toggle.dataset.windfallToggle);
+        if (Number.isInteger(index) && index >= 0) toggleWindfall(index, toggle.checked);
+    });
+    tbody.addEventListener('click', event => {
+        const removeButton = event.target?.closest?.('[data-windfall-remove]');
+        if (!removeButton) return;
+        const index = Number(removeButton.dataset.windfallRemove);
+        if (!Number.isInteger(index) || index < 0) return;
+        event.preventDefault();
+        removeWindfall(index);
+    });
+}
+
 export function renderWindfallsTable() {
     const tbody = document.getElementById('windfalls-tbody');
     if (!tbody) return;
-    
+
+    setupWindfallTableInteractions(tbody);
     tbody.innerHTML = '';
     window.tempWindfalls.forEach((wf, index) => {
         const tr = document.createElement('tr');
         
         tr.innerHTML = `
-            <td data-label="Inc." style="text-align: center; padding: 0.5rem;"><input type="checkbox" ${wf.IncludeInCalculation ? 'checked' : ''} onchange="window.toggleWindfall(${index}, this.checked)" style="margin: 0; width: 1.1rem; height: 1.1rem; cursor: pointer; display: inline-block;"></td>
-            <td data-label="Name" style="padding: 0.5rem; font-size: 0.95rem;">${wf.Name}</td>
+            <td data-label="Inc." style="text-align: center; padding: 0.5rem;"><input type="checkbox" ${wf.IncludeInCalculation ? 'checked' : ''} data-windfall-toggle="${index}" style="margin: 0; width: 1.1rem; height: 1.1rem; cursor: pointer; display: inline-block;"></td>
+            <td data-label="Name" style="padding: 0.5rem; font-size: 0.95rem;">${escapeHtml(wf.Name)}</td>
             <td data-label="Amount" style="padding: 0.5rem; text-align: right; font-size: 0.95rem;">£${parseFloat(wf.Amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-            <td data-label="Date" style="padding: 0.5rem; text-align: right; font-size: 0.95rem;">${wf.ExpectedDate}</td>
-            <td data-label="Action" style="text-align: center; padding: 0.5rem;"><button type="button" class="action-btn icon-only" onclick="window.removeWindfall(${index})" title="Remove" style="margin: 0;"><span style="color: #ef4444; font-size: 1.2rem; line-height: 1;">&times;</span></button></td>
+            <td data-label="Date" style="padding: 0.5rem; text-align: right; font-size: 0.95rem;">${escapeHtml(wf.ExpectedDate)}</td>
+            <td data-label="Action" style="text-align: center; padding: 0.5rem;"><button type="button" class="action-btn icon-only" data-windfall-remove="${index}" title="Remove" style="margin: 0;"><span style="color: #ef4444; font-size: 1.2rem; line-height: 1;">&times;</span></button></td>
         `;
         tbody.appendChild(tr);
     });
