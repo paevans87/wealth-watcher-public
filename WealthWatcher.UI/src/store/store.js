@@ -48,7 +48,8 @@ export function normalizeGeneralSettings(settings = {}) {
 const state = {
         categories: {},
         generalSettings: normalizeGeneralSettings(DEFAULT_GENERAL_SETTINGS),
-        featureSettings: { fire: true, tracker: true, forecast: true, budget: true },
+        featureSettings: { fire: true, tracker: true, forecast: true, budget: true, milestones: false },
+        milestoneSettings: { targets: [] },
         forecastSettings: {
             annualReturn: 4.0,
             monthlyContribution: 1500,

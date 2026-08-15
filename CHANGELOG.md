@@ -26,5 +26,6 @@ The latest prepared stable release is `v0.4.0`; the latest tagged release remain
 
 ## Unreleased
 
+- Add optional wealth milestones with persisted multi-target settings and dashboard progress states.
 - Prepare the repository for open-source release with public CI, dependency checks, contributor guidance, and safer local deployment defaults.
 - Maintain the public release policy, version-aligned UI metadata, release notes, release checks, and application SBOMs; tagged Docker images are published to GHCR while deployment data remains local.

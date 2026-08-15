@@ -53,7 +53,7 @@ function reset() {
     ].forEach(id => elements.set(id, createElement(id)));
     requests = [];
     saveSucceeds = true;
-    store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: true };
+    store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: true, milestones: false };
 }
 
 test('FIRE settings populate parent and dependent toggles and sections', () => {
@@ -89,7 +89,7 @@ test('disabling FIRE hides dependent navigation and settings', async () => {
     assert.equal(elements.get('fire-setting-forecast-enabled').disabled, true);
     assert.equal(requests.length, 1);
     assert.deepEqual(JSON.parse(requests[0].options.body), {
-        wealthWatcherFeatureSettings: '{"fire":false,"tracker":true,"forecast":true,"budget":true}'
+        wealthWatcherFeatureSettings: '{"fire":false,"tracker":true,"forecast":true,"budget":true,"milestones":false}'
     });
 });
 
