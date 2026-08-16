@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0f172a">
-    <meta name="description" content="Private WealthWatcher dashboard for tracking wealth, budgets, forecasts, and financial independence.">
+    <meta name="description" content="Private Wealth Watcher dashboard for tracking wealth, budgets, forecasts, and financial independence.">
     <meta name="robots" content="noindex, nofollow">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>WealthWatcher dashboard</title>
+    <title>Wealth Watcher dashboard</title>
     <!-- VITE_DEMO_METADATA -->
     <!-- VITE_DEMO_ANALYTICS -->
     <link rel="manifest" href="./manifest.webmanifest">
@@ -42,7 +42,7 @@
 
     <aside id="analytics-consent" class="demo-analytics-consent" hidden aria-labelledby="analytics-consent-title">
         <div class="demo-analytics-copy">
-            <strong id="analytics-consent-title">Help improve WealthWatcher</strong>
+            <strong id="analytics-consent-title">Help improve Wealth Watcher</strong>
             <span>Optional analytics covers this public demo only and never receives financial data.</span>
         </div>
         <div class="demo-analytics-actions">
@@ -132,20 +132,20 @@
             </div>
         </div>
         <div class="header-actions">
-            <div class="period-picker" id="period-picker">
-                <button class="period-btn" data-period="1H">1H</button>
-                <button class="period-btn" data-period="1D">1D</button>
-                <button class="period-btn" data-period="1W">1W</button>
-                <button class="period-btn active" data-period="1M">1M</button>
-                <button class="period-btn" data-period="3M">3M</button>
-                <button class="period-btn" data-period="1Y">1Y</button>
-                <button class="period-btn" data-period="MAX">MAX</button>
+            <div class="period-picker" id="period-picker" role="group" aria-label="Dashboard range">
+                <button class="period-btn" type="button" data-period="1H" aria-pressed="false">1H</button>
+                <button class="period-btn" type="button" data-period="1D" aria-pressed="false">1D</button>
+                <button class="period-btn" type="button" data-period="1W" aria-pressed="false">1W</button>
+                <button class="period-btn active" type="button" data-period="1M" aria-pressed="true">1M</button>
+                <button class="period-btn" type="button" data-period="3M" aria-pressed="false">3M</button>
+                <button class="period-btn" type="button" data-period="1Y" aria-pressed="false">1Y</button>
+                <button class="period-btn" type="button" data-period="MAX" aria-pressed="false">MAX</button>
             </div>
             <div class="action-group">
-                <button class="action-btn icon-only" onclick="forceSync()" id="btn-force-sync" title="Force Sync">
+                <button class="action-btn icon-only" onclick="forceSync()" id="btn-force-sync" title="Force Sync" aria-label="Force sync data">
                     <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                 </button>
-                <button class="action-btn icon-only" onclick="openAuditModal()" title="Audit Log">
+                <button class="action-btn icon-only" onclick="openAuditModal()" title="Audit Log" aria-label="Open sync audit log">
                     <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
                 </button>
             </div>
@@ -257,35 +257,37 @@
             </header>
 
             <div id="budget-overview-content">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
-                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Total Income</span>
-                    <h2 class="obfuscate-val" style="color: var(--cyan); margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-income">£0</h2>
+                <div class="budget-summary-grid" aria-label="Monthly budget summary">
+                    <article class="card glass-panel budget-summary-card budget-summary-income">
+                        <span class="budget-summary-label">Total Income</span>
+                        <h2 class="obfuscate-val" id="budget-total-income">£0</h2>
+                    </article>
+                    <article class="card glass-panel budget-summary-card budget-summary-bills">
+                        <span class="budget-summary-label">Bills (Needs)</span>
+                        <h2 class="obfuscate-val" id="budget-total-bills">£0</h2>
+                    </article>
+                    <article class="card glass-panel budget-summary-card budget-summary-savings">
+                        <span class="budget-summary-label">Savings (Future)</span>
+                        <h2 class="obfuscate-val" id="budget-total-savings">£0</h2>
+                    </article>
+                    <article class="card glass-panel budget-summary-card budget-summary-spend">
+                        <span class="budget-summary-label">Spend (Wants)</span>
+                        <h2 class="obfuscate-val" id="budget-total-spend">£0</h2>
+                    </article>
+                    <article class="card glass-panel budget-summary-card budget-summary-remaining">
+                        <span class="budget-summary-label">Remaining</span>
+                        <h2 class="obfuscate-val" id="budget-unallocated">£0</h2>
+                    </article>
                 </div>
-                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
-                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Bills (Needs)</span>
-                    <h2 class="obfuscate-val" style="color: #ef4444; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-bills">£0</h2>
-                </div>
-                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
-                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Savings (Future)</span>
-                    <h2 class="obfuscate-val" style="color: #10b981; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-savings">£0</h2>
-                </div>
-                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
-                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Spend (Wants)</span>
-                    <h2 class="obfuscate-val" style="color: #8b5cf6; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-total-spend">£0</h2>
-                </div>
-                <div class="card glass-panel" style="padding: 1.5rem; text-align: center;">
-                    <span style="font-size: 0.75rem; color: #a0aec0; text-transform: uppercase; font-weight: 600; letter-spacing: 1px;">Remaining</span>
-                    <h2 class="obfuscate-val" style="color: #ffffff; margin: 0.5rem 0 0 0; font-size: 1.5rem;" id="budget-unallocated">£0</h2>
-                </div>
-            </div>
 
                 <div class="card glass-panel full-width-col">
-                    <h4 class="section-title" style="margin: 0 0 1.5rem 0;">Budget Breakdown</h4>
-                    <div style="height: 50vh; position: relative;">
-                        <button id="budget-chart-back-btn" onclick="window.loadBudgetOverview()" style="display: none; position: absolute; top: 0; left: 0; background: rgba(255,255,255,0.1); border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; color: #fff; font-size: 0.85rem; z-index: 10; font-weight: bold;">&larr; Back to Overview</button>
-                        <canvas id="budgetChart"></canvas>
+                    <h4 class="section-title budget-breakdown-title">Budget Breakdown</h4>
+                    <div id="budget-chart-drilldowns" class="budget-chart-drilldowns" role="group" aria-label="Budget breakdown views"></div>
+                    <div class="budget-chart-wrap">
+                        <button id="budget-chart-back-btn" type="button" onclick="window.loadBudgetOverview()" hidden>&larr; Back to Overview</button>
+                        <canvas id="budgetChart" role="img" aria-label="Budget breakdown chart"></canvas>
                     </div>
+                    <details id="budget-chart-data" class="chart-data-alternative"></details>
                 </div>
             </div>
             </div>
@@ -372,11 +374,12 @@
                     </div>
                 </div>
                 <div class="glass-panel history-main-chart">
-                    <div class="history-chart-key" aria-hidden="true">
+                    <div class="history-chart-key" aria-label="Chart legend">
                         <span><i class="history-key-line history-key-line-value"></i>Net worth</span>
-                        <span><i class="history-key-line history-key-line-trend"></i>Start to latest trend</span>
+                        <span data-history-trend-key hidden><i class="history-key-line history-key-line-trend"></i>Start to latest trend</span>
                     </div>
-                    <canvas id="netWorthChart"></canvas>
+                    <canvas id="netWorthChart" role="img" aria-label="Net worth over the selected range"></canvas>
+                    <details id="history-chart-data" class="chart-data-alternative"></details>
                 </div>
             </div>
 
@@ -415,7 +418,7 @@
                     <p id="calendar-status" class="calendar-status" aria-live="polite">Loading daily portfolio history…</p>
                     <p id="calendar-month-comparison" class="calendar-month-comparison" aria-live="polite" hidden></p>
                 </div>
-                <div id="calendar-grid"></div>
+                <div id="calendar-grid" role="region" aria-label="Daily portfolio changes calendar" tabindex="0"></div>
             </section>
         </div>
         <!-- Forecast View -->
@@ -498,15 +501,16 @@
                     </div>
                     <div id="forecast-rate-sources" class="forecast-rate-sources"></div>
                     <div class="forecast-chart-canvas">
-                        <canvas id="forecastExpectedChart"></canvas>
+                        <canvas id="forecastExpectedChart" role="img" aria-label="Projected wealth over time"></canvas>
                     </div>
+                    <details id="forecast-chart-data" class="chart-data-alternative"></details>
                 </div>
                 </div>
             </div>
         </div>
 
     <!-- Add Entry Modal -->
-    <div class="modal-overlay" id="entry-modal">
+    <div class="modal-overlay" id="entry-modal" aria-hidden="true">
         <div class="modal-content glass-panel" role="dialog" aria-modal="true" aria-labelledby="entry-modal-title">
             <div class="modal-header">
                 <h2 id="entry-modal-title">Add Wealth Entry</h2>
@@ -545,7 +549,7 @@
     </div>
 
     <!-- Remove Property Confirmation Modal -->
-    <div class="modal-overlay" id="property-delete-modal">
+    <div class="modal-overlay" id="property-delete-modal" aria-hidden="true">
         <div class="modal-content glass-panel confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="property-delete-title">
             <div class="modal-header">
                 <h2 id="property-delete-title">Remove Property?</h2>
@@ -560,7 +564,7 @@
     </div>
 
     <!-- Generic Confirmation Modal -->
-    <div class="modal-overlay" id="confirmation-modal">
+    <div class="modal-overlay" id="confirmation-modal" aria-hidden="true">
         <div class="modal-content glass-panel confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-modal-title" aria-describedby="confirmation-modal-message">
             <div class="modal-header">
                 <h2 id="confirmation-modal-title">Confirm action</h2>
@@ -575,7 +579,7 @@
     </div>
 
     <!-- Classification Editor Modal -->
-    <div class="modal-overlay" id="classification-edit-modal">
+    <div class="modal-overlay" id="classification-edit-modal" aria-hidden="true">
         <div class="modal-content glass-panel classification-edit-modal" role="dialog" aria-modal="true" aria-labelledby="classification-edit-title" aria-describedby="classification-edit-description">
             <div class="modal-header">
                 <h2 id="classification-edit-title">Edit classification</h2>
@@ -595,7 +599,7 @@
     </div>
 
     <!-- Audit Log Modal -->
-    <div class="modal-overlay" id="audit-modal">
+    <div class="modal-overlay" id="audit-modal" aria-hidden="true">
         <div class="modal-content glass-panel audit-panel" role="dialog" aria-modal="true" aria-labelledby="audit-modal-title">
             <div class="modal-header">
                 <h2 id="audit-modal-title">Sync Audit Log</h2>
@@ -726,7 +730,7 @@
                             <div class="catalog-workspace-header">
                                 <div>
                                     <strong>Tracked assets</strong>
-                                    <span>Search, filter, and update the assets used throughout WealthWatcher.</span>
+                                    <span>Search, filter, and update the assets used throughout Wealth Watcher.</span>
                                 </div>
                                 <span class="catalog-workspace-hint">Single source of truth</span>
                             </div>
@@ -886,8 +890,8 @@
                                 
                                 <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <input type="checkbox" id="new-wf-include" checked title="Include in calculation" style="margin: 0; width: 1.1rem; height: 1.1rem; cursor: pointer;">
-                                        <label style="margin: 0; font-size: 0.8rem;">Include</label>
+                                        <input type="checkbox" id="new-wf-include" checked title="Include in calculation" aria-label="Include windfall in FIRE calculation" style="margin: 0; width: 1.1rem; height: 1.1rem; cursor: pointer;">
+                                        <label for="new-wf-include" style="margin: 0; font-size: 0.8rem;">Include</label>
                                     </div>
                                     <div id="windfall-entry-fields" style="display: contents;"></div>
                                     <button type="button" onclick="addWindfall()" style="flex: 0 0 auto; background: var(--cyan); color: #000; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; transition: all 0.2s;">Add</button>

@@ -1,4 +1,9 @@
 import { showToast } from './Toast.js';
+import {
+    closeManagedModal,
+    openManagedModal,
+    setupModalController
+} from './ModalController.js';
 
 let confirmationResolver = null;
 let isInitialized = false;
@@ -10,16 +15,12 @@ export function setupConfirmationModal() {
     if (!modal) return;
 
     isInitialized = true;
+    setupModalController();
     document.getElementById('confirmation-modal-confirm')?.addEventListener('click', () => resolveActiveModal(true));
     document.getElementById('confirmation-modal-cancel')?.addEventListener('click', () => resolveActiveModal(false));
     document.getElementById('confirmation-modal-close')?.addEventListener('click', () => resolveActiveModal(false));
     modal.addEventListener('click', event => {
         if (event.target === modal) resolveActiveModal(false);
-    });
-    document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && modal.classList.contains('active')) {
-            resolveActiveModal(false);
-        }
     });
 }
 
@@ -49,11 +50,12 @@ export function requestConfirmation({
     confirmButton?.classList.remove('action-btn');
     confirmButton?.classList.add('danger-btn');
 
-    modal.classList.add('active');
-    confirmButton?.focus?.();
-
     return new Promise(resolve => {
         confirmationResolver = resolve;
+        openManagedModal(modal, {
+            initialFocus: confirmButton,
+            onEscape: () => resolveActiveModal(false)
+        });
     });
 }
 
@@ -74,6 +76,6 @@ function resolveActiveModal(result) {
 function resolveConfirmation(result) {
     const resolve = confirmationResolver;
     confirmationResolver = null;
-    document.getElementById('confirmation-modal')?.classList.remove('active');
+    closeManagedModal('confirmation-modal');
     resolve?.(result);
 }

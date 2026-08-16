@@ -6,8 +6,11 @@ import { requestConfirmation, requestNotification } from '../components/Confirma
 import { showToast } from '../components/Toast.js';
 import { setPageLoading } from '../components/PageLoading.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
+import { bindPeriodPicker } from '../components/PeriodPicker.js';
 import { escapeHtml, safeCssColor } from '../utils/html.js';
 import { clearMilestoneDashboardCard, renderMilestoneDashboardCard } from '../components/Milestones.js';
+import { renderAccessibleChartData } from '../components/AccessibleChartData.js';
+import { calculateInvestedShare, getAggregateBreakdown, getCurrentAggregateValue } from '../components/DashboardModel.js';
 import pluralize from 'pluralize';
 
 let charts = {};
@@ -189,13 +192,10 @@ async function readApiError(response, fallback) {
 }
 
 export function setupPeriodListeners() {
-    document.querySelectorAll('#period-picker .period-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const selectedButton = e.currentTarget || e.target;
-            const activeButton = document.querySelector('#period-picker .period-btn.active');
-            if (activeButton && activeButton !== selectedButton) activeButton.classList.remove('active');
-            selectedButton.classList.add('active');
-            store.state.currentPeriod = selectedButton.getAttribute('data-period');
+    bindPeriodPicker('period-picker', {
+        selectedPeriod: store.state.currentPeriod || '1M',
+        onChange: async period => {
+            store.state.currentPeriod = period;
             store.state.isDashboardLoaded = false;
             if (store.state.currentPeriod === '1H') {
                 updateHourlyRefreshLifecycle({ immediate: true });
@@ -204,7 +204,7 @@ export function setupPeriodListeners() {
                 store.state.isDashboardLoaded = true;
                 updateHourlyRefreshLifecycle();
             }
-        });
+        }
     });
 }
 
@@ -648,12 +648,6 @@ function shouldHideDashboardCategory(category, data) {
     return store.state.generalSettings?.showZeroValuesOnDashboard !== true && getCurrentAggregateValue(data) === 0;
 }
 
-function getCurrentAggregateValue(data) {
-    const history = data?.Data;
-    if (!Array.isArray(history) || history.length === 0) return 0;
-    return Number(history[history.length - 1]?.Value) || 0;
-}
-
 function getAssetGroupDescriptors() {
     const assetGroup = (store.state.classificationGroups || [])
         .find(group => normalizeCode(getRecordValue(group, 'Key')) === 'asset-group');
@@ -894,13 +888,6 @@ function resolveCategoryAssetGroupDescriptor(category, descriptors, fallbackAsse
     return descriptors[descriptors.length - 1];
 }
 
-function getAggregateBreakdown(point) {
-    const breakdown = getRecordValue(point, 'Breakdown') ?? getRecordValue(point, 'breakdown');
-    return breakdown && typeof breakdown === 'object' && !Array.isArray(breakdown)
-        ? breakdown
-        : null;
-}
-
 function getAssetDisplayName(asset) {
     return getRecordValue(asset, 'DisplayName') || getRecordValue(asset, 'Name') || '';
 }
@@ -993,14 +980,14 @@ function getCategoryGroupParts(category, data, descriptors) {
                 value: Number(point.Value) || 0,
                 breakdown: {}
             }]]);
-        const sourceValue = Number(point.Value) || 0;
-        const sourceInvested = Number(point.Invested) || 0;
+            const sourceValue = Number(point.Value) || 0;
+            const sourceInvested = Number(point.Invested) || 0;
 
         groupDescriptors.forEach(descriptor => {
             const group = grouped.get(descriptor.key);
             const value = group?.value || 0;
-            const invested = sourceValue !== 0 ? sourceInvested * value / sourceValue : 0;
-            groupedHistory.get(descriptor.key).push({
+                const invested = calculateInvestedShare(sourceValue, sourceInvested, value);
+                groupedHistory.get(descriptor.key).push({
                 ...point,
                 Value: value,
                 Invested: Number.isFinite(invested) ? invested : 0,
@@ -1373,7 +1360,7 @@ function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSyn
                     <div style="font-size: 0.75rem; text-transform: uppercase; color: #a1a1aa; margin-bottom: 10px; font-weight: 600; letter-spacing: 0.05em;">Portfolio X-Ray</div>
                     <div style="display: flex; align-items: center; gap: 20px;">
                         <div style="position: relative; height: 120px; width: 120px; flex-shrink: 0;">
-                            <canvas id="xray-chart"></canvas>
+                            <canvas id="xray-chart" role="img" aria-label="Investment portfolio composition"></canvas>
                         </div>
                         <div id="xray-legend" style="flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">
                         </div>
@@ -1409,14 +1396,27 @@ function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSyn
                     <div class="card-delta ${safeDelta < 0 ? 'neg' : ''} obfuscate-val">${deltaSign}${formatter.format(safeDelta)} (${deltaPercentage.toFixed(2)}%)</div>
                 </div>
                 ${cardActions}
-                ${showSparklines ? `<div class="mini-chart-container" aria-label="${escapeHtml(displayLabel)} trend"><canvas id="chart-${escapeHtml(chartKey)}"></canvas></div>` : ''}
+                ${showSparklines ? `<div class="mini-chart-container" aria-label="${escapeHtml(displayLabel)} trend"><canvas id="chart-${escapeHtml(chartKey)}" role="img" aria-label="${escapeHtml(displayLabel)} trend"></canvas></div>` : ''}
             </div>
             <div class="card-value obfuscate-val">${formatter.format(currentVal)}</div>
+            ${showSparklines ? `<details class="chart-data-alternative" data-dashboard-chart-data><summary>View ${escapeHtml(displayLabel)} trend data</summary></details>` : ''}
             ${breakdownHtml}
         </div>
     `;
     
     container.innerHTML += cardHtml;
+    const renderedCard = container.lastElementChild;
+    renderAccessibleChartData(renderedCard?.querySelector?.('[data-dashboard-chart-data]'), {
+        summary: `View ${displayLabel} trend data`,
+        headers: [{ key: 'date', label: 'Date' }, { key: 'value', label: 'Value' }],
+        rows: (Array.isArray(history) ? history : []).map(point => ({
+            date: point?.Time,
+            value: Number(point?.Value ?? 0)
+        })),
+        formatCell: (row, key) => key === 'date'
+            ? row.date
+            : (globalThis.window?.isObfuscated ? '£***' : formatter.format(row.value))
+    });
 
     setTimeout(() => {
         const ctx = document.getElementById(`chart-${chartKey}`);

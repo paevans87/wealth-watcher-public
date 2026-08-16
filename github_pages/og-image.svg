@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-  <title id="title">WealthWatcher - see your whole financial picture</title>
+  <title id="title">Wealth Watcher - see your whole financial picture</title>
   <desc id="desc">An open-source, local-first personal-finance dashboard for tracking wealth, budgets, forecasts, and financial independence.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -19,7 +19,7 @@
     <circle cx="24" cy="24" r="20" fill="none" stroke="#22d3ee" stroke-width="6"/>
     <rect x="48" y="12" width="8" height="28" rx="4" fill="#22d3ee"/>
     <rect x="61" y="4" width="8" height="36" rx="4" fill="#14b8a6"/>
-    <text x="92" y="34" fill="#f8fafc" font-family="Arial, sans-serif" font-size="28" font-weight="700">WealthWatcher</text>
+    <text x="92" y="34" fill="#f8fafc" font-family="Arial, sans-serif" font-size="28" font-weight="700">Wealth Watcher</text>
   </g>
   <text x="128" y="246" fill="#f8fafc" font-family="Arial, sans-serif" font-size="58" font-weight="700">See your money's</text>
   <text x="128" y="316" fill="url(#accent)" font-family="Arial, sans-serif" font-size="58" font-weight="700">whole picture.</text>

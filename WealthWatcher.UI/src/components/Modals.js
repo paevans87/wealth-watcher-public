@@ -11,6 +11,7 @@ import {
     renderFeatureToggle
 } from './FormFields.js';
 import { escapeHtml } from '../utils/html.js';
+import { closeManagedModal, openManagedModal, setupModalController } from './ModalController.js';
 
 let generalSaveTimer;
 let fireSaveTimer;
@@ -235,10 +236,11 @@ export function setupModals() {
     renderFireSettingToggles();
     renderWindfallEntryFields();
     setupConfirmationModal();
+    setupModalController();
 
     window.addEventListener('click', function(event) {
         if (event.target.classList.contains('modal-overlay')) {
-            event.target.classList.remove('active');
+            closeModal(event.target.id);
         }
     });
 
@@ -277,24 +279,39 @@ export function setupModals() {
 }
 
 export function openModal(id) {
-    document.getElementById(id).classList.add('active');
+    const modal = document.getElementById(id);
+    if (!modal) return null;
     if (id === 'entry-modal') {
         window.resetPropertyFormState?.();
-        document.getElementById('entry-date').value = new Date().toISOString().split('T')[0];
-        document.getElementById('entry-category').value = '';
-        document.getElementById('entry-name').readOnly = false;
-        document.getElementById('entry-name').value = '';
-        document.getElementById('entry-asset-id').value = '';
+        const entryDate = document.getElementById('entry-date');
+        const entryCategory = document.getElementById('entry-category');
+        const entryName = document.getElementById('entry-name');
+        const entryAssetId = document.getElementById('entry-asset-id');
+        const entryValue = document.getElementById('entry-value');
+        const entryMortgage = document.getElementById('entry-mortgage');
+        const mortgageGroup = document.getElementById('mortgage-group');
+        if (entryDate) entryDate.value = new Date().toISOString().split('T')[0];
+        if (entryCategory) entryCategory.value = '';
+        if (entryName) {
+            entryName.readOnly = false;
+            entryName.value = '';
+        }
+        if (entryAssetId) entryAssetId.value = '';
         window.selectedEntryAssetId = '';
-        document.getElementById('entry-value').value = '';
-        document.getElementById('entry-mortgage').value = '';
-        document.getElementById('mortgage-group').style.display = 'none';
+        if (entryValue) entryValue.value = '';
+        if (entryMortgage) entryMortgage.value = '';
+        if (mortgageGroup) mortgageGroup.style.display = 'none';
         window.currentCategoryNames = [];
     }
+    const escapeHandlers = {
+        'property-delete-modal': () => window.cancelPropertyRemoval?.(),
+        'classification-edit-modal': () => window.closeClassificationEditor?.()
+    };
+    return openManagedModal(modal, { onEscape: escapeHandlers[id] });
 }
 
 export function closeModal(id) {
-    document.getElementById(id).classList.remove('active');
+    return closeManagedModal(id);
 }
 
 export function populateFireSettings() {
@@ -402,7 +419,7 @@ export function renderWindfallsTable() {
             <td data-label="Name" style="padding: 0.5rem; font-size: 0.95rem;">${escapeHtml(wf.Name)}</td>
             <td data-label="Amount" style="padding: 0.5rem; text-align: right; font-size: 0.95rem;">£${parseFloat(wf.Amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
             <td data-label="Date" style="padding: 0.5rem; text-align: right; font-size: 0.95rem;">${escapeHtml(wf.ExpectedDate)}</td>
-            <td data-label="Action" style="text-align: center; padding: 0.5rem;"><button type="button" class="action-btn icon-only" data-windfall-remove="${index}" title="Remove" style="margin: 0;"><span style="color: #ef4444; font-size: 1.2rem; line-height: 1;">&times;</span></button></td>
+            <td data-label="Action" style="text-align: center; padding: 0.5rem;"><button type="button" class="action-btn icon-only" data-windfall-remove="${index}" title="Remove ${escapeHtml(wf.Name)}" aria-label="Remove ${escapeHtml(wf.Name)}" style="margin: 0;"><span aria-hidden="true" style="color: #ef4444; font-size: 1.2rem; line-height: 1;">&times;</span></button></td>
         `;
         tbody.appendChild(tr);
     });

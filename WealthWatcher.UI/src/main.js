@@ -5,7 +5,7 @@ import { store } from './store/store.js';
 import * as apiClient from './api/apiClient.js';
 import { setupRouter, handleRouting } from './router/router.js';
 import { loadDashboard, setupPeriodListeners, setupHourlyRefreshLifecycle, setupDashboardActions } from './pages/Dashboard.js';
-import { setupModals } from './components/Modals.js';
+import { openModal, setupModals } from './components/Modals.js';
 import { setupForecast } from './pages/ForecastV2.js';
 import { setupCurrencyInputs } from './utils/formatters.js';
 import { initAllCollapsiblePanes } from './components/CollapsiblePane.js';
@@ -20,7 +20,7 @@ import { setupReleaseInfo } from './release.js';
 import { setupAssetCatalog } from './components/AssetCatalog.js';
 import { requestNotification } from './components/ConfirmationModal.js';
 import { showToast } from './components/Toast.js';
-import { normalizeAuditResponse, renderAuditRows } from './components/AuditLog.js';
+import { createAuditLogController } from './components/AuditLog.js';
 import { parseJsonObject } from './utils/persistedSettings.js';
 import {
     getAssetTypeaheadState,
@@ -36,6 +36,7 @@ globalThis.flatpickr = flatpickr;
 
 const { API_BASE_URL } = apiClient;
 const fetchCached = apiClient.fetchCached;
+const requestJson = apiClient.requestJson;
 
 // Keep this entry point compatible with the current client while allowing the
 // shared request boundary to provide demo fixtures and mutations.
@@ -169,8 +170,16 @@ async function init() {
             loadIntegrations({ includeAssets: false });
         }
 
-        const settingsResult = await apiRequest(`${API_BASE_URL}/settings`);
-        const dbSettings = await readApiPayload(settingsResult) || {};
+        let dbSettings = {};
+        try {
+            dbSettings = requestJson
+                ? (await requestJson(`${API_BASE_URL}/settings`) || {})
+                : (await readApiPayload(await apiRequest(`${API_BASE_URL}/settings`)) || {});
+        } catch (error) {
+            // Settings are optional at boot. Keep the shell, router, and page
+            // error states usable when the API is offline or not configured.
+            console.error('Unable to load saved settings; using defaults.', error);
+        }
         
         if (dbSettings['wealthWatcherGeneralSettings']) {
             store.state.generalSettings = parseJsonObject(dbSettings['wealthWatcherGeneralSettings']);
@@ -296,32 +305,24 @@ window.toggleObfuscate = function() {
 };
 
 // --- AUDIT LOG ---
+const auditLogController = createAuditLogController({
+    request: async (page, pageSize) => {
+        const url = `${API_BASE_URL}/audits?page=${page}&pageSize=${pageSize}`;
+        return requestJson
+            ? requestJson(url)
+            : readApiPayload(await apiRequest(url));
+    },
+    onError: error => console.error('Error loading audits', error)
+});
+
 window.openAuditModal = async function() {
-    store.state.auditPage = 1;
-    await loadAudits(0);
+    await auditLogController.open();
     window.openModal('audit-modal');
 };
 
-window.loadAudits = async function(pageDelta) {
-    store.state.auditPage += pageDelta;
-    if (store.state.auditPage < 1) store.state.auditPage = 1;
-
-    try {
-        const result = await apiRequest(`${API_BASE_URL}/audits?page=${store.state.auditPage}&pageSize=10`);
-        const data = normalizeAuditResponse(await readApiPayload(result));
-        
-        const tbody = document.getElementById('audit-tbody');
-        renderAuditRows(tbody, data.rows);
-
-        const pageCount = Math.max(1, Math.ceil(data.total / data.pageSize));
-        document.getElementById('audit-page-info').innerText = `Page ${store.state.auditPage} of ${pageCount}`;
-        document.getElementById('audit-prev').disabled = store.state.auditPage === 1;
-        document.getElementById('audit-next').disabled = store.state.auditPage >= pageCount;
-        
-    } catch (e) {
-        console.error("Error loading audits", e);
-    }
-}
+window.loadAudits = function(pageDelta) {
+    return auditLogController.load(pageDelta);
+};
 
 // --- ADD ENTRY AND CATEGORY LOGIC ---
 // Category selection is a native select. Keep these globals as small
@@ -468,7 +469,9 @@ function setupEntryAssetTypeahead() {
 // Quick Add
 window.openQuickAdd = function(catId, itemName, currentValue, currentMortgage) {
     const modal = document.getElementById('entry-modal');
+    if (!modal) return;
 
+    openModal('entry-modal');
     resetPropertyFormState();
     
     document.getElementById('entry-category').value = catId;
@@ -494,7 +497,6 @@ window.openQuickAdd = function(catId, itemName, currentValue, currentMortgage) {
     }
     
     document.getElementById('entry-date').value = new Date().toISOString().split('T')[0];
-    modal.classList.add('active');
 };
 
 document.getElementById('add-entry-form')?.addEventListener('submit', async (e) => {

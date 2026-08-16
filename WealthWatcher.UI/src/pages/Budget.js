@@ -4,6 +4,7 @@ import { formatter } from '../utils/formatters.js';
 import { isFeatureEnabled, setFeatureEnabled } from '../utils/featureFlags.js';
 import { showToast } from '../components/Toast.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
+import { renderAccessibleChartData } from '../components/AccessibleChartData.js';
 import {
     closeAssetTypeaheads,
     getAssetTypeaheadState,
@@ -17,6 +18,7 @@ import {
     renderSelectField
 } from '../components/FormFields.js';
 import { escapeHtml, safeCssColor } from '../utils/html.js';
+import { BUDGET_CATEGORIES, BUDGET_CATEGORY_CONFIG } from './budgetConfig.js';
 
 let budgetChartInstance = null;
 let budgetSaveTimer;
@@ -81,25 +83,23 @@ function renderBudgetEnabledToggle() {
 }
 
 function renderBudgetEntryForms() {
-    const definitions = [
-        ['budget-entry-income', 'new-income-name', 'new-income-amount', 'btn-add-budget-income', 'Add Income', 'e.g. Salary', 'addBudgetIncome'],
-        ['budget-entry-bills', 'new-bills-name', 'new-bills-amount', 'btn-add-budget-bills', 'Add Bill', 'e.g. Rent', 'addBudgetBills'],
-        ['budget-entry-savings', 'new-savings-name', 'new-savings-amount', 'btn-add-budget-savings', 'Add Saving', 'e.g. Emergency Fund', 'addBudgetSavings'],
-        ['budget-entry-spend', 'new-spend-name', 'new-spend-amount', 'btn-add-budget-spend', 'Add Spend', 'e.g. Groceries', 'addBudgetSpend']
-    ];
-
-    definitions.forEach(([targetId, nameId, amountId, buttonId, buttonLabel, namePlaceholder, action]) => {
+    BUDGET_CATEGORIES.forEach(category => {
+        const config = BUDGET_CATEGORY_CONFIG[category];
+        const targetId = `budget-entry-${category}`;
+        const nameId = `new-${category}-name`;
+        const amountId = `new-${category}-amount`;
+        const buttonId = `btn-add-budget-${category}`;
         const target = document.getElementById(targetId);
         if (!target || target.dataset.rendered === 'true') return;
         target.innerHTML = `
             <div class="add-item-row budget-entry-row">
-                ${renderCatalogInputField({ id: nameId, label: 'Name', placeholder: namePlaceholder })}
+                ${renderCatalogInputField({ id: nameId, label: 'Name', placeholder: config.namePlaceholder })}
                 ${renderCurrencyInputField({
                     id: amountId,
                     label: 'Amount (£)',
                     placeholder: '0.00'
                 })}
-                <button class="action-btn catalog-add-button" type="button" id="${buttonId}" data-budget-add="${action}">${buttonLabel}</button>
+                <button class="action-btn catalog-add-button" type="button" id="${buttonId}" data-budget-add="${config.action}">Add ${config.itemLabel}</button>
             </div>`;
         target.dataset.rendered = 'true';
     });
@@ -159,7 +159,7 @@ export function loadBudgetView(viewMode = null) {
     const backBtn = document.getElementById('budget-chart-back-btn');
 
     if (currentChartView === 'overview') {
-        if (backBtn) backBtn.style.display = 'none';
+        if (backBtn) backBtn.hidden = true;
         
         if (totalBills > 0) {
             chartLabels.push('Bills');
@@ -182,7 +182,7 @@ export function loadBudgetView(viewMode = null) {
             chartColors.push('rgba(255, 255, 255, 0.2)');
         }
     } else {
-        if (backBtn) backBtn.style.display = 'block';
+        if (backBtn) backBtn.hidden = false;
         
         if (currentChartView === 'Bills' && budgetSettings.bills) {
             budgetSettings.bills.forEach((item, index) => {
@@ -208,6 +208,18 @@ export function loadBudgetView(viewMode = null) {
     // Chart Configuration
     const ctx = document.getElementById('budgetChart');
     if (!ctx) return;
+
+    renderBudgetDrilldownControls(chartLabels, chartData);
+    renderAccessibleChartData(document.getElementById('budget-chart-data'), {
+        summary: currentChartView === 'overview' ? 'View budget breakdown data' : `View ${currentChartView} data`,
+        caption: 'Monthly amounts represented by the selected budget breakdown.',
+        headers: [{ key: 'label', label: 'Category' }, { key: 'value', label: 'Monthly amount' }],
+        rows: chartLabels.map((label, index) => ({ label, value: chartData[index] })),
+        formatCell: (row, key) => key === 'value'
+            ? (globalThis.window?.isObfuscated ? '£***' : formatter.format(row.value))
+            : row[key]
+    });
+    ctx.setAttribute?.('aria-label', `${currentChartView === 'overview' ? 'Budget breakdown' : `${currentChartView} budget breakdown`} chart`);
 
     if (budgetChartInstance) {
         budgetChartInstance.destroy();
@@ -379,10 +391,40 @@ function clearBudgetReadyState() {
         });
 
     const backBtn = document.getElementById('budget-chart-back-btn');
-    if (backBtn?.style) backBtn.style.display = 'none';
+    if (backBtn) backBtn.hidden = true;
 
     const chart = document.getElementById('budgetChart');
     if (chart && 'innerHTML' in chart) chart.innerHTML = '';
+    const drilldowns = document.getElementById('budget-chart-drilldowns');
+    if (drilldowns) drilldowns.innerHTML = '';
+    renderAccessibleChartData(document.getElementById('budget-chart-data'), {
+        headers: [{ key: 'label', label: 'Category' }, { key: 'value', label: 'Monthly amount' }],
+        rows: []
+    });
+}
+
+function renderBudgetDrilldownControls(labels, values) {
+    const target = document.getElementById('budget-chart-drilldowns');
+    if (!target) return;
+    if (target.dataset.bound !== 'true') {
+        target.dataset.bound = 'true';
+        target.addEventListener('click', event => {
+            const button = event.target?.closest?.('[data-budget-view]');
+            if (!button) return;
+            const view = button.dataset.budgetView;
+            if (view === 'overview') return loadBudgetView('overview');
+            if (['Bills', 'Savings', 'Spend'].includes(view)) loadBudgetView(view);
+        });
+    }
+
+    const available = currentChartView === 'overview'
+        ? ['Bills', 'Savings', 'Spend'].filter(label => labels.includes(label))
+        : ['overview'];
+    target.innerHTML = available.map(view => `
+        <button type="button" class="action-btn budget-drilldown-button" data-budget-view="${escapeHtml(view)}"${view === currentChartView ? ' aria-current="page"' : ''}>
+            ${view === 'overview' ? '&larr; Back to overview' : `View ${escapeHtml(view.toLowerCase())}`}
+        </button>`).join('');
+    target.hidden = available.length === 0;
 }
 
 function renderBudgetEmptyState() {
@@ -492,7 +534,7 @@ function renderBudgetTable(tbodyId, array, color, category) {
             ${assetCell}
             ${cadenceCell}
             <td data-label="" class="budget-row-actions" style="padding: 0.75rem 0.5rem; text-align: center;">
-                <button type="button" class="action-btn icon-only" data-budget-remove="${category}" data-budget-index="${index}" style="background: transparent; color: #ef4444; border: none; cursor: pointer; padding: 4px;">&times;</button>
+                <button type="button" class="action-btn icon-only" data-budget-remove="${category}" data-budget-index="${index}" aria-label="Remove ${escapeHtml(item.name || 'budget item')}" title="Remove ${escapeHtml(item.name || 'budget item')}" style="background: transparent; color: #ef4444; border: none; cursor: pointer; padding: 4px;">&times;</button>
             </td>
         `;
         tbody.appendChild(tr);

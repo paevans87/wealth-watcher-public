@@ -2,6 +2,11 @@ import { store } from '../store/store.js';
 import { fetchFreshStrict, API_BASE_URL } from '../api/apiClient.js';
 import { setPageLoading } from '../components/PageLoading.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
+import { createPageRequestController } from '../components/PageRequest.js';
+import { bindPeriodPicker, syncPeriodPicker } from '../components/PeriodPicker.js';
+import { chartDataRows, renderAccessibleChartData } from '../components/AccessibleChartData.js';
+import { normalizeTimelineEntries } from '../components/TimelineModel.js';
+import { compactCurrencyFormatter, currencyFormatter, percentFormatter } from '../utils/formatters.js';
 import { escapeHtml, safeCssColor } from '../utils/html.js';
 
 let historyChartInstances = [];
@@ -9,31 +14,11 @@ let historySnapshot = null;
 let historyPeriod = '1M';
 let showHistoryTrend = false;
 let historyControlsBound = false;
-let historyRequestId = 0;
 let historyPageState = PAGE_STATUS.LOADING;
+const historyRequests = createPageRequestController();
 
 const HISTORY_PERIODS = ['1H', '1D', '1W', '1M', '3M', '1Y', 'MAX'];
 export const HISTORY_TREND_STORAGE_KEY = 'wealthwatcher_history_show_trend';
-
-const currencyFormatter = new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    maximumFractionDigits: 0
-});
-
-const compactCurrencyFormatter = new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: 'GBP',
-    notation: 'compact',
-    compactDisplay: 'short',
-    maximumFractionDigits: 0
-});
-
-const percentFormatter = new Intl.NumberFormat('en-GB', {
-    style: 'percent',
-    signDisplay: 'always',
-    maximumFractionDigits: 1
-});
 
 export async function loadHistoryView() {
     const storedTrend = readStoredHistoryTrend();
@@ -81,7 +66,7 @@ export function setHistoryTrendPreference(value, storage = getHistoryTrendStorag
 }
 
 async function loadHistoryPeriod(period) {
-    const requestId = ++historyRequestId;
+    const requestId = historyRequests.next();
     historyPageState = PAGE_STATUS.LOADING;
     historySnapshot = null;
     renderHistoryPageState();
@@ -104,18 +89,18 @@ async function loadHistoryPeriod(period) {
             },
             data: category.Aggregate || category
         }));
-        if (requestId !== historyRequestId) return;
+        if (!historyRequests.isCurrent(requestId)) return;
 
         historySnapshot = buildHistorySnapshot(results);
         renderHistoryView();
     } catch {
-        if (requestId !== historyRequestId) return;
+        if (!historyRequests.isCurrent(requestId)) return;
         historySnapshot = null;
         historyPageState = PAGE_STATUS.ERROR;
         clearHistoryLiveContent();
         renderHistoryPageState();
     } finally {
-        if (requestId === historyRequestId) {
+        if (historyRequests.isCurrent(requestId)) {
             setPageLoading('history-view', false);
             renderHistoryPageState();
         }
@@ -140,7 +125,11 @@ export function buildHistorySnapshot(results) {
     let latestSync = null;
 
     results.forEach(({ cat, data }) => {
-        const history = Array.isArray(data?.Data) ? data.Data : [];
+        const history = normalizeTimelineEntries(data?.Data, {
+            getDate: entry => entry?.Time,
+            getValue: entry => entry?.Value,
+            validateDate: date => Boolean(date)
+        });
         const dataset = categoryDatasets.find(d => String(d.id) === String(cat.Id))
             || categoryDatasets.find(d => d.label === cat.Label);
 
@@ -152,18 +141,18 @@ export function buildHistorySnapshot(results) {
         }
 
         history.forEach(h => {
-            const value = Number(h?.Value ?? 0);
-            if (dataset && (!dataset.lastRecordedTime || String(h?.Time || '') >= dataset.lastRecordedTime)) {
-                dataset.lastRecordedTime = String(h?.Time || '');
+            const value = h.value;
+            if (dataset && (!dataset.lastRecordedTime || h.date >= dataset.lastRecordedTime)) {
+                dataset.lastRecordedTime = h.date;
                 dataset.lastRecordedValue = value;
             }
             if (!shouldIncludeHistoryValue(value)) {
                 return;
             }
 
-            const currentGlobal = globalTimeline.get(h.Time) || 0;
-            globalTimeline.set(h.Time, currentGlobal + value);
-            dataset?.dataMap.set(h.Time, value);
+            const currentGlobal = globalTimeline.get(h.date) || 0;
+            globalTimeline.set(h.date, currentGlobal + value);
+            dataset?.dataMap.set(h.date, value);
         });
     });
 
@@ -217,6 +206,7 @@ function renderHistoryView() {
 
     const visible = getVisibleHistoryData();
     updateRangeButtonState();
+    syncHistoryLegend();
 
     if (visible.dates.length === 0) {
         historyPageState = PAGE_STATUS.EMPTY;
@@ -241,6 +231,11 @@ function clearHistoryLiveContent() {
 
     const grid = document.getElementById('history-grid');
     if (grid) grid.innerHTML = '';
+    renderAccessibleChartData(document.getElementById('history-chart-data'), {
+        summary: 'View chart data',
+        headers: [{ key: 'date', label: 'Date' }, { key: 'value', label: 'Net worth' }],
+        rows: []
+    });
 }
 
 function createHistoryEmptyState(view) {
@@ -436,6 +431,15 @@ function renderNetWorthChart(visible) {
         }
     });
     historyChartInstances.push(netWorthChart);
+    renderAccessibleChartData(document.getElementById('history-chart-data'), {
+        summary: 'View net worth data',
+        caption: 'The same values shown in the net worth chart for the selected range.',
+        headers: [{ key: 'date', label: 'Date' }, { key: 'value', label: 'Net worth' }],
+        rows: chartDataRows(visible.dates, visible.totalData, 'date', 'value'),
+        formatCell: (row, key) => key === 'date'
+            ? formatFullDate(row.date)
+            : (window.isObfuscated ? '£***' : currencyFormatter.format(row.value))
+    });
 }
 
 function renderCategoryCharts(visible) {
@@ -467,8 +471,11 @@ function renderCategoryCharts(visible) {
                 <span class="obfuscate-val">${formatPercentChange(displayChange, first)}</span>
             </div>
             <div class="history-canvas-container">
-                <canvas id="historyChart-${index}"></canvas>
+                <canvas id="historyChart-${index}" role="img" aria-label="${escapeHtml(dataset.label)} value over the selected range"></canvas>
             </div>
+            <details class="chart-data-alternative" data-history-chart-data>
+                <summary>View ${escapeHtml(dataset.label)} data</summary>
+            </details>
         `;
         grid.appendChild(card);
 
@@ -530,6 +537,14 @@ function renderCategoryCharts(visible) {
             }
         });
         historyChartInstances.push(catChart);
+        renderAccessibleChartData(card.querySelector?.('[data-history-chart-data]'), {
+            summary: `View ${dataset.label} data`,
+            headers: [{ key: 'date', label: 'Date' }, { key: 'value', label: dataset.label }],
+            rows: chartDataRows(visible.dates, dataset.data, 'date', 'value'),
+            formatCell: (row, key) => key === 'date'
+                ? formatFullDate(row.date)
+                : (window.isObfuscated ? '£***' : currencyFormatter.format(row.value))
+        });
     });
 }
 
@@ -566,14 +581,14 @@ function formatLastUpdated() {
 function bindHistoryControls() {
     if (historyControlsBound) return;
 
-    HISTORY_PERIODS.forEach(period => {
-        const button = document.getElementById(`history-range-${period.toLowerCase()}`);
-        if (!button || typeof button.addEventListener !== 'function') return;
-        button.addEventListener('click', async () => {
+    bindPeriodPicker('history-range-picker', {
+        selectedPeriod: historyPeriod,
+        onChange: async period => {
+            if (!HISTORY_PERIODS.includes(period)) return;
             historyPeriod = period;
             updateRangeButtonState();
             await loadHistoryPeriod(period);
-        });
+        }
     });
 
     const trendButton = document.getElementById('history-trend-toggle');
@@ -589,12 +604,7 @@ function bindHistoryControls() {
 }
 
 function updateRangeButtonState() {
-    HISTORY_PERIODS.forEach(period => {
-        const button = document.getElementById(`history-range-${period.toLowerCase()}`);
-        if (!button) return;
-        button.classList?.toggle?.('active', historyPeriod === period);
-        button.setAttribute?.('aria-pressed', String(historyPeriod === period));
-    });
+    syncPeriodPicker('history-range-picker', historyPeriod);
 
     const trendButton = document.getElementById('history-trend-toggle');
     if (trendButton) {
@@ -602,6 +612,13 @@ function updateRangeButtonState() {
         trendButton.setAttribute?.('aria-pressed', String(showHistoryTrend));
         if ('textContent' in trendButton) trendButton.textContent = showHistoryTrend ? 'Hide trend' : 'Show trend';
     }
+}
+
+function syncHistoryLegend() {
+    const trendKey = document.querySelector?.('[data-history-trend-key]');
+    if (!trendKey) return;
+    trendKey.hidden = !showHistoryTrend;
+    trendKey.setAttribute?.('aria-hidden', String(!showHistoryTrend));
 }
 
 function getImportantPointIndices(data) {

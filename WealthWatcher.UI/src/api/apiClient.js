@@ -49,6 +49,57 @@ export async function apiRequest(url, options = {}) {
     return globalThis.fetch(normalizeApiRequestUrl(url), requestOptions);
 }
 
+/**
+ * Shared JSON/status boundary for endpoints that are not cache-backed. It
+ * supports both browser Response objects and the demo provider's payload
+ * objects, while preserving useful server error messages in one place.
+ */
+export async function requestJson(url, options = {}) {
+    const response = await apiRequest(url, options);
+    const status = response?.status ?? null;
+    let payload = null;
+
+    if (status === 204 || status === 205) {
+        payload = null;
+    } else if (response && typeof response.json === 'function') {
+        try {
+            payload = await response.json();
+        } catch (error) {
+            throw new ApiRequestError('The API returned invalid JSON.', {
+                url,
+                status,
+                statusText: response.statusText || '',
+                cause: error
+            });
+        }
+    } else if (response && typeof response.text === 'function') {
+        const text = await response.text();
+        if (text) {
+            try {
+                payload = JSON.parse(text);
+            } catch {
+                payload = text;
+            }
+        }
+    } else {
+        payload = response;
+    }
+
+    const succeeded = response?.ok ?? (status === null || (status >= 200 && status < 300));
+    if (!succeeded) {
+        const message = typeof payload === 'string'
+            ? payload
+            : payload?.Error || payload?.error || `Request failed (${status || 'unknown'}).`;
+        throw new ApiRequestError(message, {
+            url,
+            status,
+            statusText: response?.statusText || '',
+        });
+    }
+
+    return payload;
+}
+
 export async function resetDemoData() {
     if (!isDemoMode) return false;
     const { resetDemoState } = await import('../demo/demoApi.js');

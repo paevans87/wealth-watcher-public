@@ -95,3 +95,54 @@ export function renderAuditRows(tbody, rows = []) {
 
     return tbody;
 }
+
+/**
+ * Owns audit pagination, rendering, and button state so the entry point does
+ * not need to know how the audit response is shaped or how the modal table is
+ * updated.
+ */
+export function createAuditLogController({
+    request,
+    getElement = id => globalThis.document?.getElementById?.(id),
+    pageSize = 10,
+    onError = null
+} = {}) {
+    let page = 1;
+    let pageCount = 1;
+
+    function syncControls(data) {
+        const pageInfo = getElement('audit-page-info');
+        const previous = getElement('audit-prev');
+        const next = getElement('audit-next');
+        if (pageInfo) pageInfo.textContent = `Page ${page} of ${pageCount}`;
+        if (previous) previous.disabled = page <= 1;
+        if (next) next.disabled = page >= pageCount;
+        return data;
+    }
+
+    async function load(pageDelta = 0) {
+        page = Math.max(1, page + Number(pageDelta || 0));
+        try {
+            const response = await request?.(page, pageSize);
+            const data = normalizeAuditResponse(response);
+            pageCount = Math.max(1, Math.ceil(data.total / data.pageSize));
+            page = Math.min(page, pageCount);
+            renderAuditRows(getElement('audit-tbody'), data.rows);
+            syncControls(data);
+            return data;
+        } catch (error) {
+            onError?.(error);
+            return null;
+        }
+    }
+
+    return {
+        load,
+        open() {
+            page = 1;
+            return load(0);
+        },
+        get page() { return page; },
+        get pageCount() { return pageCount; }
+    };
+}
