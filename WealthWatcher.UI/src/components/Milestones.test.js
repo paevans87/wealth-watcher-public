@@ -19,6 +19,7 @@ const { store } = await import('../store/store.js');
 const {
     calculateMilestoneProgress,
     clearMilestoneDashboardCard,
+    formatMilestoneTarget,
     normalizeMilestoneSettings,
     renderMilestoneDashboardCard,
     validateMilestoneTargets
@@ -61,6 +62,8 @@ test('milestone settings normalize safely and reject invalid writes', () => {
     assert.deepEqual(normalizeMilestoneSettings({ targets: [600000, 500000, 500000, -1, 'invalid'] }), {
         targets: [500000, 600000]
     });
+    assert.equal(formatMilestoneTarget(500000), '£500,000.00');
+    assert.deepEqual(validateMilestoneTargets(['£500,000.00', '600,000']).targets, [500000, 600000]);
     assert.equal(validateMilestoneTargets([]).valid, true);
     assert.match(validateMilestoneTargets([500000, 500000]).error, /unique/);
     assert.match(validateMilestoneTargets([0]).error, /greater than/);

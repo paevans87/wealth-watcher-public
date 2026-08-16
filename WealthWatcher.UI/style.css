@@ -3892,11 +3892,6 @@ body.obfuscated h1 .obfuscate-val {
     color: #93c5fd;
 }
 
-.milestone-settings-message.success {
-    background: rgba(16, 185, 129, 0.12);
-    color: #86efac;
-}
-
 .fire-subfeature-controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
