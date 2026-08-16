@@ -698,13 +698,13 @@
                         </div>
                     </div>
                     <div class="collapsible-content">
-                        <p class="milestones-settings-intro">Add one or more positive GBP targets. The dashboard will show progress from your latest achieved target to the next target above your current Holistic Net Worth.</p>
+                        <p class="milestones-settings-intro">Add one or more milestones. The dashboard will show progress from your latest achieved target to the next target above your current Holistic Net Worth.</p>
                         <form id="milestone-settings-form" class="milestones-settings-form">
                             <div id="milestone-target-list" class="milestone-target-list" aria-label="Configured wealth milestones"></div>
                             <div class="milestone-add-row">
                                 <label class="milestone-target-field" for="milestone-new-target">
-                                    <span>New milestone target (£)</span>
-                                    <input id="milestone-new-target" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="500000" aria-describedby="milestone-settings-error">
+                                    <span>New milestone target</span>
+                                    <input id="milestone-new-target" type="text" inputmode="decimal" autocomplete="off" placeholder="£500,000.00" aria-describedby="milestone-settings-error">
                                 </label>
                                 <button type="button" class="action-btn" data-milestone-add>Add milestone</button>
                             </div>

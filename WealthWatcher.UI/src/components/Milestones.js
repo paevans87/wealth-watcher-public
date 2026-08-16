@@ -25,8 +25,11 @@ function hasAtMostTwoDecimals(value) {
 }
 
 function readTargetNumber(value) {
-    if (typeof value === 'string' && value.trim() === '') return NaN;
-    const number = Number(value);
+    const normalized = typeof value === 'string'
+        ? value.replace(/[£,\s]/g, '')
+        : value;
+    if (typeof normalized === 'string' && normalized.trim() === '') return NaN;
+    const number = Number(normalized);
     return Number.isFinite(number) ? number : NaN;
 }
 
@@ -128,8 +131,13 @@ export function calculateMilestoneProgress(currentWealth, rawTargets) {
     };
 }
 
+export function formatMilestoneTarget(value) {
+    const number = Number(value);
+    return formatter.format(Number.isFinite(number) ? number : 0);
+}
+
 function formatAmount(value) {
-    return formatter.format(Number(value) || 0);
+    return formatMilestoneTarget(value);
 }
 
 function settingsLink(label, focus = 'milestone-new-target') {
@@ -237,8 +245,8 @@ function renderMilestoneTargetList() {
         ? targets.map((value, index) => `
             <div class="milestone-target-row">
                 <label class="milestone-target-field" for="milestone-target-${index}">
-                    <span class="sr-only">Milestone ${index + 1} amount in pounds</span>
-                    <input id="milestone-target-${index}" type="number" min="0.01" step="0.01" inputmode="decimal" value="${value}" data-milestone-target="${index}" aria-describedby="milestone-settings-error">
+                    <span class="sr-only">Milestone ${index + 1} amount</span>
+                    <input id="milestone-target-${index}" type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(formatMilestoneTarget(value))}" data-milestone-target="${index}" aria-describedby="milestone-settings-error">
                 </label>
                 <span class="milestone-target-status">${index === targets.length - 1 ? 'Next after current target' : 'Configured target'}</span>
                 <button type="button" class="action-btn milestone-remove-button" data-milestone-remove="${index}" aria-label="Remove milestone ${formatAmount(value)}">Remove</button>
@@ -259,6 +267,27 @@ function readMilestoneInputs() {
         .map(input => input.value);
 }
 
+function isMilestoneAmountInput(input) {
+    return input?.matches?.('[data-milestone-target], #milestone-new-target') === true;
+}
+
+function formatMilestoneInput(input) {
+    const value = readTargetNumber(input.value);
+    if (Number.isFinite(value) && value >= 0) input.value = formatMilestoneTarget(value);
+}
+
+function unformatMilestoneInput(input) {
+    input.value = input.value.replace(/[£,\s]/g, '');
+}
+
+function sanitizeMilestoneInput(input) {
+    if (input.value.includes('-')) {
+        input.value = '';
+        return;
+    }
+    input.value = input.value.replace(/[^\d.,]/g, '');
+}
+
 async function persistMilestoneTargets(rawTargets, successMessage) {
     const validation = validateMilestoneTargets(rawTargets);
     if (!validation.valid) {
@@ -274,7 +303,7 @@ async function persistMilestoneTargets(rawTargets, successMessage) {
 
     if (await saveDbSettings(MILESTONE_SETTINGS_KEY, next)) {
         store.clearCache();
-        setMilestoneSettingsMessage('Milestone settings saved.', 'success');
+        setMilestoneSettingsMessage();
         refreshMilestoneDashboardCard();
         showToast({
             title: 'Milestones saved',
@@ -324,6 +353,15 @@ export function setupMilestoneSettings() {
 
     form.dataset.milestonesSettingsInit = 'true';
     form.addEventListener('submit', event => event.preventDefault());
+    form.addEventListener('focusin', event => {
+        if (isMilestoneAmountInput(event.target)) unformatMilestoneInput(event.target);
+    });
+    form.addEventListener('input', event => {
+        if (isMilestoneAmountInput(event.target)) sanitizeMilestoneInput(event.target);
+    });
+    form.addEventListener('focusout', event => {
+        if (isMilestoneAmountInput(event.target)) formatMilestoneInput(event.target);
+    });
     form.addEventListener('change', event => {
         if (!event.target.closest?.('[data-milestone-target]')) return;
         void persistMilestoneTargets(readMilestoneInputs(), 'Your milestone targets were updated successfully.');
