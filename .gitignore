@@ -40,6 +40,10 @@ dist/
 /DatabaseSchemaDefinitions.html
 /UIInputAudit.html
 
+# Generated audit and plan reports
+/audits/
+/plans/
+
 # Owner-only release and deployment material; omit from a fresh public export
 /OPEN_SOURCE_READINESS.md
 /OPEN_SOURCE_DEPLOYMENT.md
