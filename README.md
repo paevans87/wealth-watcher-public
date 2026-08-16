@@ -1,12 +1,12 @@
 # Wealth Watcher
 
-[![Leave a tip](https://img.buymeacoffee.com/button-api/?text=Leave%20a%20tip&emoji=%F0%9F%91%8D&slug=paevans87&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000)](https://buymeacoffee.com/paevans87)
-
 Wealth Watcher is a self-hosted personal wealth dashboard for recording assets, tracking net worth, modelling forecasts, managing budgets, and optionally synchronising supported providers.
 
 > **Status:** The original project code and documentation are licensed under the [MIT License](LICENSE). This is a local/trusted-network, single-user application with no built-in authentication, authorization, or tenant isolation. Do not expose the API or dashboard directly to the public Internet.
 
 Project site: [wealthwatcher.co.uk](https://wealthwatcher.co.uk)
+
+New here? Start with the [Getting Started guide](docs/GETTING_STARTED.md), or [try the fictional live demo](https://wealthwatcher.co.uk/demo/) before installing anything.
 
 ## What it does
 
@@ -20,14 +20,18 @@ Forecasts are illustrative estimates based on the inputs and assumptions shown i
 
 ## Requirements
 
-- .NET SDK 10.0.110 (see [global.json](global.json)).
+- .NET SDK 10.0.302 (see [global.json](global.json)).
 - Node.js 24.13.0 (see [.nvmrc](.nvmrc)).
 - Docker and Docker Compose for the containerised setup.
-- PostgreSQL 15 or a compatible PostgreSQL service for production mode.
+- PostgreSQL 15 or a compatible PostgreSQL service for an external production database. The Compose setup uses PostgreSQL 18.
+
+The recommended Docker Compose path only requires Docker and Docker Compose on the host; the .NET SDK and Node.js are needed for local development.
 
 ## Run locally for development
 
 The development API uses an in-memory database, so this path is safe for a quick evaluation and does not require PostgreSQL.
+
+These commands work in PowerShell, macOS, and Linux. The [Getting Started guide](docs/GETTING_STARTED.md) also includes the recommended Docker path and first-run steps.
 
 Start the API in one terminal:
 
@@ -46,12 +50,23 @@ Open <http://127.0.0.1:5173>. Vite proxies `/api` requests to the development AP
 
 ## Run with Docker Compose
 
+For a beginner-friendly walkthrough, see [Getting Started](docs/GETTING_STARTED.md).
+
 Copy the example configuration, replace the placeholder database password, and keep the file private:
 
 ```powershell
 Copy-Item .env.example .env
 # Edit .env and set POSTGRES_PASSWORD to a long random value.
-docker compose config
+docker compose config --quiet
+docker compose up --build
+```
+
+On macOS or Linux, the equivalent copy command is:
+
+```sh
+cp .env.example .env
+# Edit .env and set POSTGRES_PASSWORD to a long random value.
+docker compose config --quiet
 docker compose up --build
 ```
 
@@ -82,7 +97,7 @@ docker compose pull api web
 docker compose up -d --no-build --remove-orphans
 ```
 
-For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.2.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
+For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.4.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
 
 ### Release notes and updates
 
@@ -105,6 +120,13 @@ Compose configuration is supplied through a private `.env` file. The supported v
 
 Provider setup guidance is in [WealthWatcher.Api/Integrations/docs/adding-integrations.md](WealthWatcher.Api/Integrations/docs/adding-integrations.md). Never place provider credentials in source code, issue reports, screenshots, logs, or committed configuration.
 
+## Help, operations, and security
+
+- [Getting Started](docs/GETTING_STARTED.md) — recommended first run and first asset.
+- [Operations guide](docs/OPERATIONS.md) — backups, restores, and updates.
+- [Support policy](SUPPORT.md) — what can be reported safely and what is out of scope.
+- [Security policy](SECURITY.md) — the local/trusted-network boundary and private vulnerability reporting.
+
 ## Marketing-site analytics
 
 The public landing page can use Microsoft Clarity and Google Analytics 4 after visitor consent. Neither service is included in the self-hosted dashboard or receives dashboard or financial data. To enable them for GitHub Pages, add `CLARITY_PROJECT_ID` and/or `GA4_MEASUREMENT_ID` as variables on the repository's `github-pages` Actions environment. The Pages workflow injects the values at deploy time; leave them unset to keep analytics disabled for forks and local previews.
@@ -120,7 +142,7 @@ dotnet test WealthWatcher.Api.Tests/WealthWatcher.Api.Tests.csproj
 npm ci --prefix WealthWatcher.UI
 npm test --prefix WealthWatcher.UI
 npm run build --prefix WealthWatcher.UI
-docker compose config
+docker compose config --quiet
 ```
 
 The public pull-request workflow repeats the API and UI checks and validates both Docker builds. Successful pushes to `main` and version tags also publish the application images described above.
@@ -133,7 +155,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Vulnerabi
 
 Original project code and documentation are released under the [MIT License](LICENSE). Third-party packages, Docker images, provider APIs, provider data, names, logos, and other external material remain subject to their own terms; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLICY.md). The current prepared stable release is `v0.4.0`; the latest tagged release remains `v0.3.0` until this release is merged and tagged. The UI package remains private and is not published as an npm library.
+Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLICY.md). The current stable release is `v0.4.0`. The UI package remains private and is not published as an npm library.
 
 The project owner retains sole responsibility for merge decisions, release approval, and changing the release boundary.
 

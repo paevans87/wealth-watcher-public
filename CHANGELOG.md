@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented here.
 
-The latest prepared stable release is `v0.4.0`; the latest tagged release remains `v0.3.0` until this release is merged and tagged. Changes that have not yet been released are grouped under `Unreleased`.
+The latest stable release is `v0.4.0`. Changes that have not yet been released are grouped under `Unreleased`.
 
 ## 0.4.0 - 2026-08-15
 

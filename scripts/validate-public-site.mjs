@@ -35,6 +35,7 @@ requireMatch('landing Twitter metadata', landing, /name="twitter:card"/);
 requireMatch('landing structured data', landing, /"@type": "SoftwareApplication"/);
 assert.ok((landing.match(/data-analytics-event="landing_cta_click"/g) || []).length >= 5, 'landing CTA instrumentation is incomplete');
 assert.ok((landing.match(/href="demo\/"/g) || []).length >= 5, 'landing demo links are incomplete');
+assert.ok((landing.match(/docs\/GETTING_STARTED\.md/g) || []).length >= 3, 'landing Getting Started links are incomplete');
 
 requireMatch('robots sitemap directive', robots, /^Sitemap: https:\/\/wealthwatcher\.co\.uk\/sitemap\.xml$/m);
 requireMatch('sitemap landing URL', sitemap, /<loc>https:\/\/wealthwatcher\.co\.uk\/<\/loc>/);
