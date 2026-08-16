@@ -21,6 +21,57 @@ import { escapeHtml, safeCssColor } from '../utils/html.js';
 let budgetChartInstance = null;
 let budgetSaveTimer;
 let budgetSaveContext = null;
+let budgetSaveSnapshot = null;
+
+const BUDGET_CADENCE_MONTHS = Object.freeze({
+    monthly: 1,
+    month: 1,
+    '1m': 1,
+    quarterly: 3,
+    quarter: 3,
+    '3m': 3,
+    annually: 12,
+    annual: 12,
+    yearly: 12,
+    year: 12,
+    '12m': 12
+});
+
+function cloneBudgetSettings(settings) {
+    if (settings === undefined || settings === null) return {};
+    try {
+        return JSON.parse(JSON.stringify(settings));
+    } catch {
+        return {};
+    }
+}
+
+export function getMonthlyBudgetAmount(item) {
+    const amount = Number.parseFloat(item?.amount);
+    if (!Number.isFinite(amount)) return 0;
+
+    const cadence = String(item?.cadence || 'monthly').trim().toLowerCase();
+    const months = BUDGET_CADENCE_MONTHS[cadence] || 1;
+    return amount / months;
+}
+
+export function getMonthlyBudgetTotals(budgetSettings = {}) {
+    const totalFor = category => (Array.isArray(budgetSettings?.[category])
+        ? budgetSettings[category].reduce((total, item) => total + getMonthlyBudgetAmount(item), 0)
+        : 0);
+    const income = totalFor('income');
+    const bills = totalFor('bills');
+    const savings = totalFor('savings');
+    const spend = totalFor('spend');
+
+    return {
+        income,
+        bills,
+        savings,
+        spend,
+        unallocated: income - bills - savings - spend
+    };
+}
 
 function renderBudgetEnabledToggle() {
     const target = document.getElementById('budget-setting-enabled-toggle');
@@ -74,27 +125,13 @@ export function loadBudgetView(viewMode = null) {
         return;
     }
     
-    let totalIncome = 0;
-    if (budgetSettings.income) {
-        budgetSettings.income.forEach(inc => {
-            totalIncome += parseFloat(inc.amount) || 0;
-        });
-    }
-
-    let totalBills = 0;
-    if (budgetSettings.bills) {
-        budgetSettings.bills.forEach(item => totalBills += parseFloat(item.amount) || 0);
-    }
-    let totalSavings = 0;
-    if (budgetSettings.savings) {
-        budgetSettings.savings.forEach(item => totalSavings += parseFloat(item.amount) || 0);
-    }
-    let totalSpend = 0;
-    if (budgetSettings.spend) {
-        budgetSettings.spend.forEach(item => totalSpend += parseFloat(item.amount) || 0);
-    }
-
-    const unallocated = totalIncome - (totalBills + totalSavings + totalSpend);
+    const {
+        income: totalIncome,
+        bills: totalBills,
+        savings: totalSavings,
+        spend: totalSpend,
+        unallocated
+    } = getMonthlyBudgetTotals(budgetSettings);
     
     // Format Display Values
     document.getElementById('budget-total-income').innerText = formatter.format(totalIncome);
@@ -150,19 +187,19 @@ export function loadBudgetView(viewMode = null) {
         if (currentChartView === 'Bills' && budgetSettings.bills) {
             budgetSettings.bills.forEach((item, index) => {
                 chartLabels.push(item.name);
-                chartData.push(parseFloat(item.amount) || 0);
+                chartData.push(getMonthlyBudgetAmount(item));
                 chartColors.push(billsColors[index % billsColors.length]);
             });
         } else if (currentChartView === 'Savings' && budgetSettings.savings) {
             budgetSettings.savings.forEach((item, index) => {
                 chartLabels.push(item.name);
-                chartData.push(parseFloat(item.amount) || 0);
+                chartData.push(getMonthlyBudgetAmount(item));
                 chartColors.push(savingsColors[index % savingsColors.length]);
             });
         } else if (currentChartView === 'Spend' && budgetSettings.spend) {
             budgetSettings.spend.forEach((item, index) => {
                 chartLabels.push(item.name);
-                chartData.push(parseFloat(item.amount) || 0);
+                chartData.push(getMonthlyBudgetAmount(item));
                 chartColors.push(spendColors[index % spendColors.length]);
             });
         }
@@ -285,15 +322,28 @@ function ensureBudgetSettings() {
         store.state.budgetSettings = {};
     }
 
-    if (!store.state.budgetSettings.income) store.state.budgetSettings.income = [];
-    if (!store.state.budgetSettings.bills) store.state.budgetSettings.bills = [];
-    if (!store.state.budgetSettings.savings) store.state.budgetSettings.savings = [];
-    if (!store.state.budgetSettings.spend) store.state.budgetSettings.spend = [];
+    ['income', 'bills', 'savings', 'spend'].forEach(category => {
+        if (!Array.isArray(store.state.budgetSettings[category])) {
+            store.state.budgetSettings[category] = [];
+        }
+    });
+    store.state.budgetSettings.income = store.state.budgetSettings.income.map(item => ({
+        ...item,
+        cadence: item.cadence || 'monthly'
+    }));
+    store.state.budgetSettings.bills = store.state.budgetSettings.bills.map(item => ({
+        ...item,
+        cadence: item.cadence || 'monthly'
+    }));
     store.state.budgetSettings.savings = store.state.budgetSettings.savings.map(item => ({
         ...item,
         id: item.id || createBudgetId(),
         cadence: item.cadence || 'monthly',
         assetId: item.assetId || null
+    }));
+    store.state.budgetSettings.spend = store.state.budgetSettings.spend.map(item => ({
+        ...item,
+        cadence: item.cadence || 'monthly'
     }));
 
     return store.state.budgetSettings;
@@ -512,6 +562,7 @@ function addBudgetItem(category, nameInputId, amountInputId) {
     
     if (name && !isNaN(amount)) {
         const budgetSettings = ensureBudgetSettings();
+        const previousSettings = cloneBudgetSettings(budgetSettings);
         if (!budgetSettings[category]) budgetSettings[category] = [];
         
         budgetSettings[category].push(category === 'savings'
@@ -525,18 +576,19 @@ function addBudgetItem(category, nameInputId, amountInputId) {
         scheduleBudgetSave({
             title: 'Budget item added',
             message: `${name} was added to your budget.`
-        });
+        }, previousSettings);
     }
 }
 
 function removeBudgetItem(category, index) {
     if (store.state.budgetSettings && store.state.budgetSettings[category]) {
+        const previousSettings = cloneBudgetSettings(store.state.budgetSettings);
         store.state.budgetSettings[category].splice(index, 1);
         populateBudgetSettings();
         scheduleBudgetSave({
             title: 'Budget item removed',
             message: 'The budget item was removed successfully.'
-        });
+        }, previousSettings);
     }
 }
 
@@ -600,16 +652,26 @@ export function setupBudgetSettings() {
     populateBudgetSettings();
 }
 
-function scheduleBudgetSave(context = null) {
+function scheduleBudgetSave(context = null, previousSettings = null) {
     if (context) budgetSaveContext = context;
+    if (previousSettings && budgetSaveSnapshot === null) {
+        budgetSaveSnapshot = previousSettings;
+    }
     clearTimeout(budgetSaveTimer);
     budgetSaveTimer = setTimeout(async () => {
+        budgetSaveTimer = null;
+        const saveSnapshot = budgetSaveSnapshot;
+        budgetSaveSnapshot = null;
         const saveContext = budgetSaveContext || {
             title: 'Budget settings saved',
             message: 'Your budget settings were saved successfully.'
         };
         budgetSaveContext = null;
         if (!await saveDbSettings('wealthWatcherBudgetSettings', store.state.budgetSettings)) {
+            if (saveSnapshot) {
+                store.state.budgetSettings = saveSnapshot;
+                populateBudgetSettings();
+            }
             showToast({
                 title: 'Unable to save budget',
                 message: 'Your budget changes could not be saved.',
@@ -630,23 +692,25 @@ function createBudgetId() {
 window.updateBudgetSavingAsset = (index, assetId) => {
     const savings = ensureBudgetSettings().savings;
     if (!savings[index]) return;
+    const previousSettings = cloneBudgetSettings(store.state.budgetSettings);
     savings[index].assetId = assetId || null;
     populateBudgetSettings();
     scheduleBudgetSave({
         title: 'Budget saving updated',
         message: 'The saving allocation was updated successfully.'
-    });
+    }, previousSettings);
 };
 
 window.updateBudgetSavingCadence = (index, cadence) => {
     const savings = ensureBudgetSettings().savings;
     if (!savings[index]) return;
+    const previousSettings = cloneBudgetSettings(store.state.budgetSettings);
     savings[index].cadence = cadence || 'monthly';
     populateBudgetSettings();
     scheduleBudgetSave({
         title: 'Budget saving updated',
         message: 'The saving cadence was updated successfully.'
-    });
+    }, previousSettings);
 };
 
 // Global functions for inline HTML events

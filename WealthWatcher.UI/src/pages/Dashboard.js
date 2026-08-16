@@ -372,7 +372,6 @@ async function loadDashboardInternal() {
         const history = data?.Data || [];
         const isManual = data?.IsManual;
         const lastSync = data?.LastSyncDateTime ? new Date(data.LastSyncDateTime) : null;
-        const latestBreakdown = data?.LatestBreakdown || {};
 
         let currentVal = 0;
         let pastVal = 0;
@@ -402,14 +401,42 @@ async function loadDashboardInternal() {
         const catId = cat.Id.toLowerCase();
         store.state.categories[catId] = (store.state.categories[catId] || 0) + currentVal;
 
-        const assetGroup = resolveAssetGroupDescriptor(cat, assetGroupDescriptors);
-        assetGroupTotals.set(assetGroup.key, (assetGroupTotals.get(assetGroup.key) || 0) + currentVal);
-        
         const delta = currentVal - pastVal;
         const deltaInvested = currentInvested - pastInvested;
         contributors.push({ name: cat.Label, delta: delta, deltaInvested: deltaInvested, currentVal: currentVal, color: cat.Color });
 
-        renderCard(cat, currentVal, pastVal, delta, history, latestBreakdown, lastSync, isManual, data?.PropertyDetails, data?.InvestmentDetails, selectedPeriod, timeZone, assetGroupTargets.get(assetGroup.key));
+        const groupParts = getCategoryGroupParts(cat, data, assetGroupDescriptors);
+        groupParts.forEach((part, index) => {
+            const partHistory = part.history;
+            const partCurrentVal = Number(partHistory.at(-1)?.Value) || 0;
+            const partPastEntry = firstValidDate
+                ? partHistory.find(point => point.Time === firstValidDate) || partHistory[0]
+                : partHistory[0];
+            const partPastVal = Number(partPastEntry?.Value) || 0;
+            const partCurrentInvested = Number(partHistory.at(-1)?.Invested) || 0;
+            const partPastInvested = Number(partPastEntry?.Invested) || 0;
+            const partDelta = partCurrentVal - partPastVal;
+            const partAssetGroup = part.descriptor || resolveAssetGroupDescriptor(cat, assetGroupDescriptors);
+            assetGroupTotals.set(
+                partAssetGroup.key,
+                (assetGroupTotals.get(partAssetGroup.key) || 0) + partCurrentVal);
+
+            renderCard(
+                cat,
+                partCurrentVal,
+                partPastVal,
+                partDelta,
+                partHistory,
+                part.breakdown,
+                lastSync,
+                isManual,
+                part.propertyDetails,
+                part.investmentDetails,
+                selectedPeriod,
+                timeZone,
+                assetGroupTargets.get(partAssetGroup.key),
+                groupParts.length > 1 ? `${cat.Id}-${partAssetGroup.key}` : cat.Id);
+        });
     });
 
     const ytdResults = (dashboardResponse?.YtdCategories || [])
@@ -620,18 +647,6 @@ function getCurrentAggregateValue(data) {
     return Number(history[history.length - 1]?.Value) || 0;
 }
 
-function findAssetForCategory(category) {
-    const kindId = getRecordValue(category, 'ClassificationValueId') || getRecordValue(category, 'AssetKindId');
-    const kindCode = normalizeCode(getRecordValue(category, 'Id') || getRecordValue(category, 'AssetKindCode'));
-    return (store.state.assets || []).find(asset => {
-        if (kindId && String(getRecordValue(asset, 'AssetKindId')) === String(kindId)) return true;
-        if (kindCode && normalizeCode(getRecordValue(asset, 'AssetKindCode')) === kindCode) return true;
-        const classifications = getRecordValue(asset, 'Classifications');
-        return kindId && Array.isArray(classifications) && classifications.some(classification =>
-            String(getRecordValue(classification, 'Id')) === String(kindId));
-    }) || null;
-}
-
 function getAssetGroupDescriptors() {
     const assetGroup = (store.state.classificationGroups || [])
         .find(group => normalizeCode(getRecordValue(group, 'Key')) === 'asset-group');
@@ -670,8 +685,11 @@ function getAssetGroupDescriptors() {
 }
 
 function getVisibleAssetGroupDescriptors(descriptors, categories) {
-    const visibleKeys = new Set((Array.isArray(categories) ? categories : [])
-        .map(category => resolveAssetGroupDescriptor(category, descriptors).key));
+    const visibleKeys = new Set();
+    (Array.isArray(categories) ? categories : []).forEach(category => {
+        getAssetGroupDescriptorsForCategory(category, descriptors)
+            .forEach(descriptor => visibleKeys.add(descriptor.key));
+    });
     return descriptors.filter(descriptor => visibleKeys.has(descriptor.key));
 }
 
@@ -756,8 +774,23 @@ function renderAssetGroupSections(descriptors) {
     return new Map(descriptors.map(descriptor => [descriptor.key, document.getElementById(descriptor.gridId)]));
 }
 
-function resolveAssetGroupDescriptor(category, descriptors) {
-    const asset = findAssetForCategory(category);
+function findAssetsForCategory(category) {
+    const kindId = getRecordValue(category, 'ClassificationValueId') || getRecordValue(category, 'AssetKindId');
+    const kindCode = normalizeCode(getRecordValue(category, 'Id') || getRecordValue(category, 'AssetKindCode'));
+    return (store.state.assets || []).filter(asset => {
+        if (kindId && String(getRecordValue(asset, 'AssetKindId')) === String(kindId)) return true;
+        if (kindCode && normalizeCode(getRecordValue(asset, 'AssetKindCode')) === kindCode) return true;
+        const classifications = getRecordValue(asset, 'Classifications');
+        return kindId && Array.isArray(classifications) && classifications.some(classification =>
+            String(getRecordValue(classification, 'Id')) === String(kindId));
+    });
+}
+
+function findAssetForCategory(category) {
+    return findAssetsForCategory(category)[0] || null;
+}
+
+function resolveAssetGroupDescriptorForAsset(asset, category, descriptors) {
     const hasExplicitAssetGroup = asset && (
         getRecordValue(asset, 'AssetGroupAssignmentSet') === true ||
         (getRecordValue(asset, 'AssetGroupAssignmentSet') === undefined &&
@@ -770,6 +803,33 @@ function resolveAssetGroupDescriptor(category, descriptors) {
         }
         return descriptors.find(descriptor => descriptor.key === 'unassigned') || descriptors[descriptors.length - 1];
     }
+
+    return resolveCategoryAssetGroupDescriptor(category, descriptors, asset);
+}
+
+function getAssetGroupDescriptorsForCategory(category, descriptors) {
+    const assets = findAssetsForCategory(category);
+    const candidates = assets.length > 0
+        ? assets.map(asset => resolveAssetGroupDescriptorForAsset(asset, category, descriptors))
+        : [resolveCategoryAssetGroupDescriptor(category, descriptors)];
+    const defaultDescriptor = resolveCategoryAssetGroupDescriptor(category, descriptors);
+    if (assets.length > 1 && candidates.length > 1 && defaultDescriptor &&
+        !candidates.some(descriptor => descriptor?.key === defaultDescriptor.key)) {
+        candidates.push(defaultDescriptor);
+    }
+    const unique = new Map(candidates
+        .filter(Boolean)
+        .map(descriptor => [descriptor.key, descriptor]));
+    return [...unique.values()];
+}
+
+function resolveAssetGroupDescriptor(category, descriptors) {
+    const categoryGroups = getAssetGroupDescriptorsForCategory(category, descriptors);
+    if (categoryGroups.length === 1) return categoryGroups[0];
+    return resolveCategoryAssetGroupDescriptor(category, descriptors);
+}
+
+function resolveCategoryAssetGroupDescriptor(category, descriptors, fallbackAsset = null) {
 
     const assetGroupValueId = getRecordValue(category, 'AssetGroupId') || getRecordValue(category, 'AssetClassValueId');
     if (assetGroupValueId) {
@@ -798,7 +858,8 @@ function resolveAssetGroupDescriptor(category, descriptors) {
         (mappedKindGroupCode && descriptor.valueKey === mappedKindGroupCode));
     if (mapped) return mapped;
 
-    const assetGroupCode = normalizeCode(getRecordValue(asset, 'AssetGroupCode'));
+    const assetGroupCode = normalizeCode(
+        getRecordValue(category, 'AssetGroupCode') || getRecordValue(fallbackAsset, 'AssetGroupCode'));
     if (assetGroupCode) {
         const assetMapped = descriptors.find(descriptor => descriptor.valueKey === assetGroupCode);
         if (assetMapped) return assetMapped;
@@ -811,7 +872,7 @@ function resolveAssetGroupDescriptor(category, descriptors) {
     }
 
     if (kindId) {
-        const assetClassification = getRecordValue(asset, 'Classifications');
+        const assetClassification = getRecordValue(fallbackAsset, 'Classifications');
         const groupClassification = Array.isArray(assetClassification)
             ? assetClassification.find(value => normalizeCode(getRecordValue(value, 'GroupKey')) === 'asset-group')
             : null;
@@ -824,6 +885,149 @@ function resolveAssetGroupDescriptor(category, descriptors) {
     const unassigned = descriptors.find(descriptor => descriptor.key === 'unassigned');
     if (unassigned) return unassigned;
     return descriptors[descriptors.length - 1];
+}
+
+function getAggregateBreakdown(point) {
+    const breakdown = getRecordValue(point, 'Breakdown') ?? getRecordValue(point, 'breakdown');
+    return breakdown && typeof breakdown === 'object' && !Array.isArray(breakdown)
+        ? breakdown
+        : null;
+}
+
+function getAssetDisplayName(asset) {
+    return getRecordValue(asset, 'DisplayName') || getRecordValue(asset, 'Name') || '';
+}
+
+function findUniqueAssetForBreakdownName(category, name) {
+    const normalizedName = normalizeCode(String(name || '').replace(/\s+\(undeployed\)$/i, ''));
+    if (!normalizedName) return null;
+
+    const matches = findAssetsForCategory(category).filter(asset =>
+        normalizeCode(getAssetDisplayName(asset)) === normalizedName);
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function splitBreakdownByAssetGroup(breakdown, category, descriptors, fallbackDescriptor) {
+    const groups = new Map();
+    Object.entries(breakdown || {}).forEach(([name, rawValue]) => {
+        const value = Number(rawValue);
+        if (!Number.isFinite(value)) return;
+
+        const asset = findUniqueAssetForBreakdownName(category, name);
+        const descriptor = asset
+            ? resolveAssetGroupDescriptorForAsset(asset, category, descriptors)
+            : fallbackDescriptor;
+        if (!descriptor) return;
+
+        const group = groups.get(descriptor.key) || { value: 0, breakdown: {} };
+        group.value += value;
+        group.breakdown[name] = value;
+        groups.set(descriptor.key, group);
+    });
+    return groups;
+}
+
+function getInvestmentDetailsForBreakdown(investmentDetails, breakdown) {
+    if (!investmentDetails || typeof investmentDetails !== 'object') return investmentDetails;
+    const names = new Set(Object.keys(breakdown || {}).map(name => normalizeCode(name.replace(/\s+\(undeployed\)$/i, ''))));
+    const matching = Object.entries(investmentDetails)
+        .filter(([name]) => names.has(normalizeCode(name.replace(/\s+\(undeployed\)$/i, ''))));
+    return matching.length > 0 ? Object.fromEntries(matching) : undefined;
+}
+
+function getPropertyDetailsForGroup(propertyDetails, category, descriptor, fallbackDescriptor, descriptors) {
+    const properties = Array.isArray(propertyDetails?.Properties) ? propertyDetails.Properties : [];
+    if (properties.length === 0) return propertyDetails;
+
+    const assets = findAssetsForCategory(category);
+    const selected = properties.filter(property => {
+        const asset = assets.find(candidate =>
+            String(getRecordValue(candidate, 'Id')) === String(getRecordValue(property, 'Id')));
+        const propertyGroup = asset
+            ? resolveAssetGroupDescriptorForAsset(asset, category, descriptors)
+            : fallbackDescriptor;
+        return propertyGroup?.key === descriptor.key;
+    });
+    const value = selected.reduce((total, property) => total + (Number(property.Value) || 0), 0);
+    const mortgage = selected.reduce((total, property) => total + (Number(property.Mortgage) || 0), 0);
+    return {
+        ...propertyDetails,
+        Properties: selected,
+        Totals: {
+            Value: value,
+            Mortgage: mortgage,
+            Equity: value - mortgage
+        }
+    };
+}
+
+function getCategoryGroupParts(category, data, descriptors) {
+    const history = Array.isArray(data?.Data) ? data.Data : [];
+    const groupDescriptors = getAssetGroupDescriptorsForCategory(category, descriptors);
+    const fallbackDescriptor = resolveCategoryAssetGroupDescriptor(category, descriptors);
+    if (groupDescriptors.length <= 1) {
+        const latestPoint = history[history.length - 1];
+        return [{
+            descriptor: groupDescriptors[0] || fallbackDescriptor,
+            history,
+            breakdown: data?.LatestBreakdown || getAggregateBreakdown(latestPoint) || {},
+            propertyDetails: data?.PropertyDetails,
+            investmentDetails: data?.InvestmentDetails
+        }];
+    }
+
+    const groupedHistory = new Map(groupDescriptors.map(descriptor => [descriptor.key, []]));
+    history.forEach((point, index) => {
+        const pointBreakdown = getAggregateBreakdown(point)
+            || (index === history.length - 1 && data?.LatestBreakdown ? data.LatestBreakdown : null);
+        const grouped = pointBreakdown && Object.keys(pointBreakdown).length > 0
+            ? splitBreakdownByAssetGroup(pointBreakdown, category, descriptors, fallbackDescriptor)
+            : new Map([[fallbackDescriptor.key, {
+                value: Number(point.Value) || 0,
+                breakdown: {}
+            }]]);
+        const sourceValue = Number(point.Value) || 0;
+        const sourceInvested = Number(point.Invested) || 0;
+
+        groupDescriptors.forEach(descriptor => {
+            const group = grouped.get(descriptor.key);
+            const value = group?.value || 0;
+            const invested = sourceValue !== 0 ? sourceInvested * value / sourceValue : 0;
+            groupedHistory.get(descriptor.key).push({
+                ...point,
+                Value: value,
+                Invested: Number.isFinite(invested) ? invested : 0,
+                Breakdown: group?.breakdown || {}
+            });
+        });
+    });
+
+    const latestBreakdown = data?.LatestBreakdown && Object.keys(data.LatestBreakdown).length > 0
+        ? splitBreakdownByAssetGroup(data.LatestBreakdown, category, descriptors, fallbackDescriptor)
+        : new Map();
+
+    return groupDescriptors
+        .map(descriptor => {
+            const partHistory = groupedHistory.get(descriptor.key) || [];
+            const partBreakdown = latestBreakdown.get(descriptor.key)?.breakdown
+                || partHistory.at(-1)?.Breakdown
+                || {};
+            return {
+                descriptor,
+                history: partHistory,
+                breakdown: partBreakdown,
+                propertyDetails: getPropertyDetailsForGroup(
+                    data?.PropertyDetails,
+                    category,
+                    descriptor,
+                    fallbackDescriptor,
+                    descriptors),
+                investmentDetails: getInvestmentDetailsForBreakdown(data?.InvestmentDetails, partBreakdown)
+            };
+        })
+        .filter(part => store.state.generalSettings?.showZeroValuesOnDashboard === true
+            || Number(part.history.at(-1)?.Value) !== 0
+            || Object.keys(part.breakdown).length > 0);
 }
 
 function normalizeCode(value) {
@@ -1069,9 +1273,9 @@ function renderPropertyPanel(propertyDetails) {
     return html;
 }
 
-function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSync, isManual, propertyDetails, investmentDetails, selectedPeriod, timeZone, container) {
+function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSync, isManual, propertyDetails, investmentDetails, selectedPeriod, timeZone, container, renderKey = cat.Id) {
     if (!container) return;
-    const cardId = `card-${cat.Id}`;
+    const chartKey = String(renderKey || cat.Id).replace(/[^a-zA-Z0-9_-]/g, '-');
     
     let freshClass = 'fresh-good';
     if (lastSync) {
@@ -1198,7 +1402,7 @@ function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSyn
                     <div class="card-delta ${safeDelta < 0 ? 'neg' : ''} obfuscate-val">${deltaSign}${formatter.format(safeDelta)} (${deltaPercentage.toFixed(2)}%)</div>
                 </div>
                 ${cardActions}
-                ${showSparklines ? `<div class="mini-chart-container" aria-label="${escapeHtml(displayLabel)} trend"><canvas id="chart-${escapeHtml(cat.Id)}"></canvas></div>` : ''}
+                ${showSparklines ? `<div class="mini-chart-container" aria-label="${escapeHtml(displayLabel)} trend"><canvas id="chart-${escapeHtml(chartKey)}"></canvas></div>` : ''}
             </div>
             <div class="card-value obfuscate-val">${formatter.format(currentVal)}</div>
             ${breakdownHtml}
@@ -1208,10 +1412,10 @@ function renderCard(cat, currentVal, pastVal, delta, history, breakdown, lastSyn
     container.innerHTML += cardHtml;
 
     setTimeout(() => {
-        const ctx = document.getElementById(`chart-${cat.Id}`);
+        const ctx = document.getElementById(`chart-${chartKey}`);
         if (!ctx || store.state.generalSettings?.showSparklines === false) return;
-        if(charts[cat.Id]) charts[cat.Id].destroy();
-        charts[cat.Id] = new Chart(ctx, {
+        if(charts[chartKey]) charts[chartKey].destroy();
+        charts[chartKey] = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: history.map(h => h.Time),

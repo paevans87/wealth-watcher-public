@@ -6,6 +6,35 @@ import { store } from '../store/store.js';
 // boundary.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const FORECAST_CONTRIBUTIONS_STACK = 'Unallocated Contributions';
+const FORECAST_WINDFALLS_STACK = 'Unallocated Windfalls';
+const DEFAULT_FORECAST_INCLUDED_ASSETS = ['investments', 'pensions', 'property'];
+const FORECAST_STRATEGY_DESCRIPTIONS = {
+    'fire-default': 'Uses the configured FIRE/default annual return; historical data is not extrapolated.',
+    'cash-flow-adjusted-cagr': 'Links completed monthly returns after removing known invested-capital changes, then annualizes the compounded result.',
+    'median-monthly-return': 'Annualizes the median completed-month return, reducing the influence of unusually strong or weak months.',
+    'weighted-log-return': 'Averages monthly log returns with more weight on recent months, then annualizes the result.',
+    'regression-trend': 'Fits a straight-line trend to cumulative cash-flow-adjusted log wealth; the slope is the annualized forecast rate.',
+    'winsorized-monthly-return': 'Clamps extreme completed-month returns to the 10th/90th percentile before compounding, limiting outlier impact.',
+    'first-last-annualized': 'Compares the first and last observed history values, annualizes the compounded change over the elapsed period, and applies that annual rate to the forecast.'
+};
+const PERSISTED_SETTING_KEYS = [
+    'wealthWatcherGeneralSettings',
+    'wealthWatcherFeatureSettings',
+    'wealthWatcherForecastSettings',
+    'wealthWatcherFireSettings',
+    'wealthWatcherBudgetSettings'
+];
+const SETTING_ARRAY_KEYS = {
+    wealthWatcherForecastSettings: ['includedAssets', 'contributions', 'windfalls'],
+    wealthWatcherFireSettings: ['includedAssets', 'windfalls'],
+    wealthWatcherBudgetSettings: ['income', 'bills', 'savings', 'spend']
+};
+const SETTING_OBJECT_ARRAY_KEYS = {
+    wealthWatcherForecastSettings: ['contributions', 'windfalls'],
+    wealthWatcherFireSettings: ['windfalls'],
+    wealthWatcherBudgetSettings: ['income', 'bills', 'savings', 'spend']
+};
 const DEFAULT_MARKET_HOURS = {
     Days: [
         { Day: 'Monday', Enabled: true, OpenTime: '08:00', CloseTime: '16:30' },
@@ -41,6 +70,93 @@ const idFrom = (prefix, number) => `${prefix}-${number}`;
 const numberValue = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const normalize = value => String(value ?? '').trim().toLowerCase();
 const json = value => JSON.stringify(value);
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+function parseDateKey(value) {
+    const raw = String(value ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+    const parsed = new Date(`${raw}T12:00:00Z`);
+    return Number.isNaN(parsed.getTime()) || dateKey(parsed) !== raw ? null : raw;
+}
+
+function entryTimestamp(entry) {
+    const date = parseDateKey(entry?.Date);
+    if (!date) return null;
+    const time = String(entry?.Time || '23:59:59').trim();
+    const normalizedTime = /^\d{2}:\d{2}$/.test(time) ? `${time}:00` : time;
+    if (!/^\d{2}:\d{2}:\d{2}$/.test(normalizedTime)) return null;
+    const timestamp = new Date(`${date}T${normalizedTime}Z`);
+    return Number.isNaN(timestamp.getTime()) ? null : timestamp;
+}
+
+function isEntryVisibleAt(entry, now = new Date()) {
+    const timestamp = entryTimestamp(entry);
+    return timestamp !== null && timestamp <= now;
+}
+
+function firstOfNextMonth(date) {
+    const parsed = new Date(`${date}T12:00:00Z`);
+    return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, 1, 12));
+}
+
+function monthKey(value) {
+    const parsed = parseDateKey(value);
+    return parsed ? parsed.slice(0, 7) : null;
+}
+
+function cadenceMonths(cadence) {
+    const normalized = normalize(cadence);
+    if (!normalized || ['month', 'monthly', '1m'].includes(normalized)) return 1;
+    if (['quarter', 'quarterly', '3m'].includes(normalized)) return 3;
+    if (['semiannual', 'semi-annual', 'half-yearly', '6m'].includes(normalized)) return 6;
+    if (['annual', 'annually', 'year', 'yearly', '12m'].includes(normalized)) return 12;
+    const numericToken = normalized.split(/\s+/).find(token => /^\d+$/.test(token));
+    const parsed = Number(numericToken);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function normalizeForecastStrategy(strategy) {
+    const normalized = normalize(strategy);
+    return Object.prototype.hasOwnProperty.call(FORECAST_STRATEGY_DESCRIPTIONS, normalized)
+        ? normalized
+        : 'fire-default';
+}
+
+class DemoValidationError extends Error {}
+
+function normalizePersistedSetting(key, value) {
+    const raw = value === null || value === undefined || value === '' ? '{}' : value;
+    if (typeof raw !== 'string') return { error: `${key} must contain valid JSON.` };
+
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    } catch {
+        return { error: `${key} must contain valid JSON.` };
+    }
+    if (!isRecord(parsed)) return { error: `${key} must contain a JSON object.` };
+
+    for (const property of SETTING_ARRAY_KEYS[key] || []) {
+        if (Object.prototype.hasOwnProperty.call(parsed, property) && !Array.isArray(parsed[property])) {
+            return { error: `${key}.${property} must be a JSON array.` };
+        }
+    }
+    for (const property of SETTING_OBJECT_ARRAY_KEYS[key] || []) {
+        if (!Array.isArray(parsed[property])) continue;
+        const invalidIndex = parsed[property].findIndex(item => !isRecord(item));
+        if (invalidIndex >= 0) return { error: `${key}.${property}[${invalidIndex}] must be a JSON object.` };
+    }
+    return { value: raw, parsed };
+}
+
+function safeSettingsSnapshot() {
+    const settings = clone(demoState.settings) || {};
+    PERSISTED_SETTING_KEYS.forEach(key => {
+        const normalized = normalizePersistedSetting(key, settings[key]);
+        settings[key] = normalized.value || '{}';
+    });
+    return settings;
+}
 
 function seedState() {
     const today = todayKey();
@@ -363,10 +479,17 @@ function categoryForType(type) {
         || demoState.categories.find(category => normalizedType.startsWith(normalize(category.Id)));
 }
 
+function categoryForAsset(asset) {
+    if (!asset) return null;
+    const kind = findValue(asset.AssetKindId);
+    return categoryForType(kind?.Key)
+        || categoryForType(asset.EntryKind)
+        || categoryForType(asset.AssetGroupCode);
+}
+
 function categoryForEntry(entry) {
     const asset = entry.AssetId ? findAsset(entry.AssetId) : null;
-    const kind = asset ? findValue(asset.AssetKindId) : null;
-    return categoryForType(entry.Type) || categoryForType(kind?.Key) || demoState.categories[0];
+    return categoryForAsset(asset) || categoryForType(entry.Type) || demoState.categories[0];
 }
 
 function entryValue(entry) {
@@ -378,8 +501,12 @@ function entityKey(entry) {
     return String(entry.AssetId || `${categoryForEntry(entry)?.Id || 'other'}:${entry.Name || entry.Id}`);
 }
 
-function allObservationDates() {
-    return [...new Set([...demoState.entries.map(entry => entry.Date), todayKey()])].sort();
+function visibleEntries(now = new Date()) {
+    return demoState.entries.filter(entry => isEntryVisibleAt(entry, now));
+}
+
+function allObservationDates(now = new Date()) {
+    return [...new Set([...visibleEntries(now).map(entry => entry.Date), todayKey()])].sort();
 }
 
 function periodStart(period) {
@@ -388,10 +515,12 @@ function periodStart(period) {
 }
 
 function buildCategoryHistory(category, period) {
+    const now = new Date();
     const entries = demoState.entries
-        .filter(entry => categoryForEntry(entry)?.Id === category.Id)
+        .filter(entry => categoryForEntry(entry)?.Id === category.Id && isEntryVisibleAt(entry, now))
         .sort((left, right) => `${left.Date}T${left.Time || ''}`.localeCompare(`${right.Date}T${right.Time || ''}`));
-    const dates = allObservationDates().filter(date => !periodStart(period) || date >= periodStart(period));
+    const start = periodStart(period);
+    const dates = allObservationDates(now).filter(date => !start || date >= start);
     const latest = new Map();
     const data = [];
     dates.forEach(date => {
@@ -400,7 +529,11 @@ function buildCategoryHistory(category, period) {
         const value = currentEntries.reduce((total, entry) => total + entryValue(entry), 0);
         if (currentEntries.length || date === todayKey()) {
             const invested = currentEntries.reduce((total, entry) => total + numberValue(entry.InvestedCapital), 0);
-            const breakdown = Object.fromEntries(currentEntries.map(entry => [entry.Name || entry.Id, entryValue(entry)]));
+            const breakdown = currentEntries.reduce((values, entry) => {
+                const name = entry.Name || entry.Id;
+                values[name] = numberValue(values[name]) + entryValue(entry);
+                return values;
+            }, {});
             data.push({ Time: date, Value: Number(value.toFixed(2)), Invested: Number(invested.toFixed(2)), Breakdown: breakdown, HasObservation: entries.some(entry => entry.Date === date) });
         }
     });
@@ -436,11 +569,11 @@ function currentInvestmentDetails(category, categoryEntries) {
     categoryEntries.forEach(entry => {
         if (!latest.has(entityKey(entry)) || `${entry.Date}T${entry.Time || ''}` >= `${latest.get(entityKey(entry)).Date}T${latest.get(entityKey(entry)).Time || ''}`) latest.set(entityKey(entry), entry);
     });
-    return Object.fromEntries([...latest.values()].map(entry => {
+    return [...latest.values()].reduce((details, entry) => {
         const currentValue = entryValue(entry);
         const growthValue = Number((currentValue * 0.62).toFixed(2));
         const defensiveValue = Number((currentValue - growthValue).toFixed(2));
-        return [entry.Name, [
+        const positions = [
             {
                 Ticker: 'DEMO-GROWTH',
                 Name: 'Global equity fund',
@@ -457,8 +590,11 @@ function currentInvestmentDetails(category, categoryEntries) {
                 CurrentPrice: Number((defensiveValue / 100).toFixed(2)),
                 CurrentValue: defensiveValue
             }
-        ]];
-    }));
+        ];
+        const name = entry.Name || entry.Id;
+        details[name] = [...(details[name] || []), ...positions];
+        return details;
+    }, {});
 }
 
 function buildDashboard(period) {
@@ -518,9 +654,9 @@ function buildCurrentObservation(categoryId = null) {
 function namesForCategory(categoryId) {
     const category = categoryForType(categoryId);
     const names = new Map();
-    demoState.assets.filter(asset => !asset.Archived && categoryForType(findValue(asset.AssetKindId)?.Key)?.Id === category?.Id)
+    demoState.assets.filter(asset => !asset.Archived && categoryForAsset(asset)?.Id === category?.Id)
         .forEach(asset => names.set(asset.Id, { ...clone(asset), Name: asset.DisplayName }));
-    demoState.entries.filter(entry => categoryForEntry(entry)?.Id === category?.Id)
+    visibleEntries().filter(entry => categoryForEntry(entry)?.Id === category?.Id)
         .forEach(entry => names.set(entityKey(entry), { Id: entry.AssetId || entityKey(entry), Name: entry.Name, DisplayName: entry.Name, AssetId: entry.AssetId }));
     return [...names.values()];
 }
@@ -553,6 +689,19 @@ function addEntry(payload, defaults = {}) {
     return entry;
 }
 
+function propertyValuesAreValid(payload) {
+    const value = payload?.Value;
+    const mortgage = payload?.Mortgage;
+    const validNumber = candidate => candidate === undefined || candidate === null || candidate === '' || Number.isFinite(Number(candidate));
+    return validNumber(value) && validNumber(mortgage) && numberValue(value) >= 0 && numberValue(mortgage) >= 0;
+}
+
+function propertyValidationResponse(payload) {
+    return propertyValuesAreValid(payload)
+        ? null
+        : errorResponse('Property value and mortgage must be zero or greater.', 400);
+}
+
 function createAsset(payload, type = 'cash') {
     const requestedKind = payload.AssetKindId || payload.ClassificationValueId;
     const kind = findValue(requestedKind) || findValue(`kind-${normalize(type)}`) || findValue('kind-cash');
@@ -582,7 +731,7 @@ function findIntegration(id) {
 
 function mutateSettings(body) {
     Object.entries(body).forEach(([key, value]) => {
-        demoState.settings[key] = typeof value === 'string' ? value : json(value);
+        demoState.settings[key] = value;
         try {
             const parsed = JSON.parse(demoState.settings[key]);
             if (key === 'wealthWatcherGeneralSettings') store.state.generalSettings = parsed;
@@ -598,7 +747,7 @@ function mutateSettings(body) {
 }
 
 function handleGet(path, searchParams) {
-    if (path === '/settings') return response(clone(demoState.settings));
+    if (path === '/settings') return response(safeSettingsSnapshot());
     if (path === '/classification-groups') return response(clone(demoState.groups));
     const groupValuesMatch = path.match(/^\/classification-groups\/([^/]+)\/values$/);
     if (groupValuesMatch) {
@@ -639,7 +788,9 @@ function handleGet(path, searchParams) {
     if (propertyMatch) {
         const asset = findAsset(decodeURIComponent(propertyMatch[1]));
         if (!asset || asset.EntryKind !== 'Property') return errorResponse(`Property '${propertyMatch[1]}' was not found.`);
-        const entry = demoState.entries.filter(item => item.AssetId === asset.Id).sort((a, b) => b.Date.localeCompare(a.Date))[0];
+        const entry = demoState.entries
+            .filter(item => item.AssetId === asset.Id && isEntryVisibleAt(item))
+            .sort((a, b) => entryTimestamp(b) - entryTimestamp(a))[0];
         return response({ Id: asset.Id, Name: asset.DisplayName, Value: entry?.Value || 0, Mortgage: entry?.Mortgage || 0, Archived: asset.Archived });
     }
     const categoryAggregateMatch = path.match(/^\/wealth\/([^/]+)\/(aggregate|current|current-observation)$/);
@@ -712,19 +863,42 @@ function portfolioTotalAtDate(date) {
 }
 
 function handleWrite(path, method, body, searchParams) {
-    if (path === '/settings' && method === 'POST') return response(mutateSettings(body));
+    if (path === '/settings' && method === 'POST') {
+        if (!isRecord(body)) return errorResponse('A settings object is required.', 400);
+        const normalized = {};
+        for (const [key, value] of Object.entries(body)) {
+            if (!PERSISTED_SETTING_KEYS.includes(key)) continue;
+            const result = normalizePersistedSetting(key, value);
+            if (result.error) return errorResponse(result.error, 400);
+            normalized[key] = result.value;
+        }
+        return response(mutateSettings(normalized));
+    }
     if (path === '/sync' && method === 'POST') {
         createAudit('Demo sync completed.', 'Demo sync', 0);
         return response({ Succeeded: true, Message: 'Demo data synchronized successfully.', LastSyncDateTime: new Date().toISOString() });
     }
     if (path === '/wealth' && method === 'POST') {
+        if (!isRecord(body)) return errorResponse('A wealth entry object is required.', 400);
         let asset = body.AssetId ? findAsset(body.AssetId) : null;
+        if (body.AssetId && !asset) return errorResponse('Asset not found.', 404);
+        if (asset?.Archived) return errorResponse('Archived assets cannot receive new entries.', 400);
+        const requestedCategory = categoryForAsset(asset)
+            || categoryForType(body.AssetKindCode)
+            || categoryForType(body.Type);
+        if (requestedCategory?.Id === 'property') {
+            const validation = propertyValidationResponse(body);
+            if (validation) return validation;
+        }
         if (!asset) asset = createAsset({ DisplayName: body.Name, AssetKindId: body.ClassificationValueIds?.[0] }, body.Type);
         const entry = addEntry(body, { AssetId: asset.Id, Type: categoryForType(body.Type)?.Id || body.Type, Name: asset.DisplayName });
         createAudit(`Added ${entry.Name}.`, 'Manual entry', 1);
         return response(clone(entry), 201);
     }
     if (path === '/properties' && method === 'POST') {
+        if (!isRecord(body) || !String(body.Name || '').trim()) return errorResponse('A property name is required.', 400);
+        const validation = propertyValidationResponse(body);
+        if (validation) return validation;
         const asset = createAsset({ DisplayName: body.Name, AssetKindId: 'kind-property' }, 'property');
         const entry = addEntry(body, { AssetId: asset.Id, Type: 'property', Name: asset.DisplayName });
         createAudit(`Added property ${asset.DisplayName}.`, 'Manual entry', 1);
@@ -734,6 +908,10 @@ function handleWrite(path, method, body, searchParams) {
     if (propertyEntryMatch && method === 'POST') {
         const asset = findAsset(decodeURIComponent(propertyEntryMatch[1]));
         if (!asset || asset.EntryKind !== 'Property') return errorResponse(`Property '${propertyEntryMatch[1]}' was not found.`);
+        if (!isRecord(body)) return errorResponse('A property entry object is required.', 400);
+        if (asset.Archived) return errorResponse('Archived properties cannot receive new entries.', 400);
+        const validation = propertyValidationResponse(body);
+        if (validation) return validation;
         const entry = addEntry(body, { AssetId: asset.Id, Type: 'property', Name: asset.DisplayName });
         createAudit(`Added property entry for ${asset.DisplayName}.`, 'Manual entry', 1);
         return response(clone(entry), 201);
@@ -779,7 +957,14 @@ function handleWrite(path, method, body, searchParams) {
         createAudit(`${method === 'DELETE' ? 'Archived' : 'Updated'} catalogue value ${value.DisplayName || value.Key}.`, 'Catalogue', 0);
         return response(clone(value));
     }
-    if (path === '/wealth/forecast' && method === 'POST') return response(buildForecast(body));
+    if (path === '/wealth/forecast' && method === 'POST') {
+        try {
+            return response(buildForecast(body));
+        } catch (error) {
+            if (error instanceof DemoValidationError) return errorResponse(error.message, 400);
+            throw error;
+        }
+    }
     if (path === '/integrations/settings' && method === 'PUT') {
         demoState.marketHours = updateObject(demoState.marketHours, body);
         return response(clone(demoState.marketHours));
@@ -846,44 +1031,187 @@ function handleWrite(path, method, body, searchParams) {
     throw new Error(`Unsupported demo ${method} route: ${path}`);
 }
 
-function buildForecast(request) {
-    const categories = buildCurrentObservation().Categories || [];
-    const included = new Set((request.includedAssets || request.IncludedAssets || demoState.categories.map(category => category.Id))
-        .map(value => normalize(value)));
-    const stackOrder = categories
-        .map(category => category.Id)
-        .filter(category => included.has(normalize(category)) || included.size === 0);
-    const values = Object.fromEntries(stackOrder.map(category => [category,
-        numberValue(categories.find(item => item.Id === category)?.Data?.at(-1)?.Value)]));
-    const annualReturn = numberValue(request.annualReturn ?? request.AnnualReturn ?? 4) / 100;
-    const monthlyContribution = numberValue(request.monthlyContribution ?? request.MonthlyContribution ?? 0);
-    const target = numberValue(request.target ?? request.Target ?? 1000000);
-    const projection = Array.from({ length: 361 }, (_, month) => {
-        const pointValues = {};
-        Object.entries(values).forEach(([category, startingValue]) => {
-            const growth = startingValue * ((1 + annualReturn) ** (month / 12));
-            pointValues[category] = Number((growth + (category === 'investments' ? monthlyContribution * month : 0)).toFixed(2));
-        });
-        const total = Number(Object.values(pointValues).reduce((sum, value) => sum + value, 0).toFixed(2));
-        return { Date: dateKey(addDays(todayKey(), month * 30)), Values: pointValues, Total: total };
-    });
-    const hit = projection.findIndex(point => point.Total >= target);
+function requestField(request, lowerName, upperName) {
+    if (Object.prototype.hasOwnProperty.call(request, lowerName)) return request[lowerName];
+    if (Object.prototype.hasOwnProperty.call(request, upperName)) return request[upperName];
+    return undefined;
+}
+
+function forecastCategoryValue(category) {
+    const aggregate = buildCategoryHistory(category, 'ALL');
     return {
-        CurrentNW: Number(Object.values(values).reduce((sum, value) => sum + value, 0).toFixed(2)),
+        hasData: aggregate.Data.length > 0,
+        value: numberValue(aggregate.Data.at(-1)?.Value)
+    };
+}
+
+function normalizeForecastCollection(request, lowerName, upperName) {
+    const raw = requestField(request, lowerName, upperName);
+    if (raw === undefined || raw === null) return [];
+    if (!Array.isArray(raw)) throw new DemoValidationError(`${upperName} must be an array.`);
+    if (raw.some(item => !isRecord(item))) throw new DemoValidationError(`${upperName} must contain objects.`);
+    return raw;
+}
+
+function buildForecast(request) {
+    if (!isRecord(request)) throw new DemoValidationError('A forecast request object is required.');
+
+    const rawIncluded = requestField(request, 'includedAssets', 'IncludedAssets');
+    if (rawIncluded !== undefined && rawIncluded !== null && !Array.isArray(rawIncluded)) {
+        throw new DemoValidationError('IncludedAssets must be an array.');
+    }
+    const includedValues = rawIncluded === undefined
+        ? DEFAULT_FORECAST_INCLUDED_ASSETS
+        : Array.isArray(rawIncluded) ? rawIncluded : [];
+    const includedIds = new Set(includedValues.map(value => normalize(value)).filter(Boolean));
+    const selectedCategories = demoState.categories.filter(category =>
+        includedIds.has(normalize(category.Id)) ||
+        includedIds.has(normalize(category.Label)) ||
+        includedIds.has(normalize(category.ClassificationValueId)));
+
+    const rawContributions = normalizeForecastCollection(request, 'contributions', 'Contributions');
+    const rawWindfalls = normalizeForecastCollection(request, 'windfalls', 'Windfalls');
+    const contributions = rawContributions
+        .map(item => ({
+            amount: numberValue(item.amount ?? item.Amount),
+            assetId: item.assetId ?? item.AssetId ?? null,
+            intervalMonths: cadenceMonths(item.cadence ?? item.Cadence)
+        }))
+        .filter(item => item.amount > 0);
+    const windfalls = rawWindfalls
+        .map((item, index) => ({
+            index,
+            amount: numberValue(item.amount ?? item.Amount),
+            date: parseDateKey(item.expectedDate ?? item.ExpectedDate),
+            include: (item.includeInCalculation ?? item.IncludeInCalculation) === true
+        }))
+        .filter(item => item.include);
+
+    const allocationCategories = new Set();
+    const allocated = new Map();
+    const unallocated = [];
+    const monthlyContribution = numberValue(requestField(request, 'monthlyContribution', 'MonthlyContribution'));
+    if (monthlyContribution !== 0) unallocated.push({ amount: monthlyContribution, intervalMonths: 1 });
+    contributions.forEach(contribution => {
+        const category = contribution.assetId ? categoryForAsset(findAsset(contribution.assetId)) : null;
+        if (category) {
+            allocationCategories.add(category.Id);
+            const categoryContributions = allocated.get(category.Id) || [];
+            categoryContributions.push(contribution);
+            allocated.set(category.Id, categoryContributions);
+        } else {
+            unallocated.push(contribution);
+        }
+    });
+
+    const currentValues = new Map(selectedCategories
+        .map(category => [category.Id, forecastCategoryValue(category)])
+        .filter(([, result]) => result.hasData)
+        .map(([categoryId, result]) => [categoryId, result.value]));
+    allocationCategories.forEach(categoryId => {
+        if (selectedCategories.some(category => category.Id === categoryId) && !currentValues.has(categoryId)) currentValues.set(categoryId, 0);
+    });
+    const forecastCategories = selectedCategories.filter(category => currentValues.has(category.Id));
+    if (forecastCategories.length === 0) throw new DemoValidationError('No included asset data');
+
+    const annualReturn = numberValue(requestField(request, 'annualReturn', 'AnnualReturn') ?? 4) / 100;
+    const monthlyRate = annualReturn <= -1 ? -1 : Math.pow(1 + annualReturn, 1 / 12) - 1;
+    const target = numberValue(requestField(request, 'target', 'Target') ?? 1000000);
+    const today = todayKey();
+    const currentWindfallIndexes = new Set();
+    let windfallBalance = windfalls
+        .filter(windfall => windfall.date && windfall.date <= today)
+        .reduce((total, windfall) => {
+            currentWindfallIndexes.add(windfall.index);
+            return total + windfall.amount;
+        }, 0);
+    let unallocatedBalance = 0;
+    const categoryValues = new Map(currentValues);
+    const stackOrder = forecastCategories.map(category => category.Label);
+    stackOrder.push(FORECAST_CONTRIBUTIONS_STACK);
+    if (windfalls.some(windfall => windfall.include)) stackOrder.push(FORECAST_WINDFALLS_STACK);
+
+    const buildPoint = (date) => {
+        const values = Object.fromEntries(forecastCategories.map(category => [category.Label,
+            Number((categoryValues.get(category.Id) || 0).toFixed(2))]));
+        values[FORECAST_CONTRIBUTIONS_STACK] = Number(unallocatedBalance.toFixed(2));
+        if (stackOrder.includes(FORECAST_WINDFALLS_STACK)) values[FORECAST_WINDFALLS_STACK] = Number(windfallBalance.toFixed(2));
+        const total = Number(Object.values(values).reduce((sum, value) => sum + numberValue(value), 0).toFixed(2));
+        return { Date: date, Values: values, Total: total };
+    };
+
+    const projection = [buildPoint(today)];
+    let currentTotal = projection[0].Total;
+    let targetHitMonth = currentTotal >= target ? 0 : -1;
+    let targetHitDate = targetHitMonth === 0 ? today : null;
+    let date = firstOfNextMonth(today);
+
+    for (let month = 1; month <= 1200 && targetHitMonth < 0; month += 1) {
+        const monthContributions = unallocated
+            .filter(contribution => (month - 1) % contribution.intervalMonths === 0)
+            .reduce((total, contribution) => total + contribution.amount, 0);
+        unallocatedBalance = (unallocatedBalance + monthContributions) * (1 + monthlyRate);
+
+        forecastCategories.forEach(category => {
+            const additions = (allocated.get(category.Id) || [])
+                .filter(contribution => (month - 1) % contribution.intervalMonths === 0)
+                .reduce((total, contribution) => total + contribution.amount, 0);
+            categoryValues.set(category.Id, (categoryValues.get(category.Id) + additions) * (1 + monthlyRate));
+        });
+
+        const currentMonth = monthKey(dateKey(date));
+        let windfallAppliedThisPeriod = false;
+        windfalls.forEach(windfall => {
+            const isCurrentMonthFuture = month === 1 && windfall.date > today && monthKey(windfall.date) === monthKey(today);
+            const isProjectionMonth = windfall.date && monthKey(windfall.date) === currentMonth;
+            if (!currentWindfallIndexes.has(windfall.index) && (isCurrentMonthFuture || isProjectionMonth)) {
+                windfallBalance += windfall.amount;
+                currentWindfallIndexes.add(windfall.index);
+                windfallAppliedThisPeriod = true;
+            }
+        });
+
+        const point = buildPoint(dateKey(date));
+        currentTotal = point.Total;
+        if (currentTotal >= target) {
+            targetHitMonth = month;
+            targetHitDate = point.Date;
+        }
+        if (date.getUTCMonth() === 0 || targetHitMonth >= 0 || month === 1200 || windfallAppliedThisPeriod) {
+            projection.push(point);
+        }
+        date = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1, 12));
+    }
+
+    const strategy = normalizeForecastStrategy(requestField(request, 'forecastStrategy', 'ForecastStrategy'));
+    return {
+        CurrentNW: Number((currentValues.values().reduce((sum, value) => sum + numberValue(value), 0) +
+            windfalls.filter(windfall => windfall.date && windfall.date <= today).reduce((sum, windfall) => sum + windfall.amount, 0)).toFixed(2)),
         Projection: projection,
         StackOrder: stackOrder,
-        SelectedStrategy: request.forecastStrategy || request.ForecastStrategy || 'fire-default',
-        SelectedStrategyDescription: 'A steady illustrative projection using fictional demo history.',
-        TargetHitMonth: hit < 0 ? 0 : hit,
-        TargetHitDate: hit < 0 ? null : projection[hit].Date,
-        RateSources: stackOrder.map(category => ({ AssetName: category, AssetType: category, AnnualRatePercent: numberValue(request.annualReturn ?? 4), Source: 'Fictional demo history', HistoricalPeriodCount: 12 }))
+        SelectedStrategy: strategy,
+        SelectedStrategyDescription: FORECAST_STRATEGY_DESCRIPTIONS[strategy],
+        TargetHitMonth: targetHitMonth,
+        TargetHitDate: targetHitDate,
+        RateSources: forecastCategories.map(category => ({
+            AssetName: category.Label,
+            AssetType: category.Id,
+            AnnualRatePercent: annualReturn * 100,
+            Source: strategy === 'fire-default' ? 'fire-default' : strategy,
+            HistoricalPeriodCount: strategy === 'fire-default' ? 0 : 12
+        }))
     };
 }
 
 export async function handleDemoRequest(url, options = {}) {
     const { path, parsed } = parseRequestUrl(url);
     const method = String(options.method || 'GET').toUpperCase();
-    const body = readBody(options);
+    let body;
+    try {
+        body = readBody(options);
+    } catch (error) {
+        return errorResponse(error.message, 400);
+    }
     if (method === 'GET' || method === 'HEAD') {
         const result = handleGet(path, parsed.searchParams);
         return method === 'HEAD' ? response(undefined, result.status) : result;

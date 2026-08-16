@@ -40,7 +40,12 @@ globalThis.fetch = async (url, options) => {
 };
 
 const { store } = await import('../store/store.js');
-const { loadBudgetView, populateBudgetSettings, setupBudgetSettings } = await import('./Budget.js');
+const {
+    getMonthlyBudgetTotals,
+    loadBudgetView,
+    populateBudgetSettings,
+    setupBudgetSettings
+} = await import('./Budget.js');
 
 function reset() {
     elements.clear();
@@ -151,6 +156,23 @@ test('budget settings render existing rows when the settings panel is initialise
     assert.match(incomeBody.children[0].innerHTML, /4,160\.00/);
 });
 
+test('budget changes restore the last saved state when persistence fails', async () => {
+    reset();
+    store.state.budgetSettings.savings = [{
+        id: 'saving-1',
+        name: 'Emergency fund',
+        amount: 300,
+        cadence: 'monthly',
+        assetId: null
+    }];
+    saveSucceeds = false;
+
+    window.updateBudgetSavingCadence(0, 'annually');
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    assert.equal(store.state.budgetSettings.savings[0].cadence, 'monthly');
+});
+
 test('budget rows escape imported names and use delegated actions', () => {
     reset();
     const incomeBody = createElement('budget-income-tbody');
@@ -246,4 +268,41 @@ test('budget overview shows configured totals and chart, then hides both when cl
     assert.equal(totalSpend.innerText, '');
     assert.equal(unallocated.innerText, '');
     assert.equal(chartInstances.at(-1).destroyed, true);
+});
+
+test('budget monthly overview normalises income, bills, and savings cadence', () => {
+    reset();
+    elements.set('budget-chart-back-btn', createElement('budget-chart-back-btn'));
+    elements.set('budgetChart', createElement('budgetChart'));
+    store.state.budgetSettings = {
+        income: [
+            { name: 'Salary', amount: 6000, cadence: 'monthly' },
+            { name: 'Bonus', amount: 3000, cadence: 'quarterly' }
+        ],
+        bills: [
+            { name: 'Rent', amount: 1800, cadence: 'monthly' },
+            { name: 'Insurance', amount: 1200, cadence: 'annually' }
+        ],
+        savings: [
+            { name: 'Emergency fund', amount: 300, cadence: 'monthly' },
+            { name: 'Annual ISA', amount: 1200, cadence: 'annually' }
+        ],
+        spend: [{ name: 'Groceries', amount: 400, cadence: 'monthly' }]
+    };
+
+    assert.deepEqual(getMonthlyBudgetTotals(store.state.budgetSettings), {
+        income: 7000,
+        bills: 1900,
+        savings: 400,
+        spend: 400,
+        unallocated: 4300
+    });
+
+    loadBudgetView();
+
+    assert.equal(elements.get('budget-total-income').innerText, '£7,000.00');
+    assert.equal(elements.get('budget-total-bills').innerText, '£1,900.00');
+    assert.equal(elements.get('budget-total-savings').innerText, '£400.00');
+    assert.equal(elements.get('budget-unallocated').innerText, '£4,300.00');
+    assert.deepEqual(chartInstances.at(-1).configuration.data.datasets[0].data, [1900, 400, 400, 4300]);
 });

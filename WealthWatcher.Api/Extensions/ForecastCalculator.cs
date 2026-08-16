@@ -23,7 +23,7 @@ public static class ForecastCalculator
     public static ForecastResponse Calculate(IEnumerable<AssetValueEntry> source, ForecastRequest request, DateOnly today)
     {
         var included = request.IncludedAssets.Select(x => x.ToLowerInvariant()).ToHashSet();
-        var entries = source.Where(e => included.Contains(e.AssetKindCode.ToLowerInvariant()))
+        var entries = source.Where(e => e.Date <= today && included.Contains(e.AssetKindCode.ToLowerInvariant()))
             .OrderBy(e => e.Date).ThenBy(e => e.Time).ToList();
         if (entries.Count == 0) throw new InvalidOperationException("No included asset data");
 
@@ -70,7 +70,7 @@ public static class ForecastCalculator
             var unallocatedAddition = contributionPlan.UnallocatedForPeriod(month);
             projectionContributions = (projectionContributions + unallocatedAddition) *
                 (1 + Monthly(projectionContributionRate));
-            windfallBalance += (double)windfalls.Where(w => w.Date.Year == date.Year && w.Date.Month == date.Month).Sum(w => w.Amount);
+            windfallBalance += WindfallsForPeriod(windfalls, date, today, month);
             foreach (var asset in assets)
             {
                 var addition = contributionTargetKeys.Contains(asset.Key)
@@ -140,7 +140,7 @@ public static class ForecastCalculator
 
         if (normalized == FirstLastAnnualizedStrategy)
         {
-            var points = BuildHistoricalPoints(source);
+            var points = BuildHistoricalPoints(source.Where(entry => entry.Date <= today));
             if (points.Count < 2)
                 return new((double)fallbackPercent / 100, "fallback", false, 0);
 
@@ -290,7 +290,7 @@ public static class ForecastCalculator
             period++;
             contributions = (contributions + contributionPlan.UnallocatedForPeriod(period)) *
                 (1 + Monthly(contributionAnnualRate));
-            windfallBalance += (double)windfalls.Where(w => w.Date.Year == date.Year && w.Date.Month == date.Month).Sum(w => w.Amount);
+            windfallBalance += WindfallsForPeriod(windfalls, date, today, period);
             foreach (var asset in assets)
             {
                 var addition = contributionTargetKeys.Contains(asset.Key)
@@ -364,6 +364,28 @@ public static class ForecastCalculator
 
         var total = weighted.Sum(asset => (double)asset.Value);
         return weighted.Sum(asset => (double)asset.Value * asset.Rate) / total;
+    }
+
+    private static double WindfallsForPeriod(
+        IReadOnlyList<(DateOnly Date, decimal Amount)> windfalls,
+        DateOnly date,
+        DateOnly today,
+        int period)
+    {
+        var amount = windfalls
+            .Where(windfall => windfall.Date.Year == date.Year && windfall.Date.Month == date.Month)
+            .Sum(windfall => windfall.Amount);
+
+        if (period == 1)
+        {
+            amount += windfalls
+                .Where(windfall => windfall.Date > today
+                    && windfall.Date.Year == today.Year
+                    && windfall.Date.Month == today.Month)
+                .Sum(windfall => windfall.Amount);
+        }
+
+        return (double)amount;
     }
 
     private static ContributionPlan BuildContributionPlan(ForecastRequest request)
