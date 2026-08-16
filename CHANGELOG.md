@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented here.
 
-The latest stable release is `v0.4.0`. Changes that have not yet been released are grouped under `Unreleased`.
+The latest stable release is `v0.5.0`. Changes that have not yet been released are grouped under `Unreleased`.
+
+## 0.5.0 - 2026-08-16
+
+- Harden API and browser-demo validation for settings, property values, archived assets, and forecast input and data handling, including safe fallbacks for malformed persisted settings.
+- Improve accessibility and resilience across the dashboard, budget, calendar, history, forecast, FIRE, integrations, and asset catalogue with focus-managed modals, chart data alternatives, period controls, stale-response guards, and explicit empty/error states.
+- Refine milestone and FIRE/forecast settings input handling and keep disabled milestone presentation hidden.
+- Add a Docker-first Getting Started guide and clarify local/trusted-network setup, health checks, backups, and private configuration handling.
 
 ## 0.4.0 - 2026-08-15
 
