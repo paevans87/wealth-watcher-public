@@ -74,7 +74,7 @@ function reset() {
     elements.set('nav-budget', createElement('nav-budget'));
     requests = [];
     saveSucceeds = true;
-    store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: true };
+    store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: true, milestones: false };
     store.state.budgetSettings = { income: [], bills: [], savings: [], spend: [] };
     store.state.assets = [];
 }
@@ -123,7 +123,7 @@ test('budget toggle updates nav visibility and persists feature settings', async
     assert.equal(elements.get('budget-settings-form').hidden, true);
     assert.equal(requests.length, 1);
     assert.deepEqual(JSON.parse(requests[0].options.body), {
-        wealthWatcherFeatureSettings: '{"fire":true,"tracker":true,"forecast":true,"budget":false}'
+        wealthWatcherFeatureSettings: '{"fire":true,"tracker":true,"forecast":true,"budget":false,"milestones":false}'
     });
 });
 

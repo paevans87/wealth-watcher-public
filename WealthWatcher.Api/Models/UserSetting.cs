@@ -12,6 +12,7 @@ public class AppPreference
     public string ForecastJson { get; set; } = "{}";
     public string FireJson { get; set; } = "{}";
     public string IntegrationJson { get; set; } = "{}";
+    public string MilestoneJson { get; set; } = MilestoneSettingsPolicy.DefaultJson;
 }
 
 [Obsolete("Use AppPreference.")]

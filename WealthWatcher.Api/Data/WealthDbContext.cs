@@ -270,6 +270,9 @@ public class WealthDbContext : DbContext
             entity.Property(e => e.ForecastJson).IsRequired();
             entity.Property(e => e.FireJson).IsRequired();
             entity.Property(e => e.IntegrationJson).IsRequired();
+            entity.Property(e => e.MilestoneJson)
+                .IsRequired()
+                .HasDefaultValue(MilestoneSettingsPolicy.DefaultJson);
         });
 
         modelBuilder.Entity<BudgetLine>(entity =>

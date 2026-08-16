@@ -65,6 +65,8 @@ jobs:
         run: npm test --prefix WealthWatcher.UI
       - name: Build UI
         run: npm run build --prefix WealthWatcher.UI
+      - name: Validate public-site source
+        run: node scripts/validate-public-site.mjs
 
   containers:
     name: Container validation

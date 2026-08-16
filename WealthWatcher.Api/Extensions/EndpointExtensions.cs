@@ -1006,6 +1006,9 @@ public static class EndpointExtensions
                     preference.FireJson,
                     "wealthWatcherFireSettings",
                     logger),
+                ["wealthWatcherMilestoneSettings"] = ReadPersistedMilestoneSettingsJson(
+                    preference.MilestoneJson,
+                    logger),
                 ["wealthWatcherBudgetSettings"] = budget
             });
         });
@@ -1062,6 +1065,14 @@ public static class EndpointExtensions
             }
 
             logger.LogInformation("Updating {Count} user settings", settings.Count);
+
+            string? normalizedMilestoneJson = null;
+            if (settings.TryGetValue("wealthWatcherMilestoneSettings", out var milestoneJson))
+            {
+                if (!MilestoneSettingsPolicy.TryNormalize(milestoneJson, out normalizedMilestoneJson, out var milestoneError))
+                    return Results.BadRequest(new { Error = milestoneError });
+            }
+
             var preference = await db.AppPreferences.FindAsync(1);
             if (preference is null)
             {
@@ -1087,6 +1098,9 @@ public static class EndpointExtensions
                         break;
                 }
             }
+
+            if (normalizedMilestoneJson is not null)
+                preference.MilestoneJson = normalizedMilestoneJson;
 
             if (hasBudgetSettings)
                 await ReplaceBudgetSettingsAsync(db, budgetDocument!);
@@ -1733,6 +1747,17 @@ public static class EndpointExtensions
 
         logger.LogWarning("Ignoring malformed persisted {SettingKey}.", settingKey);
         return "{}";
+    }
+
+    private static string ReadPersistedMilestoneSettingsJson(
+        string? json,
+        ILogger<AppPreference> logger)
+    {
+        if (MilestoneSettingsPolicy.TryNormalize(json, out var normalized, out _))
+            return normalized;
+
+        logger.LogWarning("Ignoring malformed persisted milestone settings.");
+        return MilestoneSettingsPolicy.DefaultJson;
     }
 
     private static bool TryNormalizeSettingsJson(

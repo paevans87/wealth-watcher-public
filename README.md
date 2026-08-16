@@ -133,7 +133,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Vulnerabi
 
 Original project code and documentation are released under the [MIT License](LICENSE). Third-party packages, Docker images, provider APIs, provider data, names, logos, and other external material remain subject to their own terms; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLICY.md). The current stable release is `v0.3.0`; the UI package remains private and is not published as an npm library.
+Release and versioning rules are documented in [RELEASE_POLICY.md](RELEASE_POLICY.md). The current prepared stable release is `v0.4.0`; the latest tagged release remains `v0.3.0` until this release is merged and tagged. The UI package remains private and is not published as an npm library.
 
 The project owner retains sole responsibility for merge decisions, release approval, and changing the release boundary.
 
