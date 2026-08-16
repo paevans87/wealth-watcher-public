@@ -51,6 +51,14 @@ test('public demo banner is fixed above the page and preserves its layout space'
     assert.match(indexMarkup, /class="action-btn demo-main-site-link"\s+href="https:\/\/wealthwatcher\.co\.uk\/"/);
 });
 
+test('feature-gated Milestones card stays under its renderer visibility contract', () => {
+    const milestoneCard = indexMarkup.match(/<section id="milestones-dashboard-card"[^>]*>/)?.[0];
+
+    assert.ok(milestoneCard);
+    assert.match(milestoneCard, /\shidden(?:\s|>)/);
+    assert.doesNotMatch(milestoneCard, /\sdata-page-content(?:\s|>)/);
+});
+
 test('high-data pages have explicit mobile containment contracts', () => {
     assert.match(stylesheet, /#forecast-view\s+\.forecast-control-actions\s*\{[\s\S]*flex:\s*0 1 auto/);
     assert.match(stylesheet, /#fire-view\s+\.fire-dashboard\s*>\s*\.grid-container\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
