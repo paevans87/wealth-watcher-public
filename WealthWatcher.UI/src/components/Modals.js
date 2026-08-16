@@ -82,6 +82,20 @@ function normalizeAssetId(value) {
     return String(value ?? '').trim().toLowerCase();
 }
 
+function parseFiniteNumber(value, fallback) {
+    const parsed = Number.parseFloat(String(value ?? '').replace(/,/g, ''));
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function cloneSettings(settings) {
+    if (settings === undefined || settings === null) return {};
+    try {
+        return JSON.parse(JSON.stringify(settings));
+    } catch {
+        return {};
+    }
+}
+
 function debounceSave(timer, callback) {
     clearTimeout(timer);
     return setTimeout(callback, 500);
@@ -102,8 +116,9 @@ function readShowZeroValuesOnDashboard(settings) {
     return legacyControl ? legacyControl.checked !== true : settings.showZeroValuesOnDashboard === true;
 }
 
-async function saveGeneralSettings() {
+export async function saveGeneralSettings() {
     const current = normalizeGeneralSettings(store.state.generalSettings);
+    const previousSettings = cloneSettings(store.state.generalSettings);
     const showZeroValuesOnDashboard = readShowZeroValuesOnDashboard(current);
     const showZeroValuesOnHistory = readGeneralCheckbox(
         'general-setting-show-zero-values-history',
@@ -121,6 +136,8 @@ async function saveGeneralSettings() {
     };
 
     if (!await saveDbSettings('wealthWatcherGeneralSettings', store.state.generalSettings)) {
+        store.state.generalSettings = previousSettings;
+        populateGeneralSettings();
         showToast({
             title: 'Unable to save settings',
             message: 'Your general settings could not be saved.',
@@ -145,6 +162,7 @@ function scheduleGeneralSave() {
 }
 
 export async function saveFireSettings() {
+    const previousSettings = cloneSettings(store.state.fireSettings);
     const income = parseFloat(String(document.getElementById('fire-setting-income')?.value ?? '').replace(/,/g, ''));
     const swr = parseFloat(String(document.getElementById('fire-setting-swr')?.value ?? ''));
     const includeStatePension = document.getElementById('fire-setting-include-state-pension')?.checked === true;
@@ -153,8 +171,9 @@ export async function saveFireSettings() {
     const spAmount = Number.isFinite(configuredStatePension)
         ? configuredStatePension
         : (Number.isFinite(storedStatePension) ? storedStatePension : 12547);
-    if (!Number.isFinite(income) || !Number.isFinite(swr) ||
-        (includeStatePension && !Number.isFinite(configuredStatePension))) {
+    if (!Number.isFinite(income) || income < 0 ||
+        !Number.isFinite(swr) || swr <= 0 ||
+        (includeStatePension && (!Number.isFinite(configuredStatePension) || configuredStatePension < 0))) {
         showToast({
             title: 'Unable to save FIRE settings',
             message: 'Enter valid income, withdrawal rate, and state pension values.',
@@ -180,6 +199,8 @@ export async function saveFireSettings() {
     };
 
     if (!await saveDbSettings('wealthWatcherFireSettings', store.state.fireSettings)) {
+        store.state.fireSettings = previousSettings;
+        populateFireSettings();
         showToast({
             title: 'Unable to save FIRE settings',
             message: 'Your FIRE settings could not be saved.',
@@ -283,17 +304,19 @@ export function populateFireSettings() {
     
     const incomeInput = document.getElementById('fire-setting-income');
     if (incomeInput) {
-        incomeInput.value = (parseFloat(s.targetIncome) || 4000).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        incomeInput.value = parseFiniteNumber(s.targetIncome, 4000)
+            .toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     const swrInput = document.getElementById('fire-setting-swr');
-    if (swrInput) swrInput.value = parseFloat(s.swr) || 4.0;
+    if (swrInput) swrInput.value = parseFiniteNumber(s.swr, 4.0);
     
     const includeSp = s.includeStatePension === true;
     const spCb = document.getElementById('fire-setting-include-state-pension');
     if (spCb) spCb.checked = includeSp;
     const spInput = document.getElementById('fire-setting-state-pension');
     if (spInput) {
-        spInput.value = (parseFloat(s.statePensionAmount) || 12547).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        spInput.value = parseFiniteNumber(s.statePensionAmount, 12547)
+            .toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         spInput.disabled = !includeSp;
         spInput.required = includeSp;
     }

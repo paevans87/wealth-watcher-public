@@ -44,6 +44,91 @@ public sealed class EndpointExtensionsTests
     }
 
     [Fact]
+    public async Task Generic_property_route_rejects_negative_value_and_mortgage_before_persistence()
+    {
+        await using var host = await ForecastHost.CreateAsync([]);
+
+        var negativeValue = await host.PostWealthAsync(new WealthEntryDto
+        {
+            Name = "Home",
+            AssetKindCode = AssetKindCodes.Property,
+            Value = -1m,
+            Mortgage = 0m
+        });
+        var negativeMortgage = await host.PostWealthAsync(new WealthEntryDto
+        {
+            Name = "Home",
+            AssetKindCode = AssetKindCodes.Property,
+            Value = 200_000m,
+            Mortgage = -1m
+        });
+
+        Assert.Equal(StatusCodes.Status400BadRequest, negativeValue.StatusCode);
+        Assert.Equal(StatusCodes.Status400BadRequest, negativeMortgage.StatusCode);
+        Assert.Equal(
+            "Property value and mortgage must be zero or greater.",
+            negativeValue.Body!.RootElement.GetProperty("Error").GetString());
+        Assert.Empty(host.Db.PropertyAssetValueEntries);
+        Assert.DoesNotContain(host.Db.Assets, asset => asset.DisplayName == "Home");
+    }
+
+    [Fact]
+    public async Task Settings_endpoint_rejects_malformed_json_without_partial_persistence()
+    {
+        var preference = new AppPreference
+        {
+            GeneralJson = "{\"showSparklines\":true}",
+            ForecastJson = "{\"annualReturn\":4}"
+        };
+        await using var host = await ForecastHost.CreateAsync([], preference: preference);
+
+        var response = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherGeneralSettings"] = "{\"showSparklines\":false}",
+            ["wealthWatcherForecastSettings"] = "[]"
+        });
+
+        Assert.Equal(StatusCodes.Status400BadRequest, response.StatusCode);
+        Assert.Equal("{\"showSparklines\":true}", host.Db.AppPreferences.Single().GeneralJson);
+        Assert.Equal("{\"annualReturn\":4}", host.Db.AppPreferences.Single().ForecastJson);
+    }
+
+    [Fact]
+    public async Task Settings_endpoint_rejects_invalid_nested_shapes_and_preserves_budget()
+    {
+        await using var host = await ForecastHost.CreateAsync([]);
+
+        var response = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherBudgetSettings"] = "{\"income\":{}}"
+        });
+
+        Assert.Equal(StatusCodes.Status400BadRequest, response.StatusCode);
+        Assert.Empty(host.Db.BudgetLines);
+    }
+
+    [Fact]
+    public async Task Settings_get_returns_safe_objects_for_malformed_persisted_documents()
+    {
+        var preference = new AppPreference
+        {
+            GeneralJson = "not-json",
+            FeatureJson = "null",
+            ForecastJson = "[]",
+            FireJson = "{\"includedAssets\":{}}"
+        };
+        await using var host = await ForecastHost.CreateAsync([], preference: preference);
+
+        var response = await host.GetSettingsAsync();
+
+        Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
+        Assert.Equal("{}", response.Body!.RootElement.GetProperty("wealthWatcherGeneralSettings").GetString());
+        Assert.Equal("{}", response.Body.RootElement.GetProperty("wealthWatcherFeatureSettings").GetString());
+        Assert.Equal("{}", response.Body.RootElement.GetProperty("wealthWatcherForecastSettings").GetString());
+        Assert.Equal("{}", response.Body.RootElement.GetProperty("wealthWatcherFireSettings").GetString());
+    }
+
+    [Fact]
     public async Task Calendar_endpoint_returns_one_month_payload_with_historic_and_current_values()
     {
         var asset = new Asset { DisplayName = "Current account" };
@@ -747,7 +832,10 @@ public sealed class EndpointExtensionsTests
     private sealed class ForecastHost : IAsyncDisposable
     {
         private readonly WebApplication app;
+        private readonly RouteEndpoint wealthEndpoint;
         private readonly RouteEndpoint forecastEndpoint;
+        private readonly RouteEndpoint settingsGetEndpoint;
+        private readonly RouteEndpoint settingsPostEndpoint;
         private readonly RouteEndpoint aggregateEndpoint;
         private readonly RouteEndpoint calendarEndpoint;
         private readonly RouteEndpoint dashboardEndpoint;
@@ -763,7 +851,14 @@ public sealed class EndpointExtensionsTests
                 .SelectMany(source => source.Endpoints)
                 .OfType<RouteEndpoint>()
                 .ToArray();
+            wealthEndpoint = endpoints.Single(endpoint => endpoint.RoutePattern.RawText == "/api/wealth");
             forecastEndpoint = endpoints.Single(endpoint => endpoint.RoutePattern.RawText == "/api/wealth/forecast");
+            settingsGetEndpoint = endpoints.Single(endpoint =>
+                endpoint.RoutePattern.RawText == "/api/settings" &&
+                endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(HttpMethods.Get) == true);
+            settingsPostEndpoint = endpoints.Single(endpoint =>
+                endpoint.RoutePattern.RawText == "/api/settings" &&
+                endpoint.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods.Contains(HttpMethods.Post) == true);
             aggregateEndpoint = endpoints.Single(endpoint => endpoint.RoutePattern.RawText == "/api/wealth/{category}/aggregate");
             calendarEndpoint = endpoints.Single(endpoint => endpoint.RoutePattern.RawText == "/api/calendar");
             dashboardEndpoint = endpoints.Single(endpoint => endpoint.RoutePattern.RawText == "/api/dashboard");
@@ -779,7 +874,8 @@ public sealed class EndpointExtensionsTests
             IEnumerable<AssetValueEntry> entries,
             DateTimeOffset? now = null,
             IEnumerable<Asset>? assets = null,
-            IEnumerable<IntegrationConnection>? connections = null)
+            IEnumerable<IntegrationConnection>? connections = null,
+            AppPreference? preference = null)
         {
             var databaseRoot = new InMemoryDatabaseRoot();
             var builder = WebApplication.CreateBuilder();
@@ -802,6 +898,8 @@ public sealed class EndpointExtensionsTests
                 .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
             if (assets is not null)
                 db.Assets.AddRange(assets);
+            if (preference is not null)
+                db.AppPreferences.Add(preference);
             if (connections is not null)
             {
                 foreach (var connection in connections)
@@ -999,6 +1097,15 @@ public sealed class EndpointExtensionsTests
             return new EndpointResponse(context.Response.StatusCode, responseBody);
         }
 
+        public Task<EndpointResponse> PostWealthAsync(WealthEntryDto request) =>
+            InvokeJsonAsync(wealthEndpoint, HttpMethods.Post, request);
+
+        public Task<EndpointResponse> GetSettingsAsync() =>
+            InvokeEndpointAsync(settingsGetEndpoint, HttpMethods.Get);
+
+        public Task<EndpointResponse> PostSettingsAsync(Dictionary<string, string?> settings) =>
+            InvokeJsonAsync(settingsPostEndpoint, HttpMethods.Post, settings);
+
         public async Task<JsonDocument> GetAggregateAsync(
             string category,
             string period,
@@ -1083,16 +1190,26 @@ public sealed class EndpointExtensionsTests
             InvokeJsonAsync(propertyPatchEndpoint, HttpMethods.Patch, request, id);
 
         private async Task<EndpointResponse> InvokeJsonAsync(RouteEndpoint endpoint, string method, object body, Guid? id = null)
+            => await InvokeEndpointAsync(endpoint, method, body, id);
+
+        private async Task<EndpointResponse> InvokeEndpointAsync(
+            RouteEndpoint endpoint,
+            string method,
+            object? body = null,
+            Guid? id = null)
         {
             var context = new DefaultHttpContext { RequestServices = app.Services };
             context.Request.Method = method;
-            context.Request.ContentType = "application/json";
-            context.Request.Body = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(body));
-            context.Request.ContentLength = context.Request.Body.Length;
             if (id.HasValue) context.Request.RouteValues["id"] = id.Value.ToString();
+            if (body is not null)
+            {
+                context.Request.ContentType = "application/json";
+                context.Request.Body = new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(body));
+                context.Request.ContentLength = context.Request.Body.Length;
+                context.Features.Set<IHttpRequestBodyDetectionFeature>(new RequestBodyDetectionFeature());
+            }
             context.Response.Body = new MemoryStream();
             context.Response.StatusCode = StatusCodes.Status200OK;
-            context.Features.Set<IHttpRequestBodyDetectionFeature>(new RequestBodyDetectionFeature());
 
             await endpoint.RequestDelegate!(context);
 

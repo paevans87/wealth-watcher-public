@@ -13,9 +13,11 @@ const {
     getForecastAssetCalculationsPreference,
     getForecastCalculationStrategy,
     getForecastContributionInputs,
+    getForecastTargetFromFireSettings,
     renderHistoricalRateSources,
     setForecastAssetCalculationsPreference,
-    setForecastPageState
+    setForecastPageState,
+    setupForecast
 } = await import('./ForecastV2.js');
 
 function createForecastDom() {
@@ -81,6 +83,18 @@ function withForecastDom(callback) {
     }
 }
 
+async function withForecastDomAsync(callback) {
+    const originalDocument = globalThis.document;
+    const dom = createForecastDom();
+    globalThis.document = dom.document;
+    try {
+        return await callback(dom);
+    } finally {
+        if (originalDocument === undefined) delete globalThis.document;
+        else globalThis.document = originalDocument;
+    }
+}
+
 test('forecast strategy defaults to FIRE and accepts each named approach', () => {
     assert.equal(getForecastCalculationStrategy({}), 'fire-default');
     assert.equal(getForecastCalculationStrategy({ forecastStrategy: 'median-monthly-return' }), 'median-monthly-return');
@@ -127,6 +141,77 @@ test('first-to-last strategy is sent unchanged through the forecast request', ()
 
     assert.equal(request.forecastStrategy, FIRST_LAST_ANNUALIZED_STRATEGY);
     assert.equal(request.annualReturn, 4);
+});
+
+test('forecast settings restore the last saved state when persistence fails', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: false });
+    const originalSettings = {
+        dateOfBirth: '1990-01-01',
+        annualReturn: 4,
+        monthlyContribution: 100,
+        forecastStrategy: 'fire-default'
+    };
+    store.state.forecastSettings = { ...originalSettings };
+
+    await withForecastDomAsync(async ({ elements }) => {
+        const listeners = {};
+        const form = {
+            checkValidity: () => true,
+            addEventListener(name, callback) {
+                listeners[name] = callback;
+            }
+        };
+        elements.set('forecast-settings-form', form);
+        elements.set('forecast-setting-dob', { value: '1990-01-01' });
+        elements.set('forecast-setting-return', { value: '6' });
+        elements.set('forecast-setting-contribution', { value: '250' });
+        elements.set('forecast-setting-calculation-strategy', { value: 'fire-default' });
+
+        setupForecast();
+        listeners.input({ target: elements.get('forecast-setting-return') });
+        await new Promise(resolve => setTimeout(resolve, 550));
+
+        assert.deepEqual(store.state.forecastSettings, originalSettings);
+        assert.equal(elements.get('forecast-setting-return').value, 4);
+        assert.equal(elements.get('forecast-setting-contribution').value, 100);
+    });
+
+    globalThis.fetch = originalFetch;
+});
+
+test('forecast request preserves zero return/contribution values and future windfalls', () => {
+    const futureWindfall = {
+        Name: 'Inheritance', Amount: 100000, ExpectedDate: '2099-12-31', IncludeInCalculation: true
+    };
+    const request = buildForecastRequest({
+        annualReturn: 0,
+        monthlyContribution: 0,
+        forecastStrategy: 'fire-default'
+    }, 0, {
+        includeWindfalls: true,
+        windfalls: [futureWindfall],
+        includedAssets: ['investments']
+    });
+
+    assert.equal(request.annualReturn, 0);
+    assert.equal(request.monthlyContribution, 0);
+    assert.deepEqual(request.windfalls, [futureWindfall]);
+});
+
+test('FIRE forecast target preserves explicit zero income and state pension values', () => {
+    assert.equal(getForecastTargetFromFireSettings({
+        targetIncome: 0,
+        swr: 4,
+        includeStatePension: true,
+        statePensionAmount: 0
+    }), 0);
+    assert.equal(getForecastTargetFromFireSettings({
+        targetIncome: 4000,
+        swr: 4,
+        includeStatePension: true,
+        statePensionAmount: 0
+    }), 1200000);
 });
 
 test('projection chart is stacked and each asset type has its own dataset', () => {

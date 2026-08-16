@@ -84,8 +84,9 @@ public static class EndpointExtensions
             var name = dto.Name.Trim();
             if (string.IsNullOrWhiteSpace(name))
                 return Results.BadRequest(new { Error = "A property name is required." });
-            if (dto.Value < 0 || dto.Mortgage < 0)
-                return Results.BadRequest(new { Error = "Property value and mortgage must be zero or greater." });
+            var validationError = ValidatePropertyValues(dto.Value, dto.Mortgage);
+            if (validationError is not null)
+                return Results.BadRequest(new { Error = validationError });
 
             AssetCatalogService.EnsureDefaults(db);
             var propertyExists = await db.Assets.AnyAsync(asset =>
@@ -138,8 +139,9 @@ public static class EndpointExtensions
                 return Results.NotFound(new { Error = "Property not found." });
             if (asset.ArchivedAt.HasValue)
                 return Results.BadRequest(new { Error = "Archived properties cannot receive new entries." });
-            if (dto.Value < 0 || dto.Mortgage < 0)
-                return Results.BadRequest(new { Error = "Property value and mortgage must be zero or greater." });
+            var validationError = ValidatePropertyValues(dto.Value, dto.Mortgage);
+            if (validationError is not null)
+                return Results.BadRequest(new { Error = validationError });
 
             var now = timeProvider.GetUtcNow().UtcDateTime;
             var entryDate = dto.Date == default ? DateOnly.FromDateTime(now) : dto.Date;
@@ -261,6 +263,10 @@ public static class EndpointExtensions
 
             if (string.Equals(kindCode, AssetKindCodes.Property, StringComparison.OrdinalIgnoreCase))
             {
+                var validationError = ValidatePropertyValues(dto.Value, dto.Mortgage);
+                if (validationError is not null)
+                    return Results.BadRequest(new { Error = validationError });
+
                 var propertyId = dto.PropertyId ?? dto.AssetId;
                 asset = propertyId.HasValue
                     ? await LoadPropertyAssetAsync(db, propertyId.Value)
@@ -286,6 +292,10 @@ public static class EndpointExtensions
                         .Select(entry => entry.Mortgage)
                         .FirstOrDefaultAsync();
                 }
+
+                validationError = ValidatePropertyValues(dto.Value, mortgage);
+                if (validationError is not null)
+                    return Results.BadRequest(new { Error = validationError });
 
                 var propertyEntry = new PropertyAssetValueEntry(
                     asset.DisplayName,
@@ -972,28 +982,88 @@ public static class EndpointExtensions
             }
         });
 
-        app.MapGet("/api/settings", async (WealthDbContext db) =>
+        app.MapGet("/api/settings", async (
+            WealthDbContext db,
+            ILogger<AppPreference> logger) =>
         {
             var preference = await db.AppPreferences.FindAsync(1) ?? new AppPreference();
             var budget = await BuildBudgetSettingsAsync(db);
             return Results.Ok(new Dictionary<string, string>
             {
-                ["wealthWatcherGeneralSettings"] = preference.GeneralJson,
-                ["wealthWatcherFeatureSettings"] = preference.FeatureJson,
-                ["wealthWatcherForecastSettings"] = preference.ForecastJson,
-                ["wealthWatcherFireSettings"] = preference.FireJson,
-                ["wealthWatcherMilestoneSettings"] = preference.MilestoneJson,
+                ["wealthWatcherGeneralSettings"] = ReadPersistedSettingsJson(
+                    preference.GeneralJson,
+                    "wealthWatcherGeneralSettings",
+                    logger),
+                ["wealthWatcherFeatureSettings"] = ReadPersistedSettingsJson(
+                    preference.FeatureJson,
+                    "wealthWatcherFeatureSettings",
+                    logger),
+                ["wealthWatcherForecastSettings"] = ReadPersistedSettingsJson(
+                    preference.ForecastJson,
+                    "wealthWatcherForecastSettings",
+                    logger),
+                ["wealthWatcherFireSettings"] = ReadPersistedSettingsJson(
+                    preference.FireJson,
+                    "wealthWatcherFireSettings",
+                    logger),
+                ["wealthWatcherMilestoneSettings"] = ReadPersistedMilestoneSettingsJson(
+                    preference.MilestoneJson,
+                    logger),
                 ["wealthWatcherBudgetSettings"] = budget
             });
         });
 
         app.MapPost("/api/settings", async (
-            Dictionary<string, string> settings,
+            Dictionary<string, string?>? settings,
             WealthDbContext db,
             ILogger<AppPreference> logger,
             IWealthCacheInvalidator invalidator,
             CancellationToken cancellationToken) =>
         {
+            if (settings is null)
+                return Results.BadRequest(new { Error = "A settings object is required." });
+
+            // Validate and normalize the complete request before touching the
+            // tracked preference or budget entities. This keeps a malformed
+            // setting from partially applying a multi-setting save and gives
+            // clients an explicit failure they can use to retain/restore the
+            // last known persisted state.
+            var normalizedSettings = new Dictionary<string, string>(StringComparer.Ordinal);
+            BudgetSettingsDocument? budgetDocument = null;
+            var hasBudgetSettings = false;
+            foreach (var pair in settings)
+            {
+                switch (pair.Key)
+                {
+                    case "wealthWatcherGeneralSettings":
+                    case "wealthWatcherFeatureSettings":
+                    case "wealthWatcherForecastSettings":
+                    case "wealthWatcherFireSettings":
+                        if (!TryNormalizeSettingsJson(
+                                pair.Value,
+                                pair.Key,
+                                out var normalized,
+                                out var validationError))
+                            return Results.BadRequest(new { Error = validationError });
+                        normalizedSettings[pair.Key] = normalized;
+                        break;
+                    case "wealthWatcherBudgetSettings":
+                        if (!TryNormalizeSettingsJson(
+                                pair.Value,
+                                pair.Key,
+                                out var normalizedBudget,
+                                out var budgetValidationError))
+                            return Results.BadRequest(new { Error = budgetValidationError });
+                        if (!TryDeserializeBudgetSettings(
+                                normalizedBudget,
+                                out budgetDocument,
+                                out var budgetError))
+                            return Results.BadRequest(new { Error = budgetError });
+                        hasBudgetSettings = true;
+                        break;
+                }
+            }
+
             logger.LogInformation("Updating {Count} user settings", settings.Count);
 
             string? normalizedMilestoneJson = null;
@@ -1010,32 +1080,32 @@ public static class EndpointExtensions
                 db.AppPreferences.Add(preference);
             }
 
-            foreach (var pair in settings)
+            foreach (var pair in normalizedSettings)
             {
                 switch (pair.Key)
                 {
                     case "wealthWatcherGeneralSettings":
-                        preference.GeneralJson = NormalizeJson(pair.Value);
+                        preference.GeneralJson = pair.Value;
                         break;
                     case "wealthWatcherFeatureSettings":
-                        preference.FeatureJson = NormalizeJson(pair.Value);
+                        preference.FeatureJson = pair.Value;
                         break;
                     case "wealthWatcherForecastSettings":
-                        preference.ForecastJson = NormalizeJson(pair.Value);
+                        preference.ForecastJson = pair.Value;
                         break;
                     case "wealthWatcherFireSettings":
-                        preference.FireJson = NormalizeJson(pair.Value);
-                        break;
-                    case "wealthWatcherMilestoneSettings":
-                        preference.MilestoneJson = normalizedMilestoneJson!;
-                        break;
-                    case "wealthWatcherBudgetSettings":
-                        await ReplaceBudgetSettingsAsync(db, pair.Value);
+                        preference.FireJson = pair.Value;
                         break;
                 }
             }
 
-            await db.SaveChangesAsync();
+            if (normalizedMilestoneJson is not null)
+                preference.MilestoneJson = normalizedMilestoneJson;
+
+            if (hasBudgetSettings)
+                await ReplaceBudgetSettingsAsync(db, budgetDocument!);
+
+            await db.SaveChangesAsync(cancellationToken);
             await invalidator.InvalidateWealthAsync(cancellationToken);
             return Results.Ok();
         });
@@ -1660,17 +1730,159 @@ public static class EndpointExtensions
             invested[identity(entry)] = investment.InvestedCapital.Value;
     }
 
-    private static string NormalizeJson(string json)
+    private static string? ValidatePropertyValues(decimal value, decimal? mortgage)
     {
+        return value < 0 || mortgage is < 0
+            ? "Property value and mortgage must be zero or greater."
+            : null;
+    }
+
+    private static string ReadPersistedSettingsJson(
+        string? json,
+        string settingKey,
+        ILogger<AppPreference> logger)
+    {
+        if (TryNormalizeSettingsJson(json, settingKey, out var normalized, out _))
+            return normalized;
+
+        logger.LogWarning("Ignoring malformed persisted {SettingKey}.", settingKey);
+        return "{}";
+    }
+
+    private static string ReadPersistedMilestoneSettingsJson(
+        string? json,
+        ILogger<AppPreference> logger)
+    {
+        if (MilestoneSettingsPolicy.TryNormalize(json, out var normalized, out _))
+            return normalized;
+
+        logger.LogWarning("Ignoring malformed persisted milestone settings.");
+        return MilestoneSettingsPolicy.DefaultJson;
+    }
+
+    private static bool TryNormalizeSettingsJson(
+        string? json,
+        string settingKey,
+        out string normalized,
+        out string error)
+    {
+        normalized = "{}";
+        error = $"{settingKey} must contain a JSON object.";
+        if (string.IsNullOrWhiteSpace(json))
+            return true;
+
+        JsonDocument document;
         try
         {
-            using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
-            return document.RootElement.GetRawText();
+            document = JsonDocument.Parse(json);
         }
         catch (JsonException)
         {
-            return "{}";
+            error = $"{settingKey} must contain valid JSON.";
+            return false;
         }
+
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return false;
+
+            if (!ValidateSettingsArrayShapes(document.RootElement, settingKey, out error))
+                return false;
+
+            normalized = document.RootElement.GetRawText();
+            return true;
+        }
+    }
+
+    private static bool ValidateSettingsArrayShapes(
+        JsonElement root,
+        string settingKey,
+        out string error)
+    {
+        HashSet<string> arrayProperties = settingKey switch
+        {
+            "wealthWatcherBudgetSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "income", "bills", "savings", "spend"
+            },
+            "wealthWatcherForecastSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "includedAssets", "contributions", "windfalls"
+            },
+            "wealthWatcherFireSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "includedAssets", "windfalls"
+            },
+            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        };
+        HashSet<string> objectArrayProperties = settingKey switch
+        {
+            "wealthWatcherBudgetSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "income", "bills", "savings", "spend"
+            },
+            "wealthWatcherForecastSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "contributions", "windfalls"
+            },
+            "wealthWatcherFireSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "windfalls"
+            },
+            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        };
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!arrayProperties.Contains(property.Name))
+                continue;
+            if (property.Value.ValueKind != JsonValueKind.Array)
+            {
+                error = $"{settingKey}.{property.Name} must be a JSON array.";
+                return false;
+            }
+
+            if (!objectArrayProperties.Contains(property.Name))
+                continue;
+            var index = 0;
+            foreach (var item in property.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    error = $"{settingKey}.{property.Name}[{index}] must be a JSON object.";
+                    return false;
+                }
+                index++;
+            }
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryDeserializeBudgetSettings(
+        string json,
+        out BudgetSettingsDocument? document,
+        out string error)
+    {
+        try
+        {
+            document = JsonSerializer.Deserialize<BudgetSettingsDocument>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            document = null;
+        }
+
+        if (document is null)
+        {
+            error = "wealthWatcherBudgetSettings must contain a valid budget object.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
     }
 
     private static async Task<string> BuildBudgetSettingsAsync(WealthDbContext db)
@@ -1699,20 +1911,10 @@ public static class EndpointExtensions
         assetId = line.AssetMappings.FirstOrDefault()?.AssetId
     };
 
-    private static async Task ReplaceBudgetSettingsAsync(WealthDbContext db, string json)
+    private static async Task ReplaceBudgetSettingsAsync(
+        WealthDbContext db,
+        BudgetSettingsDocument document)
     {
-        BudgetSettingsDocument? document;
-        try
-        {
-            document = JsonSerializer.Deserialize<BudgetSettingsDocument>(json, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            document = null;
-        }
-        if (document is null)
-            return;
-
         db.BudgetLineAssetMappings.RemoveRange(await db.BudgetLineAssetMappings.ToListAsync());
         db.BudgetLines.RemoveRange(await db.BudgetLines.ToListAsync());
         var validAssetIds = (await db.Assets.Select(asset => asset.Id).ToListAsync()).ToHashSet();
@@ -1730,6 +1932,8 @@ public static class EndpointExtensions
     {
         foreach (var item in items ?? [])
         {
+            if (item is null)
+                continue;
             if (string.IsNullOrWhiteSpace(item.Name))
                 continue;
             var line = new BudgetLine

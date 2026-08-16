@@ -698,6 +698,112 @@ test('Dashboard respects an explicit Asset Group assignment over the Type defaul
     }
 });
 
+test('Dashboard splits mixed AssetKind balances across each asset group', async () => {
+    const originals = {
+        period: store.state.currentPeriod,
+        categories: store.state.CATEGORIES,
+        groups: store.state.classificationGroups,
+        assets: store.state.assets,
+        assetsLoaded: store.state.assetsLoaded,
+        settings: store.state.generalSettings
+    };
+
+    try {
+        elements.clear();
+        store.clearCache();
+        store.state.currentPeriod = '1M';
+        store.state.generalSettings = { hideZeroValues: false, showSparklines: false };
+        store.state.assetsLoaded = true;
+        store.state.classificationGroups = [{
+            Key: 'asset-kind',
+            Values: [{
+                Id: 'kind-investments',
+                Key: 'investments',
+                DisplayName: 'Investments',
+                AssetGroupId: 'group-liquid'
+            }]
+        }, {
+            Key: 'asset-group',
+            Values: [
+                { Id: 'group-liquid', Key: 'liquid', DisplayName: 'Liquid', DisplayOrder: 1 },
+                { Id: 'group-illiquid', Key: 'illiquid', DisplayName: 'Illiquid', DisplayOrder: 2 }
+            ]
+        }];
+        store.state.assets = [
+            {
+                Id: 'asset-isa',
+                DisplayName: 'ISA',
+                AssetKindId: 'kind-investments',
+                AssetKindCode: 'investments',
+                AssetGroupId: 'group-liquid',
+                AssetGroupCode: 'liquid',
+                AssetGroupAssignmentSet: true
+            },
+            {
+                Id: 'asset-pension',
+                DisplayName: 'Pension portfolio',
+                AssetKindId: 'kind-investments',
+                AssetKindCode: 'investments',
+                AssetGroupId: 'group-illiquid',
+                AssetGroupCode: 'illiquid',
+                AssetGroupAssignmentSet: true
+            }
+        ];
+        store.state.CATEGORIES = [{
+            Id: 'investments',
+            Label: 'Investments',
+            Color: '#10b981',
+            ClassificationValueId: 'kind-investments',
+            AssetGroupId: 'group-liquid',
+            AssetGroupCode: 'liquid'
+        }];
+        mockApiResponses = {
+            '/wealth/investments/aggregate?period=1M': {
+                Data: [
+                    {
+                        Time: '2026-07-01',
+                        Value: 250,
+                        Invested: 200,
+                        Breakdown: { ISA: 100, 'Pension portfolio': 150 }
+                    },
+                    {
+                        Time: '2026-07-30',
+                        Value: 300,
+                        Invested: 240,
+                        Breakdown: { ISA: 120, 'Pension portfolio': 180 }
+                    }
+                ],
+                IsManual: true,
+                LatestBreakdown: { ISA: 120, 'Pension portfolio': 180 }
+            },
+            '/wealth/investments/aggregate?period=YTD': {
+                Data: [{ Time: '2026-01-01', Value: 250, Invested: 200 }]
+            }
+        };
+
+        await loadDashboard({ force: true });
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        assert.equal(elements.get('liquid-total').innerText, '£120.00');
+        assert.equal(elements.get('illiquid-total').innerText, '£180.00');
+        assert.equal(elements.get('global-total').innerText, '£300.00');
+        assert.match(elements.get('liquid-grid').innerHTML, /ISA/);
+        assert.doesNotMatch(elements.get('liquid-grid').innerHTML, /Pension portfolio/);
+        assert.match(elements.get('illiquid-grid').innerHTML, /Pension portfolio/);
+        assert.doesNotMatch(elements.get('illiquid-grid').innerHTML, />ISA</);
+    } finally {
+        store.clearCache();
+        store.state.currentPeriod = originals.period;
+        store.state.CATEGORIES = originals.categories;
+        store.state.classificationGroups = originals.groups;
+        store.state.assets = originals.assets;
+        store.state.assetsLoaded = originals.assetsLoaded;
+        store.state.generalSettings = originals.settings;
+        mockApiResponses = {};
+        fetchRequests = [];
+    }
+});
+
 test('Dashboard targets the live Asset Group grids after rendering the unclassified banner', async () => {
     const originals = {
         period: store.state.currentPeriod,

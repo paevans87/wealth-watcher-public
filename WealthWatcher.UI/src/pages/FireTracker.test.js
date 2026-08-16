@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { store } from '../store/store.js';
-import { renderFireView } from './FireTracker.js';
+import { getCurrentWindfallsAmount, renderFireView } from './FireTracker.js';
 
 // Setup minimal DOM environment mock for testing renderFireView
 function setupMockDOM() {
@@ -91,8 +91,8 @@ test('FireTracker calculates investable assets correctly with custom includedAss
         includeWindfalls: true,
         includedAssets: ['investments', 'pensions'],
         windfalls: [
-            { Description: 'Inheritance', Amount: 50000, IncludeInCalculation: true },
-            { Description: 'Bonus', Amount: 10000, IncludeInCalculation: false }
+            { Description: 'Inheritance', Amount: 50000, ExpectedDate: '2000-01-01', IncludeInCalculation: true },
+            { Description: 'Bonus', Amount: 10000, ExpectedDate: '2000-01-01', IncludeInCalculation: false }
         ]
     };
 
@@ -109,6 +109,40 @@ test('FireTracker calculates investable assets correctly with custom includedAss
     const currentAssetsEl = document.getElementById('fire-current-assets');
     // Investments (100k) + Pensions (150k) + Active Windfall (50k) = 300,000. Property, Cash, Savings excluded.
     assert.strictEqual(currentAssetsEl.innerText, '£300,000.00');
+});
+
+test('FireTracker keeps future windfalls forecast-only and preserves explicit zero FIRE values', () => {
+    const elements = setupMockDOM();
+    store.state.fireSettings = {
+        targetIncome: 0,
+        swr: 4,
+        includeStatePension: true,
+        statePensionAmount: 0,
+        includeWindfalls: true,
+        includedAssets: ['investments'],
+        windfalls: [
+            { Amount: 50000, ExpectedDate: '2099-12-31', IncludeInCalculation: true },
+            { Amount: 10000, ExpectedDate: '2000-01-01', IncludeInCalculation: true }
+        ]
+    };
+    store.state.categories = { investments: 100000 };
+
+    renderFireView();
+
+    assert.equal(elements['fire-current-assets'].innerText, '£110,000.00');
+    assert.equal(elements['fire-target-income'].innerText, '£0.00');
+    assert.equal(elements['fire-target-display'].innerText, '£0.00');
+    assert.equal(elements['fire-setting-income'].value, '0.00');
+    assert.equal(elements['fire-setting-state-pension'].value, '0.00');
+});
+
+test('current windfall totals require an included, valid date on or before today', () => {
+    assert.equal(getCurrentWindfallsAmount([
+        { Amount: 10, ExpectedDate: '2026-01-01', IncludeInCalculation: true },
+        { Amount: 20, ExpectedDate: '2026-06-01', IncludeInCalculation: true },
+        { Amount: 30, ExpectedDate: '2026-06-01', IncludeInCalculation: false },
+        { Amount: 40, ExpectedDate: 'not-a-date', IncludeInCalculation: true }
+    ], '2026-06-01'), 30);
 });
 
 test('FireTracker shows a settings CTA when tracking data is absent', () => {

@@ -22,6 +22,34 @@ export const FORECAST_CALCULATIONS_STORAGE_KEY = 'wealthwatcher_forecast_show_as
 const DEFAULT_INCLUDED_ASSETS = ['investments', 'bonds', 'pensions', 'property'];
 const fallbackColors = ['#06b6d4', '#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#84cc16', '#f97316'];
 
+function parseFiniteNumber(value, fallback) {
+    const parsed = Number.parseFloat(String(value ?? '').replace(/,/g, ''));
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function cloneSettings(settings) {
+    if (settings === undefined || settings === null) return {};
+    try {
+        return JSON.parse(JSON.stringify(settings));
+    } catch {
+        return {};
+    }
+}
+
+export function getForecastTargetFromFireSettings(fire = {}) {
+    const targetIncome = parseFiniteNumber(fire.targetIncome, 4000);
+    const statePensionAmount = parseFiniteNumber(fire.statePensionAmount, 12547);
+    const swr = parseFiniteNumber(fire.swr, 4);
+    const annualIncome = Math.max(0, targetIncome) * 12
+        - (fire.includeStatePension === true ? Math.max(0, statePensionAmount) : 0);
+
+    // A zero/negative withdrawal rate cannot produce a finite FIRE target.
+    // Preserve the configured value everywhere it is displayed and avoid a
+    // truthiness fallback that would turn an intentional zero income into the
+    // default £100,000 target.
+    return swr > 0 ? Math.max(0, annualIncome) / (swr / 100) : 0;
+}
+
 // The method descriptions are also the UI explanation of the assumptions sent to the API.
 export const FORECAST_STRATEGIES = [
     {
@@ -268,6 +296,7 @@ export function setupForecast() {
             const monthlyContribution = parseFloat(document.getElementById('forecast-setting-contribution')?.value);
             if (![annualReturn, monthlyContribution].every(Number.isFinite)) return;
 
+            const previousSettings = cloneSettings(store.state.forecastSettings);
             store.state.forecastSettings = {
                 dateOfBirth: document.getElementById('forecast-setting-dob')?.value || '',
                 annualReturn,
@@ -277,6 +306,8 @@ export function setupForecast() {
                 })
             };
             if (!await saveDbSettings('wealthWatcherForecastSettings', store.state.forecastSettings)) {
+                store.state.forecastSettings = previousSettings;
+                populateForecastSettings();
                 showToast({
                     title: 'Unable to save forecast settings',
                     message: 'Your forecast changes could not be saved.',
@@ -604,9 +635,7 @@ export async function loadForecastView() {
     showForecastAssetCalculations = getForecastAssetCalculationsPreference();
     setupForecastCalculationsToggle();
     populateForecastSettings();
-    let annualIncome = (parseFloat(fire.targetIncome) || 4000) * 12;
-    if (fire.includeStatePension === true) annualIncome -= parseFloat(fire.statePensionAmount) || 12547;
-    const target = Math.max(0, annualIncome) / ((parseFloat(fire.swr) || 4) / 100) || 100000;
+    const target = getForecastTargetFromFireSettings(fire);
     try {
         const data = await fetchFreshStrict(`${API_BASE_URL}/wealth/forecast`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -2,6 +2,45 @@ import { store } from '../store/store.js';
 import { formatter } from '../utils/formatters.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 
+const DEFAULT_TARGET_INCOME = 4000;
+const DEFAULT_SWR = 4.0;
+const DEFAULT_STATE_PENSION_AMOUNT = 12547;
+
+function parseFiniteNumber(value, fallback) {
+    const parsed = Number.parseFloat(String(value ?? '').replace(/,/g, ''));
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getLocalDateKey(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getWindfallDateKey(windfall) {
+    const expectedDate = String(windfall?.ExpectedDate ?? windfall?.expectedDate ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedDate)) return null;
+
+    const parsed = new Date(`${expectedDate}T00:00:00`);
+    if (Number.isNaN(parsed.valueOf()) || getLocalDateKey(parsed) !== expectedDate) return null;
+    return expectedDate;
+}
+
+export function getCurrentWindfallsAmount(windfalls = [], today = getLocalDateKey()) {
+    return (Array.isArray(windfalls) ? windfalls : [])
+        .filter(windfall => {
+            const included = windfall?.IncludeInCalculation === true
+                || windfall?.includeInCalculation === true;
+            const expectedDate = getWindfallDateKey(windfall);
+            return included && expectedDate !== null && expectedDate <= today;
+        })
+        .reduce((sum, windfall) => sum + parseFiniteNumber(
+            windfall.Amount ?? windfall.amount,
+            0
+        ), 0);
+}
+
 export function renderFireView() {
     const targetIncomeInput = document.getElementById('fire-setting-income');
     const swrInput = document.getElementById('fire-setting-swr');
@@ -9,15 +48,13 @@ export function renderFireView() {
     const statePensionAmountInput = document.getElementById('fire-setting-state-pension');
     
     const s = store.state.fireSettings || {};
-    const targetIncome = parseFloat(s.targetIncome) || 4000;
-    const swr = parseFloat(s.swr) || 4.0;
+    const targetIncome = parseFiniteNumber(s.targetIncome, DEFAULT_TARGET_INCOME);
+    const swr = parseFiniteNumber(s.swr, DEFAULT_SWR);
     const includeStatePension = s.includeStatePension === true;
-    const statePensionAmount = parseFloat(s.statePensionAmount) || 12547;
+    const statePensionAmount = parseFiniteNumber(s.statePensionAmount, DEFAULT_STATE_PENSION_AMOUNT);
     const includeWindfalls = s.includeWindfalls !== false; // default true if undefined
     const windfalls = includeWindfalls ? (s.windfalls || []) : [];
-    const activeWindfallsAmount = windfalls
-        .filter(w => w && (w.IncludeInCalculation || w.includeInCalculation))
-        .reduce((sum, w) => sum + (parseFloat(w.Amount || w.amount || 0) || 0), 0);
+    const activeWindfallsAmount = getCurrentWindfallsAmount(windfalls);
     
     const configuredCategories = Array.isArray(store.state.CATEGORIES) ? store.state.CATEGORIES : [];
     const defaultIncludedAssets = configuredCategories.length > 0
@@ -58,7 +95,10 @@ export function renderFireView() {
         if (effectiveMonthlyTarget < 0) effectiveMonthlyTarget = 0;
     }
     
-    let targetNumber = (effectiveMonthlyTarget * 12) / (swr / 100);
+    // A zero/negative withdrawal rate is invalid for the FIRE calculation. Keep
+    // the configured value visible and avoid replacing it with the default or
+    // rendering an infinite target for malformed persisted settings.
+    let targetNumber = swr > 0 ? (effectiveMonthlyTarget * 12) / (swr / 100) : 0;
     
     let investableAssets = 0;
     includedAssets.forEach(assetId => {

@@ -186,6 +186,59 @@ public class ForecastCalculatorTests
     }
 
     [Fact]
+    public void ForecastIgnoresFutureSnapshotsForCurrentValueAndHistoricalRate()
+    {
+        var today = new DateOnly(2026, 2, 1);
+        var result = ForecastCalculator.Calculate(
+            [
+                Investment("ISA", 100m, new DateOnly(2026, 1, 1), 100m),
+                Investment("ISA", 110m, new DateOnly(2026, 1, 31), 100m),
+                Investment("ISA", 10_000m, new DateOnly(2040, 1, 1), 100m)
+            ],
+            new ForecastRequest {
+                Target = 100_000m,
+                AnnualReturn = 6m,
+                ForecastStrategy = ForecastCalculator.FirstLastAnnualizedStrategy,
+                IncludedAssets = ["investments"]
+            },
+            today);
+
+        var expectedAnnualRate = Math.Pow(1.1d, 365d / 30d) - 1;
+        var current = Assert.Single(result.Projection, point => point.Date == today.ToString("yyyy-MM-dd"));
+        var rate = Assert.Single(result.RateSources);
+
+        Assert.Equal(110m, result.CurrentNW);
+        Assert.Equal(110d, current.Values["Investments"]);
+        Assert.Equal(expectedAnnualRate * 100, rate.AnnualRatePercent, 8);
+    }
+
+    [Fact]
+    public void ForecastIncludesCurrentMonthFutureWindfallInFirstProjectionPeriod()
+    {
+        var today = new DateOnly(2026, 6, 15);
+        var result = ForecastCalculator.Calculate(
+            [Investment("ISA", 100m, today, 100m)],
+            new ForecastRequest {
+                Target = 100_000m,
+                AnnualReturn = 0m,
+                IncludedAssets = ["investments"],
+                Windfalls = [new WindfallDto {
+                    Amount = 50m,
+                    ExpectedDate = "2026-06-30",
+                    IncludeInCalculation = true
+                }]
+            },
+            today);
+
+        var current = Assert.Single(result.Projection, point => point.Date == today.ToString("yyyy-MM-dd"));
+        var firstAnnualProjection = Assert.Single(result.Projection, point => point.Date == "2027-01-01");
+
+        Assert.Equal(0d, current.Values[ForecastCalculator.WindfallsStack]);
+        Assert.Equal(50d, firstAnnualProjection.Values[ForecastCalculator.WindfallsStack]);
+        Assert.Equal(150d, firstAnnualProjection.Total);
+    }
+
+    [Fact]
     public void Allocated_and_unallocated_budget_savings_are_projected_separately()
     {
         var assetId = Guid.NewGuid();

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const elements = new Map();
 let assetCheckboxes = [];
 let requests = [];
+let saveSucceeds = true;
 
 function createElement(id, value = '', tagName = 'div') {
     const children = [];
@@ -87,7 +88,7 @@ globalThis.document = {
 };
 globalThis.fetch = async (url, options) => {
     requests.push({ url, options });
-    return { ok: true };
+    return { ok: saveSucceeds };
 };
 
 const { normalizeGeneralSettings, store } = await import('../store/store.js');
@@ -95,6 +96,7 @@ const {
     populateFireSettings,
     populateGeneralSettings,
     renderWindfallsTable,
+    saveGeneralSettings,
     saveFireSettings
 } = await import('./Modals.js');
 
@@ -109,6 +111,7 @@ function reset() {
     elements.set('windfalls-tbody', createElement('windfalls-tbody', '', 'tbody'));
     assetCheckboxes = [{ value: 'Investments' }, { value: 'PENSIONS' }];
     requests = [];
+    saveSucceeds = true;
     window.tempWindfalls = [];
     store.state.CATEGORIES = [];
     store.state.fireSettings = {
@@ -142,6 +145,59 @@ test('Fire settings require a valid state pension amount only when enabled', asy
     elements.get('fire-setting-state-pension').value = 'not a number';
     assert.equal(await saveFireSettings(), false);
     assert.equal(requests.length, 1);
+});
+
+test('Fire settings round-trip explicit zero income and state pension values', async () => {
+    reset();
+    store.state.fireSettings = {
+        ...store.state.fireSettings,
+        targetIncome: 0,
+        includeStatePension: true,
+        statePensionAmount: 0
+    };
+
+    populateFireSettings();
+
+    assert.equal(elements.get('fire-setting-income').value, '0.00');
+    assert.equal(elements.get('fire-setting-state-pension').value, '0.00');
+    assert.equal(await saveFireSettings(), true);
+    assert.equal(store.state.fireSettings.targetIncome, 0);
+    assert.equal(store.state.fireSettings.statePensionAmount, 0);
+    const payload = JSON.parse(requests[0].options.body);
+    const savedSettings = JSON.parse(payload.wealthWatcherFireSettings);
+    assert.equal(savedSettings.targetIncome, 0);
+    assert.equal(savedSettings.statePensionAmount, 0);
+});
+
+test('Fire settings reject a zero withdrawal rate instead of restoring the default', async () => {
+    reset();
+    elements.get('fire-setting-swr').value = '0';
+
+    assert.equal(await saveFireSettings(), false);
+    assert.equal(elements.get('fire-setting-swr').value, '0');
+    assert.equal(requests.length, 0);
+});
+
+test('FIRE settings restore the last saved state when persistence fails', async () => {
+    reset();
+    saveSucceeds = false;
+    elements.get('fire-setting-income').value = '5,000.00';
+
+    assert.equal(await saveFireSettings(), false);
+    assert.equal(store.state.fireSettings.targetIncome, 4000);
+    assert.equal(elements.get('fire-setting-income').value, '4,000.00');
+});
+
+test('Fire settings display a persisted zero withdrawal rate without restoring the default', () => {
+    reset();
+    store.state.fireSettings = {
+        ...store.state.fireSettings,
+        swr: 0
+    };
+
+    populateFireSettings();
+
+    assert.equal(elements.get('fire-setting-swr').value, 0);
 });
 
 test('Fire settings population tolerates controls that are not rendered', () => {
@@ -218,6 +274,24 @@ test('general settings use positive zero-value controls and migrate legacy dashb
     assert.equal(elements.get('general-setting-show-zero-values-dashboard').checked, false);
     assert.equal(elements.get('general-setting-show-zero-values-history').checked, true);
     assert.equal(elements.get('general-setting-show-sparklines').checked, false);
+});
+
+test('general settings restore the last saved state when persistence fails', async () => {
+    reset();
+    elements.set('general-setting-show-zero-values-dashboard', createElement('general-setting-show-zero-values-dashboard'));
+    elements.set('general-setting-show-zero-values-history', createElement('general-setting-show-zero-values-history'));
+    elements.set('general-setting-show-sparklines', createElement('general-setting-show-sparklines'));
+    store.state.generalSettings = {
+        showZeroValuesOnDashboard: false,
+        showZeroValuesOnHistory: false,
+        showSparklines: true
+    };
+    elements.get('general-setting-show-zero-values-dashboard').checked = true;
+    saveSucceeds = false;
+
+    assert.equal(await saveGeneralSettings(), false);
+    assert.equal(store.state.generalSettings.showZeroValuesOnDashboard, false);
+    assert.equal(elements.get('general-setting-show-zero-values-dashboard').checked, false);
 });
 
 test('windfall rows escape imported values and avoid inline event handlers', () => {
