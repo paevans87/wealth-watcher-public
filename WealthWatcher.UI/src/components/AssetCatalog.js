@@ -1,10 +1,11 @@
 import { store } from '../store/store.js';
-import { apiRequest, API_BASE_URL } from '../api/apiClient.js';
+import { requestJson, API_BASE_URL } from '../api/apiClient.js';
 import { requestConfirmation, requestNotification } from './ConfirmationModal.js';
 import { showToast } from './Toast.js';
 import { renderCatalogInputField, renderSelectField, escapeHtml } from './FormFields.js';
 import { PAGE_STATUS, setPageStatus } from './PageState.js';
 import { safeCssColor } from '../utils/html.js';
+import { createAssetCatalogApi } from './assetCatalogApi.js';
 
 const ASSET_GROUPS_KEY = 'asset-group';
 const ASSET_KINDS_KEY = 'asset-kind';
@@ -42,18 +43,13 @@ const catalogFilterDefinitions = {
 };
 
 async function request(path, options = {}) {
-    const response = await apiRequest(`${API_BASE_URL}${path}`, {
+    return requestJson(`${API_BASE_URL}${path}`, {
         ...options,
         headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
     });
-    const payload = response.status === 204 || typeof response.json !== 'function'
-        ? null
-        : await response.json().catch(() => null);
-    if (!response.ok) {
-        throw new Error(payload?.Error || payload?.error || `Request failed (${response.status}).`);
-    }
-    return payload;
 }
+
+const catalogApi = createAssetCatalogApi(request);
 
 function createCatalogRefresh(refresh) {
     return async (...args) => {
@@ -481,10 +477,7 @@ async function addValue(form, refresh) {
                 return;
             }
 
-            await request('/assets', {
-                method: 'POST',
-                body: JSON.stringify({ DisplayName: displayName, AssetKindId: assetKindId })
-            });
+            await catalogApi.createAsset({ DisplayName: displayName, AssetKindId: assetKindId });
         } else {
             const isAssetKind = form.id === 'asset-kind-form';
             const payload = {
@@ -497,9 +490,7 @@ async function addValue(form, refresh) {
                 if (parentValueId) payload.ParentValueId = parentValueId;
             }
 
-            await request(
-                `/classification-groups/${encodeURIComponent(form.dataset.groupKey || ASSET_GROUPS_KEY)}/values`,
-                { method: 'POST', body: JSON.stringify(payload) });
+            await catalogApi.createClassification(form.dataset.groupKey || ASSET_GROUPS_KEY, payload);
         }
     } catch (error) {
         console.error(error);
@@ -547,12 +538,9 @@ function setupClassificationEditor(refresh) {
 
     document.getElementById('classification-edit-cancel')?.addEventListener('click', closeClassificationEditor);
     document.getElementById('classification-edit-close')?.addEventListener('click', closeClassificationEditor);
+    window.closeClassificationEditor = closeClassificationEditor;
     document.getElementById('classification-edit-modal')?.addEventListener('click', event => {
         if (event.target.id === 'classification-edit-modal') closeClassificationEditor();
-    });
-    document.addEventListener('keydown', event => {
-        const modal = document.getElementById('classification-edit-modal');
-        if (event.key === 'Escape' && modal?.classList.contains('active')) closeClassificationEditor();
     });
     document.getElementById('classification-edit-archive')?.addEventListener('click', async () => {
         const state = editorState;
@@ -600,10 +588,11 @@ async function saveValue(form, refresh) {
     }
 
     try {
-        await request(path, {
-            method: editorState.isNewAsset ? 'POST' : 'PATCH',
-            body: JSON.stringify(payload)
-        });
+        if (editorState.isAsset) {
+            await catalogApi.updateAsset(editorState.id, payload, { create: editorState.isNewAsset });
+        } else {
+            await catalogApi.updateClassification(editorState.id, payload);
+        }
     } catch (error) {
         console.error(error);
         await requestNotification({
@@ -659,13 +648,8 @@ async function archiveValue(state, refresh) {
     })) return;
 
     try {
-        const path = state.isAsset
-            ? `/assets/${state.id}`
-            : `/classification-values/${state.id}`;
-        const options = state.isAsset
-            ? { method: 'PATCH', body: JSON.stringify({ Archived: true }) }
-            : { method: 'DELETE' };
-        await request(path, options);
+        if (state.isAsset) await catalogApi.archiveAsset(state.id);
+        else await catalogApi.archiveClassification(state.id);
     } catch (error) {
         console.error(error);
         await requestNotification({
@@ -921,12 +905,9 @@ export async function moveAssetToGroup(assetId, destinationGroupId, refresh = as
     }
 
     try {
-        await request(`/assets/${encodeURIComponent(assetId)}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-                AssetGroupId: noGroupDestination ? null : String(destinationGroupId),
-                SetAssetGroup: true
-            })
+        await catalogApi.moveAsset(assetId, {
+            AssetGroupId: noGroupDestination ? null : String(destinationGroupId),
+            SetAssetGroup: true
         });
 
         await refresh();

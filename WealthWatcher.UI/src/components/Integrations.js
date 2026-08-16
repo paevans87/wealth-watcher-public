@@ -1,4 +1,4 @@
-import { apiRequest, API_BASE_URL, isDemoMode } from '../api/apiClient.js';
+import { requestJson, API_BASE_URL, isDemoMode } from '../api/apiClient.js';
 import { store } from '../store/store.js';
 import { requestConfirmation } from './ConfirmationModal.js';
 import { showToast } from './Toast.js';
@@ -11,6 +11,8 @@ import {
 } from './AssetTypeahead.js';
 import { renderFeatureToggle, renderSelectField } from './FormFields.js';
 import { PAGE_STATUS, setPageStatus } from './PageState.js';
+import { createIntegrationApi } from './integrationApi.js';
+import { closeManagedModal, openManagedModal } from './ModalController.js';
 import { escapeHtml } from '../utils/html.js';
 
 const steps = ['Enable', 'Add Keys', 'Test', 'Pull Accounts', 'Allocate'];
@@ -40,18 +42,13 @@ async function request(path, options = {}) {
         showDemoOnlyMessage();
         throw new DemoOnlyOperationError();
     }
-    const response = await apiRequest(`${API_BASE_URL}${path}`, {
+    return requestJson(`${API_BASE_URL}${path}`, {
         ...options,
         headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
     });
-    const payload = response.status === 204 || typeof response.json !== 'function'
-        ? null
-        : await response.json().catch(() => null);
-    if (!response.ok) {
-        throw new Error(payload?.Error || payload?.error || `Request failed (${response.status}).`);
-    }
-    return payload;
 }
+
+const integrationApi = createIntegrationApi(request);
 
 class DemoOnlyOperationError extends Error {
     constructor() {
@@ -336,9 +333,7 @@ function renderWizardBody() {
     const descriptor = descriptorFor(connection);
     if (!wizard || !connection || !descriptor) {
         if (wizard) {
-            wizard.hidden = true;
-            wizard.classList.remove('active');
-            wizard.setAttribute('aria-hidden', 'true');
+            closeManagedModal(wizard);
         }
         return;
     }
@@ -347,6 +342,7 @@ function renderWizardBody() {
     wizard.hidden = false;
     wizard.classList.add('active');
     wizard.setAttribute('aria-hidden', 'false');
+    if (!wasOpen) openManagedModal(wizard, { initialFocus: '#integration-wizard-close' });
     renderSteps();
     const options = connection.Options || {};
 
@@ -432,6 +428,8 @@ function setupWizardModal() {
 }
 
 function closeWizard() {
+    const wizard = document.getElementById('integration-wizard');
+    closeManagedModal(wizard);
     currentConnectionId = null;
     renderWizardBody();
     lastWizardTrigger?.focus?.();
@@ -617,10 +615,10 @@ async function refresh({ includeCatalog = true, includeAssets = true } = {}) {
     renderConnections();
     try {
         const [nextCatalog, nextConnections, nextAssets, nextMarketHours] = await Promise.all([
-            includeCatalog ? request('/integrations/catalog') : Promise.resolve(catalog),
-            request('/integrations'),
-            includeAssets ? request('/assets') : Promise.resolve(null),
-            request('/integrations/settings')
+            includeCatalog ? integrationApi.catalog() : Promise.resolve(catalog),
+            integrationApi.connections(),
+            includeAssets ? integrationApi.assets() : Promise.resolve(null),
+            integrationApi.settings()
         ]);
 
         if (!Array.isArray(nextCatalog)) throw new Error('The integration catalogue response was invalid.');
@@ -684,7 +682,7 @@ async function withBusyButton(button, label, action) {
 
 async function enable(providerKey) {
     try {
-        const connection = await request(`/integrations/${encodeURIComponent(providerKey)}`, { method: 'POST', body: '{}' });
+        const connection = await integrationApi.enable(providerKey);
         await refresh({ includeCatalog: false, includeAssets: false });
         currentConnectionId = connection.Id;
         currentStep = 1;
@@ -715,10 +713,7 @@ async function saveConnectionName(form) {
     }
 
     try {
-        await request(`/integrations/${currentConnectionId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ DisplayName: name })
-        });
+        await integrationApi.update(currentConnectionId, { DisplayName: name });
         await refresh({ includeCatalog: false, includeAssets: false });
         currentStep = 2;
         renderWizardBody();
@@ -751,7 +746,7 @@ async function removeConnection(connectionId) {
     })) return;
 
     try {
-        await request(`/integrations/${connectionId}`, { method: 'DELETE' });
+        await integrationApi.remove(connectionId);
         if (currentConnectionId === connectionId) {
             currentConnectionId = null;
             currentStep = 1;
@@ -785,9 +780,7 @@ async function saveCredentials(form) {
         options[input.name.slice('option:'.length)] = input.type === 'checkbox' ? String(input.checked) : input.value;
     });
     try {
-        await request(`/integrations/${currentConnectionId}/credentials`, {
-            method: 'PUT', body: JSON.stringify({ Credentials: credentials, Options: options })
-        });
+        await integrationApi.credentials(currentConnectionId, { Credentials: credentials, Options: options });
         await refresh({ includeCatalog: false, includeAssets: false });
         currentStep = 3;
         renderWizardBody();
@@ -811,7 +804,7 @@ async function saveCredentials(form) {
 
 async function updateConnection(id, body) {
     try {
-        await request(`/integrations/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        await integrationApi.update(id, body);
         await refresh({ includeCatalog: false, includeAssets: false });
         showToast({
             title: 'Integration settings saved',
@@ -865,10 +858,7 @@ async function saveMarketHours(form) {
 
     showMarketHoursMessage('Saving market hours…', 'saving');
     try {
-        marketHoursSettings = await request('/integrations/settings', {
-            method: 'PUT',
-            body: JSON.stringify({ Days: days })
-        });
+        marketHoursSettings = await integrationApi.saveSettings({ Days: days });
         showMarketHoursMessage('Market hours saved.', 'success');
         showToast({
             title: 'Market hours saved',
@@ -898,10 +888,7 @@ async function allocateAccount(accountId, role = 'Deployed') {
     } else if (state.newName) {
         if (!state.assetKindId) throw new Error('Select an Asset Kind for the new asset.');
     } else if (state.cleared && currentAssetId) {
-        return request(`/integrations/${currentConnectionId}/accounts/${accountId}/allocation`, {
-            method: 'PUT',
-            body: JSON.stringify({ Clear: true, Role: role })
-        });
+        return integrationApi.allocation(currentConnectionId, accountId, { Clear: true, Role: role });
     } else {
         throw new Error('Select an existing asset or enter a name for a new one.');
     }
@@ -909,10 +896,7 @@ async function allocateAccount(accountId, role = 'Deployed') {
     const body = state.assetId
         ? { AssetId: state.assetId, Role: role }
         : { AssetName: state.newName, AssetKindId: state.assetKindId, Role: role };
-    return request(`/integrations/${currentConnectionId}/accounts/${accountId}/allocation`, {
-        method: 'PUT',
-        body: JSON.stringify(body)
-    });
+    return integrationApi.allocation(currentConnectionId, accountId, body);
 }
 
 export async function loadIntegrations(options = {}) {
@@ -976,7 +960,7 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
             }
             if (button.hasAttribute('data-integration-test')) {
                 return withBusyButton(button, 'Testing…', async () => {
-                    const result = await request(`/integrations/${currentConnectionId}/test`, { method: 'POST' });
+                    const result = await integrationApi.test(currentConnectionId);
                     await refresh({ includeCatalog: false, includeAssets: false });
                     currentStep = result.Succeeded ? 4 : 3;
                     renderWizardBody();
@@ -991,7 +975,7 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
             }
             if (button.hasAttribute('data-integration-discover')) {
                 return withBusyButton(button, 'Pulling accounts…', async () => {
-                    const result = await request(`/integrations/${currentConnectionId}/accounts/discover`, { method: 'POST' });
+                    const result = await integrationApi.discover(currentConnectionId);
                     await refresh({ includeCatalog: false, includeAssets: false });
                     currentStep = result.Succeeded ? 5 : 4;
                     renderWizardBody();
@@ -1038,13 +1022,6 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
                 type: 'error',
                 key: 'integration-action'
             });
-        }
-    });
-
-    document.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && wizard?.classList.contains('active')) {
-            event.preventDefault();
-            closeWizard();
         }
     });
 

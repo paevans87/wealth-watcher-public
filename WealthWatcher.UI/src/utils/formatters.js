@@ -4,6 +4,26 @@ export const formatter = new Intl.NumberFormat('en-GB', {
     minimumFractionDigits: 2 
 });
 
+export const currencyFormatter = new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+    maximumFractionDigits: 0
+});
+
+export const compactCurrencyFormatter = new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 0
+});
+
+export const percentFormatter = new Intl.NumberFormat('en-GB', {
+    style: 'percent',
+    signDisplay: 'always',
+    maximumFractionDigits: 1
+});
+
 export function formatCurrencyInput(input) {
     let val = input.value.replace(/,/g, '');
     if (!isNaN(val) && val !== '') {

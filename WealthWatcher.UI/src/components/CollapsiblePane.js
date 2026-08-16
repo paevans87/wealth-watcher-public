@@ -126,6 +126,7 @@ export function togglePane(pane) {
     // Update aria-expanded on header if present
     const header = paneEl.querySelector('.collapsible-header');
     if (header) {
+        syncCollapsibleAccessibility(paneEl, header);
         header.setAttribute('aria-expanded', String(!newCollapsedState));
     }
 
@@ -174,6 +175,7 @@ export function initCollapsiblePane(paneEl) {
 
         const header = paneEl.querySelector('.collapsible-header');
         if (header) {
+            syncCollapsibleAccessibility(paneEl, header);
             header.setAttribute('aria-expanded', String(!isCollapsed));
         }
     }
@@ -193,7 +195,26 @@ export function initCollapsiblePane(paneEl) {
             }
             togglePane(paneEl);
         });
+        header.addEventListener('keydown', (e) => {
+            if (e.target?.closest?.('button, input, select, a, label')) return;
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault?.();
+            togglePane(paneEl);
+        });
     }
+}
+
+function syncCollapsibleAccessibility(paneEl, header) {
+    if (!paneEl || !header) return;
+    const paneId = paneEl.dataset?.paneId || paneEl.id || 'settings-pane';
+    const content = paneEl.querySelector?.('.collapsible-content');
+    if (content && !content.id) {
+        content.id = `${String(paneId).replace(/[^a-zA-Z0-9_-]/g, '-')}-content`;
+    }
+    header.setAttribute?.('aria-expanded', String(!paneEl.classList.contains('collapsed')));
+    if (content?.id) header.setAttribute?.('aria-controls', content.id);
+    if (!header.getAttribute?.('role')) header.setAttribute?.('role', 'button');
+    if (!header.getAttribute?.('tabindex')) header.setAttribute?.('tabindex', '0');
 }
 
 /**

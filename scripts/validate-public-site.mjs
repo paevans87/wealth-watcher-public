@@ -26,7 +26,7 @@ const analytics = await read('github_pages/analytics.js');
 const demoSource = await read('WealthWatcher.UI/index.html');
 const viteConfig = await read('WealthWatcher.UI/vite.config.js');
 
-requireMatch('landing title', landing, /<title>WealthWatcher/);
+requireMatch('landing title', landing, /<title>Wealth Watcher/);
 requireMatch('landing description', landing, /<meta name="description" content="[^"]+">/);
 requireMatch('landing robots policy', landing, /<meta name="robots" content="index, follow">/);
 requireMatch('landing canonical', landing, /<link rel="canonical" href="https:\/\/wealthwatcher\.co\.uk\/">/);
@@ -38,7 +38,7 @@ assert.ok((landing.match(/href="demo\/"/g) || []).length >= 5, 'landing demo lin
 
 requireMatch('robots sitemap directive', robots, /^Sitemap: https:\/\/wealthwatcher\.co\.uk\/sitemap\.xml$/m);
 requireMatch('sitemap landing URL', sitemap, /<loc>https:\/\/wealthwatcher\.co\.uk\/<\/loc>/);
-requireMatch('social image title', socialImage, /WealthWatcher - see your whole financial picture/);
+requireMatch('social image title', socialImage, /Wealth Watcher - see your whole financial picture/);
 
 requireMatch('analytics event API', analytics, /window\.wealthWatcherTrack = trackEvent/);
 requireMatch('analytics consent gate', analytics, /if \(\(!projectId && !measurementId\) \|\| !consentBanner/);
@@ -58,8 +58,8 @@ try {
         console.log('Normal UI build detected; built demo checks are reserved for the Pages artifact.');
     } else {
     requireMatch('built demo mode', demoHtml, /data-demo-mode="true"/);
-    requireMatch('built demo title', demoHtml, /<title>WealthWatcher live demo - explore the dashboard<\/title>/);
-    requireMatch('built demo description', demoHtml, /Explore WealthWatcher with fictional data in your browser/);
+    requireMatch('built demo title', demoHtml, /<title>Wealth Watcher live demo - explore the dashboard<\/title>/);
+    requireMatch('built demo description', demoHtml, /Explore Wealth Watcher with fictional data in your browser/);
     requireMatch('built demo robots policy', demoHtml, /<meta name="robots" content="noindex, follow">/);
     requireMatch('built demo canonical', demoHtml, /<link rel="canonical" href="https:\/\/wealthwatcher\.co\.uk\/">/);
     requireMatch('built demo analytics loader', demoHtml, /\.\.\/analytics\.js/);

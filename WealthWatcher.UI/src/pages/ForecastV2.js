@@ -6,13 +6,16 @@ import { renderFeatureToggle } from '../components/FormFields.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 import { showToast } from '../components/Toast.js';
 import { setPageLoading } from '../components/PageLoading.js';
+import { createPageRequestController } from '../components/PageRequest.js';
+import { renderAccessibleChartData } from '../components/AccessibleChartData.js';
+import { currencyFormatter } from '../utils/formatters.js';
 
 let forecastChart;
 let forecastSaveTimer;
 let forecastStrategyChangeHandler;
 let forecastRateSources = [];
 let showForecastAssetCalculations = true;
-let forecastRequestId = 0;
+const forecastRequests = createPageRequestController();
 let boundForecastRetryButton = null;
 const DEFAULT_ANNUAL_RETURN = 4;
 const DEFAULT_MONTHLY_CONTRIBUTION = 1500;
@@ -504,6 +507,10 @@ function clearForecastResults() {
         trend.title = '';
     }
     renderHistoricalRateSources([], false);
+    renderAccessibleChartData(document.getElementById('forecast-chart-data'), {
+        headers: [{ key: 'date', label: 'Period' }, { key: 'total', label: 'Projected total' }, { key: 'target', label: 'FIRE target' }],
+        rows: []
+    });
 }
 
 export function setForecastPageState(status) {
@@ -627,7 +634,7 @@ export function renderHistoricalRateSources(rates = forecastRateSources, visible
 }
 
 export async function loadForecastView() {
-    const requestId = ++forecastRequestId;
+    const requestId = forecastRequests.next();
     setPageLoading('forecast-view', true);
     setForecastPageState(PAGE_STATUS.LOADING);
     const fire = store.state.fireSettings || {};
@@ -641,7 +648,7 @@ export async function loadForecastView() {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildForecastRequest(settings, target, fire))
         });
-        if (requestId !== forecastRequestId) return data;
+        if (!forecastRequests.isCurrent(requestId)) return data;
         if (!data || typeof data !== 'object') {
             throw new Error('Forecast response was invalid.');
         }
@@ -658,6 +665,20 @@ export async function loadForecastView() {
         setForecastPageState(PAGE_STATUS.READY);
         forecastChart = showChart('forecastExpectedChart', forecastChart, points,
             data.StackOrder || data.stackOrder || [], target, categories);
+        renderAccessibleChartData(document.getElementById('forecast-chart-data'), {
+            summary: 'View forecast data',
+            caption: 'Projected total wealth and the FIRE target for each forecast period.',
+            headers: [{ key: 'date', label: 'Period' }, { key: 'total', label: 'Projected total' }, { key: 'target', label: 'FIRE target' }],
+            rows: points.map(point => ({
+                date: point.Date || point.date,
+                total: point.Total ?? point.total ?? 0,
+                target
+            })),
+            formatCell: (row, key) => {
+                if (key === 'date') return row.date;
+                return globalThis.window?.isObfuscated ? '£***' : currencyFormatter.format(row[key]);
+            }
+        });
         const selectedStrategy = data.SelectedStrategy || data.selectedStrategy
             || getForecastCalculationStrategy(settings);
         const details = getForecastStrategyDetails(selectedStrategy);
@@ -671,10 +692,10 @@ export async function loadForecastView() {
         summary('forecast', hitResult(data.CurrentNW ?? data.currentNW, target,
             data.TargetHitMonth ?? data.targetHitMonth, data.TargetHitDate ?? data.targetHitDate), settings.dateOfBirth);
     } catch (error) {
-        if (requestId !== forecastRequestId) return;
+        if (!forecastRequests.isCurrent(requestId)) return;
         setForecastPageState(PAGE_STATUS.ERROR);
         console.error('Failed to load forecast:', error);
     } finally {
-        if (requestId === forecastRequestId) setPageLoading('forecast-view', false);
+        if (forecastRequests.isCurrent(requestId)) setPageLoading('forecast-view', false);
     }
 }

@@ -3,6 +3,8 @@ import { formatter } from '../utils/formatters.js';
 import { escapeHtml } from '../utils/html.js';
 import { setPageLoading } from '../components/PageLoading.js';
 import { setPageStatus } from '../components/PageState.js';
+import { createPageRequestController } from '../components/PageRequest.js';
+import { aggregateTimelineEntries } from '../components/TimelineModel.js';
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -56,29 +58,10 @@ export function getPreviousCalendarDateKey(dateKey) {
 }
 
 export function aggregateCategoryTimelines(categoryResults) {
-    const globalTimeline = new Map();
-    const observedDates = new Set();
-
-    categoryResults.forEach(result => {
-        getHistory(result).forEach(entry => {
-            if (!parseCalendarDateKey(entry?.Time)) return;
-
-            const value = Number(entry.Value);
-            if (!Number.isFinite(value)) return;
-
-            const currentTotal = globalTimeline.get(entry.Time) || 0;
-            globalTimeline.set(entry.Time, currentTotal + value);
-
-            if (entry.HasObservation) {
-                observedDates.add(entry.Time);
-            }
-        });
-    });
-
-    return {
-        totals: new Map(Array.from(globalTimeline.entries()).sort(([left], [right]) => left.localeCompare(right))),
-        observedDates
-    };
+    return aggregateTimelineEntries(
+        (Array.isArray(categoryResults) ? categoryResults : []).flatMap(result => getHistory(result)),
+        { validateDate: date => Boolean(parseCalendarDateKey(date)) }
+    );
 }
 
 export function calculateDailyChange(dateKey, totals, observedDates = null) {
@@ -362,7 +345,7 @@ let calendarViewState = {
 let boundPreviousButton = null;
 let boundNextButton = null;
 let boundCalendarRetryButton = null;
-let calendarRequestId = 0;
+const calendarRequests = createPageRequestController();
 
 function getCalendarElements() {
     if (typeof document === 'undefined') return {};
@@ -814,7 +797,7 @@ async function loadCalendarMonth(month, requestId) {
             year: month.year,
             monthIndex: month.monthIndex
         });
-        if (requestId !== calendarRequestId) return timeline;
+        if (!calendarRequests.isCurrent(requestId)) return timeline;
 
         calendarViewState.totals = timeline.totals;
         calendarViewState.observedDates = timeline.observedDates;
@@ -837,7 +820,7 @@ async function loadCalendarMonth(month, requestId) {
         renderCalendarView();
         return timeline;
     } finally {
-        if (requestId === calendarRequestId) setPageLoading('calendar-view', false);
+        if (calendarRequests.isCurrent(requestId)) setPageLoading('calendar-view', false);
     }
 }
 
@@ -860,13 +843,13 @@ async function changeCalendarMonth(offset) {
     calendarViewState.days = [];
     calendarViewState.monthComparison = null;
     calendarViewState.error = null;
-    const requestId = ++calendarRequestId;
+    const requestId = calendarRequests.next();
     renderCalendarView();
 
     try {
         return await loadCalendarMonth(targetMonth, requestId);
     } catch (error) {
-        if (requestId !== calendarRequestId) return emptyCalendarTimeline();
+        if (!calendarRequests.isCurrent(requestId)) return emptyCalendarTimeline();
         console.error('Error loading calendar month:', error);
         calendarViewState.error = error;
         calendarViewState.status = 'error';
@@ -883,7 +866,7 @@ async function retryCalendarLoad() {
     const month = calendarViewState.currentMonth;
     if (!month) return loadCalendarView({ currentDate: calendarViewState.currentDate });
 
-    const requestId = ++calendarRequestId;
+    const requestId = calendarRequests.next();
     calendarViewState.status = 'loading';
     calendarViewState.error = null;
     calendarViewState.totals = new Map();
@@ -895,7 +878,7 @@ async function retryCalendarLoad() {
     try {
         return await loadCalendarMonth(month, requestId);
     } catch (error) {
-        if (requestId !== calendarRequestId) return emptyCalendarTimeline();
+        if (!calendarRequests.isCurrent(requestId)) return emptyCalendarTimeline();
         console.error('Error retrying calendar view:', error);
         calendarViewState.error = error;
         calendarViewState.status = 'error';
@@ -921,7 +904,7 @@ function bindCalendarControls(elements) {
 export async function loadCalendarView({ currentDate } = {}) {
     const viewDate = getValidCurrentDate(currentDate);
     const currentBrowserMonth = getMonthFromDate(viewDate);
-    const requestId = ++calendarRequestId;
+    const requestId = calendarRequests.next();
 
     calendarViewState = {
         currentDate: viewDate,
@@ -944,7 +927,7 @@ export async function loadCalendarView({ currentDate } = {}) {
         const timeline = await loadCalendarMonth(currentBrowserMonth, requestId);
         return timeline;
     } catch (error) {
-        if (requestId !== calendarRequestId) return emptyCalendarTimeline();
+        if (!calendarRequests.isCurrent(requestId)) return emptyCalendarTimeline();
         console.error('Error loading calendar view:', error);
         calendarViewState.error = error;
         calendarViewState.status = 'error';

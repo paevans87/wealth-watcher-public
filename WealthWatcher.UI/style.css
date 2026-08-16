@@ -350,6 +350,20 @@ body.demo-mode {
     height: 18px;
 }
 
+/* Preserve the product name on desktop while allowing the navigation to use
+   the remaining width gracefully at smaller laptop breakpoints. */
+@media (min-width: 769px) {
+    .nav-brand { flex: 0 0 auto; }
+    .nav-brand-title-link span { flex: 0 0 auto; overflow: visible; text-overflow: clip; }
+    .nav-links { flex: 1 1 auto; justify-content: flex-end; gap: 0.5rem; }
+    .nav-link { padding-left: 0.65rem; padding-right: 0.65rem; }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+    .nav-text { display: none; }
+    .nav-link { padding-left: 0.45rem; padding-right: 0.45rem; }
+}
+
 .action-group {
     display: flex;
     gap: 8px;
@@ -5616,16 +5630,17 @@ body.obfuscated h1 .obfuscate-val {
 
     #calendar-view #calendar-grid {
         min-width: 0;
-        overflow-x: hidden;
+        overflow-x: auto;
+        padding-bottom: 0.35rem;
     }
 
     #calendar-view .calendar-grid-content {
         grid-template-columns: repeat(7, minmax(0, 1fr));
-        min-width: 0;
+        min-width: 52.5rem;
     }
 
     #calendar-view .calendar-cell {
-        min-width: 0;
+        min-width: 7.5rem;
         min-height: 5.75rem;
         padding: 0.45rem 0.3rem;
     }
@@ -5648,8 +5663,8 @@ body.obfuscated h1 .obfuscate-val {
     #calendar-view .calendar-change-amount,
     #calendar-view .calendar-change-percentage {
         min-width: 0;
-        overflow-wrap: anywhere;
-        white-space: normal;
+        overflow-wrap: normal;
+        white-space: nowrap;
     }
 }
 
@@ -6186,4 +6201,165 @@ body.obfuscated h1 .obfuscate-val {
     #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(3) { width: 31% !important; }
     #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(4) { width: 20% !important; }
     #budget-settings-pane .budget-table[data-budget-category="savings"] th:nth-child(5) { width: 8% !important; }
+}
+
+/* --- SHARED ACCESSIBILITY AND DATA ALTERNATIVES --- */
+:where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid var(--cyan) !important;
+    outline-offset: 3px;
+}
+
+.collapsible-header[role="button"] {
+    cursor: pointer;
+}
+
+.chart-data-alternative {
+    margin-top: 0.75rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.16);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.chart-data-alternative summary {
+    cursor: pointer;
+    padding: 0.7rem 0;
+    color: #a5f3fc;
+    font-weight: 700;
+}
+
+.chart-data-caption {
+    margin: 0 0 0.65rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.chart-data-table-wrap {
+    max-height: 18rem;
+    overflow: auto;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 0.65rem;
+}
+
+.chart-data-table {
+    width: 100%;
+    min-width: 24rem;
+    border-collapse: collapse;
+    background: rgba(15, 23, 42, 0.34);
+}
+
+.chart-data-table th,
+.chart-data-table td {
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.11);
+    text-align: left;
+}
+
+.chart-data-table th {
+    position: sticky;
+    top: 0;
+    background: #111c31;
+    color: var(--text-main);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.chart-data-table tr:last-child td { border-bottom: 0; }
+
+/* --- BUDGET OVERVIEW --- */
+.budget-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.8rem;
+    margin-bottom: 1.25rem;
+}
+
+.budget-summary-card {
+    min-width: 0;
+    min-height: 0;
+    padding: 1rem;
+    text-align: center;
+}
+
+.budget-summary-label {
+    display: block;
+    overflow: hidden;
+    color: #a0aec0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.budget-summary-card h2 {
+    margin: 0.45rem 0 0;
+    font-size: clamp(1.1rem, 2vw, 1.45rem);
+}
+
+.budget-summary-income h2 { color: var(--cyan); }
+.budget-summary-bills h2 { color: var(--red); }
+.budget-summary-savings h2 { color: var(--green); }
+.budget-summary-spend h2 { color: var(--purple); }
+.budget-summary-remaining h2 { color: var(--text-main); }
+
+.budget-breakdown-title { margin: 0 0 0.8rem; }
+
+.budget-chart-drilldowns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.budget-drilldown-button {
+    flex: 0 0 auto;
+    min-height: 2.2rem;
+    padding: 0.45rem 0.75rem;
+}
+
+.budget-chart-wrap {
+    position: relative;
+    height: 50vh;
+    min-height: 20rem;
+}
+
+#budget-chart-back-btn {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    padding: 0.5rem 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+@media (max-width: 900px) {
+    .budget-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+    .budget-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .budget-summary-card { padding: 0.85rem 0.65rem; }
+    .budget-summary-label { font-size: 0.62rem; }
+    .budget-chart-wrap { height: 22rem; min-height: 18rem; }
+}
+
+@media (max-width: 430px) {
+    .budget-summary-grid { grid-template-columns: 1fr; }
+    .budget-summary-card { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; text-align: left; }
+    .budget-summary-card h2 { margin-top: 0; }
+}
+
+/* Keep useful navigation labels visible on mobile widths where the bar has room. */
+@media (min-width: 561px) and (max-width: 768px) {
+    .nav-text { display: inline; }
+    .nav-link { gap: 0.25rem; }
 }
