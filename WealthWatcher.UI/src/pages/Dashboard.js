@@ -9,6 +9,14 @@ import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 import { bindPeriodPicker } from '../components/PeriodPicker.js';
 import { escapeHtml, safeCssColor } from '../utils/html.js';
 import { clearMilestoneDashboardCard, renderMilestoneDashboardCard } from '../components/Milestones.js';
+import {
+    buildFireStatusViewModel,
+    clearFireStatusSummary,
+    renderFireStatusSummary,
+    renderPendingFireStatusSummary
+} from '../components/FireStatusSummary.js';
+import { calculateFireSummary } from '../components/FireModel.js';
+import { loadForecastSnapshot } from './ForecastV2.js';
 import { renderAccessibleChartData } from '../components/AccessibleChartData.js';
 import { calculateInvestedShare, getAggregateBreakdown, getCurrentAggregateValue } from '../components/DashboardModel.js';
 import pluralize from 'pluralize';
@@ -27,6 +35,7 @@ let hourlyRefreshLifecycleSetup = false;
 let dashboardActionsSetup = false;
 let collapsedAssetGroupKeys = new Set();
 let refreshDashboardData = async () => {};
+let fireStatusRequestId = 0;
 
 export function setupDashboardActions({ refresh } = {}) {
     if (refresh) refreshDashboardData = refresh;
@@ -270,6 +279,8 @@ export function loadDashboard({ force = false } = {}) {
     dashboardHasData = false;
     dashboardPageState = PAGE_STATUS.LOADING;
     dashboardPageError = null;
+    fireStatusRequestId += 1;
+    clearFireStatusSummary();
     clearMilestoneDashboardCard();
     setPageLoading('dashboard-view', true);
     renderDashboardPageState();
@@ -296,6 +307,7 @@ export function loadDashboard({ force = false } = {}) {
 }
 
 async function loadDashboardInternal() {
+    const currentFireStatusRequestId = ++fireStatusRequestId;
     const selectedPeriod = store.state.currentPeriod;
     const timeZone = selectedPeriod === '1H'
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -469,6 +481,7 @@ async function loadDashboardInternal() {
     }
 
     updateGlobalHeader(globalTotal, globalPast, contributors);
+    renderDashboardFireStatus(globalTotal, currentFireStatusRequestId);
     renderMilestoneDashboardCard(globalTotal);
     renderXrayChart();
     
@@ -507,8 +520,49 @@ async function requestDashboardData(url) {
 function clearDashboardLiveContent() {
     const laneSections = document.getElementById('lane-sections');
     if (laneSections) laneSections.innerHTML = '';
+    fireStatusRequestId += 1;
+    clearFireStatusSummary();
     clearMilestoneDashboardCard();
 }
+
+function getDashboardFireSummary() {
+    return calculateFireSummary({
+        categories: store.state.categories || {},
+        fire: store.state.fireSettings || {},
+        categoryDefinitions: Array.isArray(store.state.CATEGORIES) ? store.state.CATEGORIES : []
+    });
+}
+
+function renderDashboardFireStatus(holisticNetWorth, requestId) {
+    const fireSummary = getDashboardFireSummary();
+    renderPendingFireStatusSummary({ holisticNetWorth, fireSummary });
+
+    if (fireSummary.state !== 'ready') return;
+    if (!store.state.featureSettings?.forecast || !store.state.featureSettings?.fire) {
+        renderFireStatusSummary(buildFireStatusViewModel({
+            holisticNetWorth,
+            fireSummary,
+            projection: { status: 'disabled' }
+        }));
+        return;
+    }
+
+    void loadForecastSnapshot().then(projection => {
+        if (requestId !== fireStatusRequestId || dashboardPageState !== PAGE_STATUS.READY) return;
+        renderFireStatusSummary(buildFireStatusViewModel({
+            holisticNetWorth,
+            fireSummary: getDashboardFireSummary(),
+            projection
+        }));
+    });
+}
+
+export function refreshDashboardFireStatus() {
+    if (dashboardPageState !== PAGE_STATUS.READY) return Promise.resolve();
+    return loadDashboard({ force: true });
+}
+
+globalThis.refreshDashboardFireStatus = refreshDashboardFireStatus;
 
 function insertDashboardState(view, stateElement) {
     if (!view || !stateElement) return;
@@ -619,6 +673,7 @@ function renderDashboardPageState() {
     const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
     const laneSections = document.getElementById('lane-sections');
     const milestonesCard = document.getElementById('milestones-dashboard-card');
+    const fireStatusCard = document.getElementById('fire-status-dashboard-card');
     let emptyState = document.getElementById('dashboard-empty-state');
     let errorState = document.getElementById('dashboard-error-state');
 
@@ -629,6 +684,7 @@ function renderDashboardPageState() {
         if (header) header.hidden = false;
         if (laneSections) laneSections.hidden = true;
         if (milestonesCard) milestonesCard.hidden = true;
+        if (fireStatusCard) fireStatusCard.hidden = true;
     } else if (dashboardPageState === PAGE_STATUS.READY) {
         if (header) header.hidden = false;
         if (laneSections) laneSections.hidden = false;
@@ -637,6 +693,7 @@ function renderDashboardPageState() {
         if (header) header.hidden = true;
         if (laneSections) laneSections.hidden = true;
         if (milestonesCard) milestonesCard.hidden = true;
+        if (fireStatusCard) fireStatusCard.hidden = true;
     }
 
     if (emptyState) emptyState.hidden = dashboardPageState !== PAGE_STATUS.EMPTY;

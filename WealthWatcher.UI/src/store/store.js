@@ -76,7 +76,8 @@ const state = {
         isDashboardLoaded: false,
         isHistoryLoaded: false,
         isCalendarLoaded: false,
-        isForecastLoaded: false
+        isForecastLoaded: false,
+        fireStatusForecast: { key: '', status: 'idle', target: 0, data: null, date: null }
 };
 
 let generalSettings = state.generalSettings;
@@ -114,6 +115,7 @@ export const store = {
         this.state.isHistoryLoaded = false;
         this.state.isCalendarLoaded = false;
         this.state.isForecastLoaded = false;
+        this.state.fireStatusForecast = { key: '', status: 'idle', target: 0, data: null, date: null };
     },
 
     clearHourlyAggregateCache() {
@@ -137,6 +139,9 @@ export const store = {
             delete this.apiCacheMeta[key];
             delete this.apiCacheTags[key];
         });
+        if (tag === 'fire-status') {
+            this.state.fireStatusForecast = { key: '', status: 'idle', target: 0, data: null, date: null };
+        }
     }
 };
 

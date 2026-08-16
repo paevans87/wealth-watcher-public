@@ -26,7 +26,18 @@ export const DEMO_API_CONTRACT = Object.freeze([
     { method: 'POST', path: '/api/properties/asset-home/entries', body: { Value: 356000, Mortgage: 174000, Date: '2026-08-13', Time: '12:00:00' } },
     { method: 'POST', path: '/api/assets', body: { DisplayName: 'Demo ISA', AssetKindId: 'kind-investments' } },
     { method: 'POST', path: '/api/classification-groups/asset-kind/values', body: { DisplayName: 'Demo asset kind', Key: 'demo-asset-kind' } },
-    { method: 'POST', path: '/api/wealth/forecast', body: { target: 1200000, annualReturn: 4, monthlyContribution: 1500, includedAssets: ['investments', 'pensions', 'property'] } },
+    { method: 'POST', path: '/api/wealth/forecast', body: {
+        target: 1200000,
+        annualReturn: 4,
+        monthlyContribution: 0,
+        contributions: [
+            { name: 'Emergency fund', amount: 450, assetId: 'asset-cash', cadence: 'monthly' },
+            { name: 'Index fund contribution', amount: 1500, assetId: 'asset-isa', cadence: 'monthly' }
+        ],
+        forecastStrategy: 'fire-default',
+        windfalls: [],
+        includedAssets: ['investments', 'pensions', 'property']
+    } },
     { method: 'PATCH', path: '/api/assets/asset-isa', body: { DisplayName: 'Demo ISA renamed' } },
     { method: 'PATCH', path: '/api/classification-values/kind-cash', body: { DisplayName: 'Cash accounts' } },
     { method: 'PATCH', path: '/api/properties/asset-home', body: { Archived: false } },

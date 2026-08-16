@@ -34,5 +34,6 @@ The latest stable release is `v0.5.0`. Changes that have not yet been released a
 
 ## Unreleased
 
+- Add a Dashboard FIRE status summary that separates selected FIRE assets from Holistic Net Worth, reuses forecast assumptions for a projected date, and provides neutral next-action links.
 - Prepare the repository for open-source release with public CI, dependency checks, contributor guidance, and safer local deployment defaults.
 - Maintain the public release policy, version-aligned UI metadata, release notes, release checks, and application SBOMs; tagged Docker images are published to GHCR while deployment data remains local.

@@ -932,6 +932,218 @@ body.demo-mode {
     transform: translateY(0);
 }
 
+/* --- DASHBOARD FIRE STATUS --- */
+.card.fire-status-dashboard-card {
+    background: linear-gradient(135deg, rgba(8, 47, 73, 0.38), rgba(15, 23, 42, 0.7));
+    border-color: rgba(34, 211, 238, 0.2);
+    border-radius: 12px;
+    box-shadow: none;
+    min-height: 0;
+    margin-block: 0.75rem;
+    padding: 1rem 1.1rem;
+}
+
+.card.fire-status-dashboard-card:hover {
+    box-shadow: none;
+    transform: none;
+}
+
+.fire-status-card-header,
+.fire-status-card-lower,
+.fire-status-milestone {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+}
+
+.fire-status-card-header {
+    align-items: flex-start;
+}
+
+.fire-status-card-header h4 {
+    color: var(--text-main);
+    font-size: 1rem;
+    margin: 0.15rem 0 0;
+}
+
+.fire-status-card-kicker {
+    color: var(--cyan);
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.fire-status-card-scope,
+.fire-status-projection small {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.5;
+}
+
+.fire-status-card-scope {
+    margin: 0.45rem 0 0;
+    max-width: 62rem;
+}
+
+.fire-status-card-link {
+    flex: 0 0 auto;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.fire-status-card-metrics {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 1rem;
+}
+
+.fire-status-card-metrics > div {
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    padding-left: 0.75rem;
+}
+
+.fire-status-card-metrics > div:first-child {
+    border-left: 0;
+    padding-left: 0;
+}
+
+.fire-status-card-metrics span,
+.fire-status-projection > span,
+.fire-status-next-action > span,
+.fire-status-milestone > span {
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    letter-spacing: 0.03em;
+}
+
+.fire-status-card-metrics strong {
+    color: var(--text-main);
+    font-size: 1rem;
+    line-height: 1.2;
+}
+
+.fire-status-progress-track {
+    background: rgba(71, 85, 105, 0.8);
+    border-radius: 999px;
+    height: 0.45rem;
+    margin-top: 0.85rem;
+    overflow: hidden;
+}
+
+.fire-status-progress-fill {
+    background: linear-gradient(90deg, var(--cyan), #22d3ee);
+    border-radius: inherit;
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
+    display: block;
+    height: 100%;
+    transition: width 0.35s ease;
+}
+
+.fire-status-card-lower {
+    align-items: flex-start;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    margin-top: 0.9rem;
+    padding-top: 0.8rem;
+}
+
+.fire-status-projection,
+.fire-status-next-action {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.fire-status-projection strong {
+    color: var(--text-main);
+    font-size: 0.9rem;
+}
+
+.fire-status-projection small {
+    font-size: 0.65rem;
+}
+
+.fire-status-next-action {
+    align-items: flex-end;
+    text-align: right;
+}
+
+.fire-status-next-action a,
+.fire-status-milestone a {
+    color: var(--cyan);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.fire-status-next-action a:hover,
+.fire-status-milestone a:hover {
+    text-decoration: underline;
+}
+
+.fire-status-milestone {
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    justify-content: flex-start;
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+}
+
+.fire-status-milestone strong {
+    color: var(--text-main);
+    font-size: 0.8rem;
+}
+
+.fire-status-milestone a {
+    margin-left: auto;
+}
+
+body.obfuscated .fire-status-progress-fill {
+    opacity: 0;
+}
+
+@media (max-width: 768px) {
+    .fire-status-card-header,
+    .fire-status-card-lower {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .fire-status-card-link {
+        align-self: flex-start;
+    }
+
+    .fire-status-card-metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .fire-status-card-metrics > div:nth-child(3) {
+        border-left: 0;
+        padding-left: 0;
+    }
+
+    .fire-status-next-action {
+        align-items: flex-start;
+        text-align: left;
+    }
+
+    .fire-status-milestone {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .fire-status-milestone a {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
 /* --- MILESTONES --- */
 .card.milestones-dashboard-card {
     background: rgba(8, 47, 73, 0.24);
