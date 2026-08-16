@@ -212,6 +212,7 @@ export async function saveFireSettings() {
     }
     store.clearCache();
     renderFireView();
+    globalThis.refreshDashboardFireStatus?.();
     showToast({
         title: 'FIRE settings saved',
         message: 'Your FIRE settings were saved successfully.',

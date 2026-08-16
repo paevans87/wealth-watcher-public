@@ -1,0 +1,97 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { store } from '../store/store.js';
+import { calculateFireSummary } from './FireModel.js';
+import {
+    buildFireStatusViewModel,
+    formatProjectionDate,
+    getFireStatusAction,
+    renderFireStatusSummary
+} from './FireStatusSummary.js';
+
+const originalFeatureSettings = { ...store.state.featureSettings };
+const originalBudgetSettings = store.state.budgetSettings;
+const originalMilestoneSettings = store.state.milestoneSettings;
+
+test.afterEach(() => {
+    store.state.featureSettings = { ...originalFeatureSettings };
+    store.state.budgetSettings = originalBudgetSettings;
+    store.state.milestoneSettings = originalMilestoneSettings;
+});
+
+function readySummary() {
+    return calculateFireSummary({
+        categories: { cash: 32000, investments: 411300, property: 31000 },
+        fire: { targetIncome: 4000, swr: 4, includedAssets: ['investments'] }
+    });
+}
+
+test('FIRE status card keeps the FIRE scope distinct from holistic net worth', () => {
+    store.state.featureSettings = { ...originalFeatureSettings, fire: true, tracker: true, forecast: true, budget: true, milestones: false };
+    store.state.budgetSettings = {
+        income: [{ amount: 7150 }],
+        bills: [{ amount: 3000 }],
+        savings: [{ amount: 1950 }],
+        spend: [{ amount: 350 }]
+    };
+    const card = { hidden: true, innerHTML: '', dataset: {} };
+    const summary = readySummary();
+
+    renderFireStatusSummary(buildFireStatusViewModel({
+        holisticNetWorth: 442500,
+        fireSummary: summary,
+        projection: { status: 'projected', date: '2043-02' }
+    }), card);
+
+    assert.equal(card.hidden, false);
+    assert.match(card.innerHTML, /FIRE assets/);
+    assert.match(card.innerHTML, /Holistic Net Worth is/);
+    assert.match(card.innerHTML, /Projected FIRE date/);
+    assert.match(card.innerHTML, /February 2043/);
+    assert.match(card.innerHTML, /Review £1,850.00 unallocated in Budget/);
+    assert.doesNotMatch(card.innerHTML, /On track/);
+    assert.equal(card.dataset.fireStatusState, 'ready');
+});
+
+test('FIRE status next action prioritises setup and forecast recovery', () => {
+    const summary = readySummary();
+    store.state.featureSettings = { ...originalFeatureSettings, fire: true, tracker: true, forecast: false, budget: true };
+    assert.deepEqual(getFireStatusAction({ fireSummary: summary, projection: { status: 'projected' } }), {
+        label: 'Enable Forecast',
+        href: '#settings?panel=fire-settings&focus=fire-forecast-settings'
+    });
+
+    store.state.featureSettings = { ...originalFeatureSettings, fire: true, tracker: true, forecast: true, budget: true };
+    assert.deepEqual(getFireStatusAction({ fireSummary: summary, projection: { status: 'unreachable' } }), {
+        label: 'Review Forecast assumptions',
+        href: '#forecast'
+    });
+
+    const setup = calculateFireSummary({ categories: { cash: 32000 }, fire: { targetIncome: 0, swr: 4 } });
+    assert.deepEqual(getFireStatusAction({ fireSummary: setup, projection: { status: 'projected' } }), {
+        label: 'Configure FIRE settings',
+        href: '#settings?panel=fire-settings&focus=fire-tracker-settings'
+    });
+});
+
+test('FIRE status renders a setup state without inventing progress', () => {
+    store.state.featureSettings = { ...originalFeatureSettings, fire: true, tracker: true, forecast: true };
+    const card = { hidden: true, innerHTML: '', dataset: {} };
+    const summary = calculateFireSummary({ categories: { cash: 32000 }, fire: { targetIncome: 0, swr: 4 } });
+
+    renderFireStatusSummary(buildFireStatusViewModel({
+        holisticNetWorth: 32000,
+        fireSummary: summary,
+        projection: { status: 'pending' }
+    }), card);
+
+    assert.equal(card.hidden, false);
+    assert.match(card.innerHTML, /Set up your FIRE snapshot/);
+    assert.doesNotMatch(card.innerHTML, /role="progressbar"/);
+});
+
+test('projection dates are formatted as month and year', () => {
+    assert.equal(formatProjectionDate('2043-02'), 'February 2043');
+    assert.equal(formatProjectionDate('not-a-date'), null);
+});

@@ -1,5 +1,5 @@
 import { store } from '../store/store.js';
-import { fetchFreshStrict, saveDbSettings, API_BASE_URL } from '../api/apiClient.js';
+import { fetchCached, fetchFreshStrict, saveDbSettings, API_BASE_URL } from '../api/apiClient.js';
 import { isFeatureEnabled } from '../utils/featureFlags.js';
 import { getAssetTypeaheadState, renderAssetTypeahead, setupAssetTypeahead } from '../components/AssetTypeahead.js';
 import { renderFeatureToggle } from '../components/FormFields.js';
@@ -9,6 +9,7 @@ import { setPageLoading } from '../components/PageLoading.js';
 import { createPageRequestController } from '../components/PageRequest.js';
 import { renderAccessibleChartData } from '../components/AccessibleChartData.js';
 import { currencyFormatter } from '../utils/formatters.js';
+import { calculateFireTarget, getIncludedFireAssetIds } from '../components/FireModel.js';
 
 let forecastChart;
 let forecastSaveTimer;
@@ -22,13 +23,7 @@ const DEFAULT_MONTHLY_CONTRIBUTION = 1500;
 const DEFAULT_FORECAST_STRATEGY = 'fire-default';
 export const FIRST_LAST_ANNUALIZED_STRATEGY = 'first-last-annualized';
 export const FORECAST_CALCULATIONS_STORAGE_KEY = 'wealthwatcher_forecast_show_asset_calculations';
-const DEFAULT_INCLUDED_ASSETS = ['investments', 'bonds', 'pensions', 'property'];
 const fallbackColors = ['#06b6d4', '#8b5cf6', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#84cc16', '#f97316'];
-
-function parseFiniteNumber(value, fallback) {
-    const parsed = Number.parseFloat(String(value ?? '').replace(/,/g, ''));
-    return Number.isFinite(parsed) ? parsed : fallback;
-}
 
 function cloneSettings(settings) {
     if (settings === undefined || settings === null) return {};
@@ -40,17 +35,7 @@ function cloneSettings(settings) {
 }
 
 export function getForecastTargetFromFireSettings(fire = {}) {
-    const targetIncome = parseFiniteNumber(fire.targetIncome, 4000);
-    const statePensionAmount = parseFiniteNumber(fire.statePensionAmount, 12547);
-    const swr = parseFiniteNumber(fire.swr, 4);
-    const annualIncome = Math.max(0, targetIncome) * 12
-        - (fire.includeStatePension === true ? Math.max(0, statePensionAmount) : 0);
-
-    // A zero/negative withdrawal rate cannot produce a finite FIRE target.
-    // Preserve the configured value everywhere it is displayed and avoid a
-    // truthiness fallback that would turn an intentional zero income into the
-    // default £100,000 target.
-    return swr > 0 ? Math.max(0, annualIncome) / (swr / 100) : 0;
+    return calculateFireTarget(fire);
 }
 
 // The method descriptions are also the UI explanation of the assumptions sent to the API.
@@ -319,7 +304,9 @@ export function setupForecast() {
                 });
                 return;
             }
+            store.clearCache();
             await loadForecastView();
+            globalThis.refreshDashboardFireStatus?.();
             showToast({
                 title: 'Forecast settings saved',
                 message: 'Your forecast settings were saved successfully.',
@@ -589,13 +576,9 @@ export function getForecastContributionInputs(settings = store.state.forecastSet
     };
 }
 
-function getIncludedAssets(fire) {
+function getIncludedAssets(fire = {}) {
     if (Array.isArray(fire.includedAssets)) return fire.includedAssets;
-    if (store.state.CATEGORIES?.length) {
-        return store.state.CATEGORIES.map(category => category.Id)
-            .filter(id => !['cash', 'savings'].includes(String(id).toLowerCase()));
-    }
-    return DEFAULT_INCLUDED_ASSETS;
+    return getIncludedFireAssetIds(fire, store.state.CATEGORIES);
 }
 
 export function buildForecastRequest(settings = store.state.forecastSettings || {}, target, fire = store.state.fireSettings || {}) {
@@ -609,6 +592,116 @@ export function buildForecastRequest(settings = store.state.forecastSettings || 
         windfalls: fire.includeWindfalls === false ? [] : (fire.windfalls || []),
         includedAssets: getIncludedAssets(fire)
     };
+}
+
+function readForecastField(data, upperKey, lowerKey) {
+    return data?.[upperKey] ?? data?.[lowerKey];
+}
+
+function isForecastDate(value) {
+    const date = String(value ?? '').trim();
+    const match = /^(\d{4})-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/.exec(date);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3] || '01');
+    const parsed = new Date(year, month - 1, day);
+    if (Number.isNaN(parsed.valueOf())
+        || parsed.getFullYear() !== year
+        || parsed.getMonth() !== month - 1
+        || parsed.getDate() !== day) return null;
+
+    return `${match[1]}-${match[2]}`;
+}
+
+export function getForecastProjectionStatus(data, target) {
+    const current = Number(readForecastField(data, 'CurrentNW', 'currentNW'));
+    const months = Number(readForecastField(data, 'TargetHitMonth', 'targetHitMonth'));
+    const date = isForecastDate(readForecastField(data, 'TargetHitDate', 'targetHitDate'));
+    const points = readForecastField(data, 'Projection', 'projection')
+        || readForecastField(data, 'Expected', 'expected')
+        || [];
+
+    if (target > 0 && Number.isFinite(current) && current >= target) return 'achieved';
+    if (months === 0) return 'achieved';
+    if (months > 0 && date) return 'projected';
+    if (months < 0) return 'unreachable';
+    if (date) return 'projected';
+    return Array.isArray(points) && points.length > 0 ? 'unavailable' : 'empty';
+}
+
+export function getForecastProjectionDate(data) {
+    return isForecastDate(readForecastField(data, 'TargetHitDate', 'targetHitDate'));
+}
+
+/**
+ * Loads the existing forecast endpoint for the Dashboard card. This is kept
+ * separate from the full Forecast page so the card can render FIRE math first
+ * and treat this request as an optional projection enhancement.
+ */
+export async function loadForecastSnapshot({
+    settings = store.state.forecastSettings || {},
+    fire = store.state.fireSettings || {},
+    force = false
+} = {}) {
+    if (!isFeatureEnabled('forecast')) {
+        const snapshot = { key: 'disabled', status: 'disabled', target: 0, data: null, date: null };
+        store.state.fireStatusForecast = snapshot;
+        return snapshot;
+    }
+
+    const target = getForecastTargetFromFireSettings(fire);
+    const request = buildForecastRequest(settings, target, fire);
+    const key = JSON.stringify(request);
+    const previous = store.state.fireStatusForecast;
+    if (!force && previous?.key === key && previous.status && previous.status !== 'pending') {
+        return previous;
+    }
+
+    const pending = { key, status: 'pending', target, data: null, date: null };
+    store.state.fireStatusForecast = pending;
+    if (target <= 0) {
+        const setupSnapshot = { ...pending, status: 'setup' };
+        store.state.fireStatusForecast = setupSnapshot;
+        return setupSnapshot;
+    }
+
+    try {
+        const data = await fetchCached(`${API_BASE_URL}/wealth/forecast`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(request)
+        }, {
+            cacheResponse: !force,
+            ttlMs: 5 * 60 * 1000,
+            tags: ['fire-status', 'forecast'],
+            throwOnError: true
+        });
+        const currentRequest = buildForecastRequest(
+            store.state.forecastSettings || {},
+            getForecastTargetFromFireSettings(store.state.fireSettings || {}),
+            store.state.fireSettings || {}
+        );
+        if (JSON.stringify(currentRequest) !== key) {
+            return { ...pending, status: 'stale' };
+        }
+
+        const validData = data && typeof data === 'object' ? data : null;
+        const snapshot = {
+            key,
+            status: validData ? getForecastProjectionStatus(validData, target) : 'unavailable',
+            target,
+            data: validData,
+            date: validData ? getForecastProjectionDate(validData) : null
+        };
+        store.state.fireStatusForecast = snapshot;
+        return snapshot;
+    } catch (error) {
+        const snapshot = { ...pending, status: 'unavailable', error };
+        store.state.fireStatusForecast = snapshot;
+        return snapshot;
+    }
 }
 
 export function renderHistoricalRateSources(rates = forecastRateSources, visible = showForecastAssetCalculations) {
