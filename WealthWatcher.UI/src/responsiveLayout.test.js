@@ -63,7 +63,6 @@ test('feature-gated Milestones card stays under its renderer visibility contract
 test('high-data pages have explicit mobile containment contracts', () => {
     assert.match(stylesheet, /#forecast-view\s+\.forecast-control-actions\s*\{[\s\S]*flex:\s*0 1 auto/);
     assert.match(stylesheet, /#fire-view\s+\.fire-dashboard\s*>\s*\.grid-container\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    assert.match(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*div:first-child\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
     assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-flow-visual\s*\{[\s\S]*min-height:\s*0/);
     assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-flow-mobile-view\s*\{\s*display:\s*block/);
     assert.match(stylesheet, /\.budget-editor-grid\s*\{[\s\S]*align-items:\s*start/);
@@ -81,6 +80,7 @@ test('Budget configuration uses compact grouped lines and a responsive focused e
     assert.match(indexMarkup, /id="budget-line-editor-form"[^>]*role="dialog"|role="dialog"[\s\S]*id="budget-line-editor-form"/);
     assert.doesNotMatch(indexMarkup, /budget-plan-settings-button|>Plan settings</);
     assert.doesNotMatch(indexMarkup, /budget-save-status|Changes saved/);
+    assert.doesNotMatch(indexMarkup, /budget-summary-grid|budget-total-(?:income|bills|savings|spend)|budget-unallocated/);
     assert.doesNotMatch(indexMarkup, /<table[^>]+budget-table/);
     assert.doesNotMatch(indexMarkup, /id="budget-entry-(?:income|bills|savings|spend)"/);
     assert.match(stylesheet, /\.budget-plan-groups\s*\{[\s\S]*display:\s*grid/);
@@ -88,7 +88,7 @@ test('Budget configuration uses compact grouped lines and a responsive focused e
     assert.match(stylesheet, /\.form-flyout\s*\{[\s\S]*position:\s*fixed/);
     assert.match(stylesheet, /\.form-flyout-dialog\s*\{[\s\S]*position:\s*absolute/);
     assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.form-flyout-dialog\s*\{[\s\S]*border-radius:\s*16px\s+16px\s+0\s+0/);
-    assert.match(stylesheet, /\.budget-summary-grid\s*\{[\s\S]*justify-content:\s*center/);
+    assert.doesNotMatch(stylesheet, /\.budget-summary-(?:grid|card|label)/);
     assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-plan-line\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
 });
 

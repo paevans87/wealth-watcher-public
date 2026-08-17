@@ -66,7 +66,6 @@ function reset() {
     elements.set('budget-disabled-description', createElement('budget-disabled-description'));
     elements.set('budget-settings-form', createElement('budget-settings-form'));
     elements.set('budget-flow-renderer', createElement('budget-flow-renderer'));
-    elements.set('budget-unallocated-label', createElement('budget-unallocated-label'));
     elements.set('budget-validation-message', createElement('budget-validation-message'));
     const budgetView = createElement('budget-view');
     const budgetHeader = createElement('budget-header');
@@ -85,8 +84,6 @@ function reset() {
     };
     elements.set('budget-view', budgetView);
     elements.set('budget-overview-content', createElement('budget-overview-content'));
-    ['budget-total-income', 'budget-total-bills', 'budget-total-savings', 'budget-total-spend', 'budget-unallocated']
-        .forEach(id => elements.set(id, createElement(id)));
     elements.set('nav-budget', createElement('nav-budget'));
     requests = [];
     saveSucceeds = true;
@@ -271,11 +268,6 @@ test('budget overview explains missing configuration and keeps setup on the Budg
 
 test('budget overview shows configured totals and clickable flow nodes, then hides both when cleared', async () => {
     reset();
-    const totalIncome = elements.get('budget-total-income');
-    const totalBills = elements.get('budget-total-bills');
-    const totalSavings = elements.get('budget-total-savings');
-    const totalSpend = elements.get('budget-total-spend');
-    const unallocated = elements.get('budget-unallocated');
     store.state.budgetSettings = {
         income: [{ name: 'Salary', amount: 5000 }],
         bills: [{ name: 'Rent', amount: 2000 }],
@@ -287,11 +279,13 @@ test('budget overview shows configured totals and clickable flow nodes, then hid
 
     assert.equal(elements.has('budget-empty-state'), false, 'ready content should not create the no-data experience');
     assert.equal(elements.get('budget-overview-content').hidden, false);
-    assert.equal(totalIncome.innerText, '£5,000.00');
-    assert.equal(totalBills.innerText, '£2,000.00');
-    assert.equal(totalSavings.innerText, '£500.00');
-    assert.equal(totalSpend.innerText, '£300.00');
-    assert.equal(unallocated.innerText, '£2,200.00');
+    assert.deepEqual(getMonthlyBudgetTotals(store.state.budgetSettings), {
+        income: 5000,
+        bills: 2000,
+        savings: 500,
+        spend: 300,
+        unallocated: 2200
+    });
     assert.match(elements.get('budget-flow-renderer').innerHTML, /budget-flow-svg/);
     assert.doesNotMatch(elements.get('budget-flow-renderer').innerHTML, /budget-flow-table/);
     assert.match(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-focus="bills"/);
@@ -336,11 +330,6 @@ test('budget overview shows configured totals and clickable flow nodes, then hid
 
     assert.equal(elements.get('budget-empty-state').hidden, false);
     assert.equal(elements.get('budget-overview-content').hidden, true);
-    assert.equal(totalIncome.innerText, '');
-    assert.equal(totalBills.innerText, '');
-    assert.equal(totalSavings.innerText, '');
-    assert.equal(totalSpend.innerText, '');
-    assert.equal(unallocated.innerText, '');
     assert.equal(elements.get('budget-flow-renderer').innerHTML, '');
 });
 
@@ -372,10 +361,6 @@ test('budget monthly overview normalises income, bills, and savings cadence', ()
 
     loadBudgetView();
 
-    assert.equal(elements.get('budget-total-income').innerText, '£7,000.00');
-    assert.equal(elements.get('budget-total-bills').innerText, '£1,900.00');
-    assert.equal(elements.get('budget-total-savings').innerText, '£400.00');
-    assert.equal(elements.get('budget-unallocated').innerText, '£4,300.00');
     assert.match(elements.get('budget-flow-renderer').innerHTML, /£7,000\.00/);
     assert.match(elements.get('budget-flow-renderer').innerHTML, /£4,300\.00/);
 });
@@ -392,7 +377,6 @@ test('budget flow breakdown formats annual lines and linked assets', async () =>
 
     loadBudgetView();
 
-    assert.equal(elements.get('budget-total-income').innerText, '£4,800.86');
     assert.match(elements.get('budget-flow-renderer').innerHTML, /£4,800\.86/);
 
     const flowControl = { dataset: { budgetFlowFocus: 'bills' } };

@@ -721,39 +721,6 @@ function displayedBudgetAmount(value) {
     return globalThis.window?.isObfuscated ? '£***' : formatter.format(value);
 }
 
-function renderBudgetSummary(totals) {
-    const values = {
-        'budget-total-income': totals.income,
-        'budget-total-bills': totals.bills,
-        'budget-total-savings': totals.savings,
-        'budget-total-spend': totals.spend,
-        'budget-unallocated': totals.unallocated
-    };
-    Object.entries(values).forEach(([id, value]) => {
-        const element = document.getElementById(id);
-        if (!element) return;
-        element.innerText = displayedBudgetAmount(value);
-    });
-
-    const unallocated = document.getElementById('budget-unallocated');
-    const label = document.getElementById('budget-unallocated-label');
-    if (label) label.innerText = totals.unallocated < 0 ? 'Funding gap' : 'Left to allocate';
-    if (unallocated?.style) unallocated.style.color = totals.unallocated < 0 ? '#f87171' : '';
-}
-
-function clearBudgetSummary() {
-    ['budget-total-income', 'budget-total-bills', 'budget-total-savings', 'budget-total-spend', 'budget-unallocated']
-        .forEach(id => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.innerText = '';
-                if (element.style) element.style.color = '';
-            }
-        });
-    const label = document.getElementById('budget-unallocated-label');
-    if (label) label.innerText = 'Left to allocate';
-}
-
 function renderBudgetEmptyState() {
     const view = document.getElementById('budget-view');
     if (!view) return;
@@ -853,7 +820,6 @@ function renderBudgetPresentation(settings, { preserveEditor = true } = {}) {
         if (disabledState) disabledState.hidden = false;
         if (flowTarget) flowTarget.innerHTML = '';
         if (document.getElementById('budget-plan-groups')) document.getElementById('budget-plan-groups').innerHTML = '';
-        clearBudgetSummary();
         return { totals, errors, hasData, state: 'disabled' };
     }
 
@@ -861,7 +827,6 @@ function renderBudgetPresentation(settings, { preserveEditor = true } = {}) {
     if (hasData) {
         if (overview) overview.hidden = false;
         if (emptyState) emptyState.hidden = true;
-        renderBudgetSummary(totals);
         renderBudgetFlow(flowTarget, createBudgetFlowModel(totals, flowBreakdowns), {
             formatter: value => displayedBudgetAmount(value),
             obfuscated: Boolean(globalThis.window?.isObfuscated),
@@ -874,7 +839,6 @@ function renderBudgetPresentation(settings, { preserveEditor = true } = {}) {
     budgetFlowSelection = null;
     renderBudgetEmptyState();
     if (flowTarget) flowTarget.innerHTML = '';
-    clearBudgetSummary();
     return { totals, errors, hasData, state: errors.length ? 'invalid' : 'empty' };
 }
 
