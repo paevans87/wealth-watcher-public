@@ -26,7 +26,34 @@ export const DEMO_API_CONTRACT = Object.freeze([
     { method: 'POST', path: '/api/properties/asset-home/entries', body: { Value: 356000, Mortgage: 174000, Date: '2026-08-13', Time: '12:00:00' } },
     { method: 'POST', path: '/api/assets', body: { DisplayName: 'Demo ISA', AssetKindId: 'kind-investments' } },
     { method: 'POST', path: '/api/classification-groups/asset-kind/values', body: { DisplayName: 'Demo asset kind', Key: 'demo-asset-kind' } },
-    { method: 'POST', path: '/api/wealth/forecast', body: { target: 1200000, annualReturn: 4, monthlyContribution: 1500, includedAssets: ['investments', 'pensions', 'property'] } },
+    { method: 'POST', path: '/api/settings', body: { wealthWatcherFeatureSettings: JSON.stringify({ fire: true, tracker: true, forecast: true, budget: true, milestones: false }) } },
+    {
+        method: 'POST',
+        path: '/api/settings',
+        body: {
+            wealthWatcherBudgetSettings: JSON.stringify({
+                income: [{ id: 'contract-income', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null }],
+                bills: [{ id: 'contract-bill', name: 'Annual insurance', amount: 1200, cadence: 'annually', assetId: null }],
+                savings: [
+                    { id: 'contract-linked-saving', name: 'ISA contribution', amount: 500, cadence: 'monthly', assetId: 'asset-isa' },
+                    { id: 'contract-unlinked-saving', name: 'Rainy day fund', amount: 250, cadence: 'quarterly', assetId: null }
+                ],
+                spend: [{ id: 'contract-spend', name: 'Groceries', amount: 450, cadence: 'monthly', assetId: null }]
+            })
+        }
+    },
+    {
+        method: 'POST',
+        path: '/api/wealth/forecast',
+        body: {
+            target: 1200000,
+            annualReturn: 4,
+            monthlyContribution: 0,
+            contributions: [{ amount: 1500, assetId: 'asset-isa', cadence: 'monthly' }],
+            windfalls: [],
+            includedAssets: ['investments', 'pensions', 'property']
+        }
+    },
     { method: 'PATCH', path: '/api/assets/asset-isa', body: { DisplayName: 'Demo ISA renamed' } },
     { method: 'PATCH', path: '/api/classification-values/kind-cash', body: { DisplayName: 'Cash accounts' } },
     { method: 'PATCH', path: '/api/properties/asset-home', body: { Archived: false } },

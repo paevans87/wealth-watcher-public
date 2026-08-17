@@ -9,7 +9,13 @@ globalThis.window = {
 const originalDocument = globalThis.document;
 globalThis.document = {};
 
-const { clearSettingsPanelQuery, getSettingsPanelTarget, revealSettingsPanel } = await import('./router.js');
+const {
+    clearSettingsPanelQuery,
+    getDeprecatedRouteRedirect,
+    getSettingsPanelTarget,
+    revealSettingsPanel,
+    shouldRedirectDisabledFeatureRoute
+} = await import('./router.js');
 
 test.after(() => {
     if (originalDocument === undefined) delete globalThis.document;
@@ -27,6 +33,21 @@ test('settings route targets preserve the panel and optional subsection', () => 
     });
     assert.equal(getSettingsPanelTarget('#settings'), null);
     assert.equal(getSettingsPanelTarget('#budget?panel=monthly-budget'), null);
+});
+
+test('retired Budget Settings deep links redirect to the Budget page', () => {
+    assert.equal(getDeprecatedRouteRedirect('#settings?panel=monthly-budget'), '#budget');
+    assert.equal(getDeprecatedRouteRedirect('#settings?panel=monthly-budget&focus=budget-settings-pane'), '#budget');
+    assert.equal(getDeprecatedRouteRedirect('#settings?panel=fire-settings'), null);
+    assert.equal(getDeprecatedRouteRedirect('#budget'), null);
+});
+
+test('disabled Budget stays on its route while other disabled feature routes fall back', () => {
+    assert.equal(shouldRedirectDisabledFeatureRoute('#budget', 'budget', false), false);
+    assert.equal(shouldRedirectDisabledFeatureRoute('#budget', 'budget', true), false);
+    assert.equal(shouldRedirectDisabledFeatureRoute('#forecast', 'forecast', false), true);
+    assert.equal(shouldRedirectDisabledFeatureRoute('#forecast', 'forecast', true), false);
+    assert.equal(shouldRedirectDisabledFeatureRoute('#dashboard', null, false), false);
 });
 
 test('settings route expands a closed pane and scrolls to its requested subsection', () => {

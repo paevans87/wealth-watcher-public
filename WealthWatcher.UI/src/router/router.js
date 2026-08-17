@@ -47,6 +47,31 @@ export function getSettingsPanelTarget(hash = '') {
 }
 
 /**
+ * Returns the route that should replace a retired Budget Settings deep link.
+ * Budget configuration now lives on the Budget page, but keeping this
+ * redirect preserves bookmarked links and old empty-state URLs.
+ * @param {string} hash
+ * @returns {string|null}
+ */
+export function getDeprecatedRouteRedirect(hash = '') {
+    const target = getSettingsPanelTarget(hash);
+    return target?.panelId === 'monthly-budget' ? '#budget' : null;
+}
+
+/**
+ * Determines whether a disabled feature route should fall back to Dashboard.
+ * Budget is intentionally rendered while disabled so its page-owned enable
+ * control remains reachable.
+ * @param {string} route
+ * @param {string|null} featureKey
+ * @param {boolean} enabled
+ * @returns {boolean}
+ */
+export function shouldRedirectDisabledFeatureRoute(route, featureKey, enabled) {
+    return Boolean(featureKey && !enabled && route !== '#budget');
+}
+
+/**
  * Removes a one-time settings panel target after it has been revealed.
  * This prevents the deep-link from overriding the pane's saved state on refresh.
  * @param {string} hash
@@ -89,13 +114,24 @@ export function handleRouting() {
     const hash = window.location.hash || '#dashboard';
     const route = hash.split('?')[0];
 
+    const redirectRoute = getDeprecatedRouteRedirect(hash);
+    if (redirectRoute) {
+        if (window.location.hash !== redirectRoute) {
+            window.location.hash = redirectRoute;
+        }
+        return;
+    }
+
     applyFeatureVisibility();
     
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
     const featureKey = getFeatureKeyForRoute(route);
-    if (featureKey && !isFeatureEnabled(featureKey)) {
+    // Budget owns its enable/disable experience on the Budget page. Keep the
+    // route alive so users can reach the in-page enable action; other disabled
+    // feature routes retain the existing Dashboard fallback.
+    if (shouldRedirectDisabledFeatureRoute(route, featureKey, isFeatureEnabled(featureKey))) {
         const dashboardView = document.getElementById('dashboard-view');
         const navDashboard = document.getElementById('nav-dashboard');
         if (dashboardView) dashboardView.classList.add('active');
@@ -122,7 +158,11 @@ export function handleRouting() {
         const navBudget = document.getElementById('nav-budget');
         if(budgetView) budgetView.classList.add('active');
         if(navBudget) navBudget.classList.add('active');
-        
+
+        // The Budget editor moved out of Settings. Hydrate it alongside the
+        // overview so direct navigation and refreshes render the complete
+        // Budget page, including the disabled-state enable action.
+        populateBudgetSettings();
         loadBudgetView();
     } else if (route === '#history') {
         const historyView = document.getElementById('history-view');
@@ -165,7 +205,6 @@ export function handleRouting() {
         populateFireFeatureSettings();
         populateFireSettings();
         populateForecastSettings();
-        populateBudgetSettings();
         populateMilestoneSettings();
         initAllCollapsiblePanes(settingsView);
         const settingsPanelTarget = getSettingsPanelTarget(hash);
