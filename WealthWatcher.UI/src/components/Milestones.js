@@ -305,6 +305,7 @@ async function persistMilestoneTargets(rawTargets, successMessage) {
         store.clearCache();
         setMilestoneSettingsMessage();
         refreshMilestoneDashboardCard();
+        globalThis.refreshDashboardFireStatus?.();
         showToast({
             title: 'Milestones saved',
             message: successMessage,

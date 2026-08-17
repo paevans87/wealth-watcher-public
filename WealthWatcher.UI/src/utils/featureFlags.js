@@ -93,6 +93,8 @@ export async function setFeatureEnabled(featureKey, enabled) {
     applyFeatureVisibility();
 
     if (await saveDbSettings(FEATURE_SETTINGS_KEY, nextSettings)) {
+        store.clearCache();
+        globalThis.refreshDashboardFireStatus?.();
         showToast({
             title: `${featureLabel} ${nextSettings[featureKey] ? 'enabled' : 'disabled'}`,
             message: `${featureLabel} settings were saved successfully.`,

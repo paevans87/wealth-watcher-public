@@ -1159,6 +1159,7 @@ function scheduleBudgetSave(context = null, previousSettings = null) {
             }
         }
         store.clearCache();
+        globalThis.refreshDashboardFireStatus?.();
         showToast({ ...saveContext, type: 'success', key: 'budget-settings' });
     }, 300);
 }

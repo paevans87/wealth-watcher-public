@@ -1,45 +1,11 @@
 import { store } from '../store/store.js';
 import { formatter } from '../utils/formatters.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
+import {
+    calculateFireSummary
+} from '../components/FireModel.js';
 
-const DEFAULT_TARGET_INCOME = 4000;
-const DEFAULT_SWR = 4.0;
-const DEFAULT_STATE_PENSION_AMOUNT = 12547;
-
-function parseFiniteNumber(value, fallback) {
-    const parsed = Number.parseFloat(String(value ?? '').replace(/,/g, ''));
-    return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function getLocalDateKey(date = new Date()) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-function getWindfallDateKey(windfall) {
-    const expectedDate = String(windfall?.ExpectedDate ?? windfall?.expectedDate ?? '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedDate)) return null;
-
-    const parsed = new Date(`${expectedDate}T00:00:00`);
-    if (Number.isNaN(parsed.valueOf()) || getLocalDateKey(parsed) !== expectedDate) return null;
-    return expectedDate;
-}
-
-export function getCurrentWindfallsAmount(windfalls = [], today = getLocalDateKey()) {
-    return (Array.isArray(windfalls) ? windfalls : [])
-        .filter(windfall => {
-            const included = windfall?.IncludeInCalculation === true
-                || windfall?.includeInCalculation === true;
-            const expectedDate = getWindfallDateKey(windfall);
-            return included && expectedDate !== null && expectedDate <= today;
-        })
-        .reduce((sum, windfall) => sum + parseFiniteNumber(
-            windfall.Amount ?? windfall.amount,
-            0
-        ), 0);
-}
+export { getCurrentWindfallsAmount } from '../components/FireModel.js';
 
 export function renderFireView() {
     const targetIncomeInput = document.getElementById('fire-setting-income');
@@ -48,23 +14,17 @@ export function renderFireView() {
     const statePensionAmountInput = document.getElementById('fire-setting-state-pension');
     
     const s = store.state.fireSettings || {};
-    const targetIncome = parseFiniteNumber(s.targetIncome, DEFAULT_TARGET_INCOME);
-    const swr = parseFiniteNumber(s.swr, DEFAULT_SWR);
-    const includeStatePension = s.includeStatePension === true;
-    const statePensionAmount = parseFiniteNumber(s.statePensionAmount, DEFAULT_STATE_PENSION_AMOUNT);
-    const includeWindfalls = s.includeWindfalls !== false; // default true if undefined
-    const windfalls = includeWindfalls ? (s.windfalls || []) : [];
-    const activeWindfallsAmount = getCurrentWindfallsAmount(windfalls);
-    
-    const configuredCategories = Array.isArray(store.state.CATEGORIES) ? store.state.CATEGORIES : [];
-    const defaultIncludedAssets = configuredCategories.length > 0
-        ? configuredCategories
-            .map(category => category.Id)
-            .filter(id => !['cash', 'savings'].includes(String(id).toLowerCase()))
-        : ['investments', 'bonds', 'pensions', 'property'];
-    const includedAssets = new Set((Array.isArray(s.includedAssets) ? s.includedAssets : defaultIncludedAssets)
-        .map(assetId => String(assetId).trim().toLowerCase())
-        .filter(Boolean));
+    const fireSummary = calculateFireSummary({
+        categories: store.state.categories || {},
+        fire: s,
+        categoryDefinitions: Array.isArray(store.state.CATEGORIES) ? store.state.CATEGORIES : []
+    });
+    const targetIncome = fireSummary.targetIncome;
+    const swr = fireSummary.swr;
+    const includeStatePension = fireSummary.includeStatePension;
+    const statePensionAmount = fireSummary.statePensionAmount;
+
+    const includedAssets = new Set(fireSummary.includedAssets);
     
     if (targetIncomeInput) targetIncomeInput.value = targetIncome.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (swrInput) swrInput.value = swr;
@@ -77,8 +37,7 @@ export function renderFireView() {
     });
     
     // Calculations
-    const categories = store.state.categories || {};
-    const hasTrackingData = Object.keys(categories).length > 0;
+    const hasTrackingData = fireSummary.hasTrackingData;
     if (hasTrackingData) {
         setPageStatus('fire-view', PAGE_STATUS.READY);
         showTrackerReadyState();
@@ -89,36 +48,14 @@ export function renderFireView() {
         return;
     }
 
-    let effectiveMonthlyTarget = targetIncome;
-    if (includeStatePension) {
-        effectiveMonthlyTarget -= (statePensionAmount / 12);
-        if (effectiveMonthlyTarget < 0) effectiveMonthlyTarget = 0;
-    }
-    
     // A zero/negative withdrawal rate is invalid for the FIRE calculation. Keep
     // the configured value visible and avoid replacing it with the default or
     // rendering an infinite target for malformed persisted settings.
-    let targetNumber = swr > 0 ? (effectiveMonthlyTarget * 12) / (swr / 100) : 0;
-    
-    let investableAssets = 0;
-    includedAssets.forEach(assetId => {
-        if (categories[assetId] !== undefined && categories[assetId] !== null) {
-            const val = parseFloat(categories[assetId]);
-            if (!isNaN(val)) {
-                investableAssets += val;
-            }
-        }
-    });
-    
-    investableAssets += activeWindfallsAmount;
-    
-    const currentPassiveIncome = (investableAssets * (swr / 100)) / 12;
-    const remaining = Math.max(0, targetNumber - investableAssets);
-    
-    let completion = 100;
-    if (targetNumber > 0) {
-        completion = Math.min(100, (investableAssets / targetNumber) * 100);
-    }
+    const targetNumber = fireSummary.target;
+    const investableAssets = fireSummary.investableAssets;
+    const currentPassiveIncome = fireSummary.currentPassiveIncome;
+    const remaining = fireSummary.remaining;
+    const completion = fireSummary.completion;
     
     // UI Updates
     const targetDisplay = document.getElementById('fire-target-display');
@@ -232,7 +169,7 @@ function renderTrackerEmptyState() {
                             <span class="presentation-preview-label">Illustrative example</span>
                             <strong>FIRE progress</strong>
                         </div>
-                        <span class="presentation-preview-status">On track</span>
+                        <span class="presentation-preview-status">Illustrative projection</span>
                     </div>
                     <div class="tracker-preview-main">
                         <div class="tracker-preview-ring" aria-hidden="true"><div><strong>68%</strong><span>complete</span></div></div>

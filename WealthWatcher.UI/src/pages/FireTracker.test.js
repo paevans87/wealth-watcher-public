@@ -158,6 +158,8 @@ test('FireTracker shows a settings CTA when tracking data is absent', () => {
     assert.match(elements['fire-empty-state'].innerHTML, /Illustrative example/);
     assert.match(elements['fire-empty-state'].innerHTML, /tracker-preview/);
     assert.match(elements['fire-empty-state'].innerHTML, /aria-label="Illustrative example of a configured FIRE tracker"/);
+    assert.match(elements['fire-empty-state'].innerHTML, /Illustrative projection/);
+    assert.doesNotMatch(elements['fire-empty-state'].innerHTML, /On track/);
     assert.match(elements['fire-empty-state'].innerHTML, /href="#settings\?panel=fire-settings(?:&amp;|&)focus=fire-tracker-settings"/);
     assert.match(elements['fire-empty-state'].innerHTML, /aria-controls="fire-settings-pane"/);
     assert.match(elements['fire-empty-state'].innerHTML, /No tracking data yet/);
