@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented here.
 
-The latest stable release is `v0.5.0`. Changes that have not yet been released are grouped under `Unreleased`.
+The latest stable release is `v0.6.0`. Changes that have not yet been released are grouped under `Unreleased`.
+
+## 0.6.0 - 2026-08-17
+
+- Add a Dashboard FIRE status summary that keeps selected FIRE assets separate from Holistic Net Worth, shows progress toward the configured target, and provides a context-aware next action.
+- Add an optional projected FIRE date from the existing forecast endpoint, with shared FIRE/forecast target calculations and safe handling for disabled, incomplete, stale, or unavailable projections.
+- Rebuild Budget as a page-owned planner with income, bills, savings, and spending lines, cadence-aware monthly equivalents, forecast-asset savings links, an interactive flow view, and browser-demo parity.
+- Preserve budget line identifiers and asset mappings across edits, assign identifiers to new lines, remove omitted lines, and reject invalid or conflicting settings atomically.
+- Refresh the pinned .NET SDK, API/test dependencies, GitHub Actions, and Docker metadata tooling, with expanded API, UI, demo-contract, routing, and responsive-layout regression coverage.
 
 ## 0.5.0 - 2026-08-16
 
@@ -34,6 +42,5 @@ The latest stable release is `v0.5.0`. Changes that have not yet been released a
 
 ## Unreleased
 
-- Add a Dashboard FIRE status summary that separates selected FIRE assets from Holistic Net Worth, reuses forecast assumptions for a projected date, and provides neutral next-action links.
 - Prepare the repository for open-source release with public CI, dependency checks, contributor guidance, and safer local deployment defaults.
 - Maintain the public release policy, version-aligned UI metadata, release notes, release checks, and application SBOMs; tagged Docker images are published to GHCR while deployment data remains local.
