@@ -355,3 +355,19 @@ test('linked budget savings stay asset-specific while unlinked savings use the m
         contributions: [{ name: 'ISA', amount: 500, assetId: 'asset-isa', cadence: 'monthly' }]
     });
 });
+
+test('linked annual budget savings retain cadence for forecast aggregation', () => {
+    store.state.budgetSettings = {
+        savings: [{ name: 'Annual ISA contribution', amount: 1200, assetId: 'asset-isa', cadence: 'annually' }]
+    };
+
+    assert.deepEqual(getForecastContributionInputs({ monthlyContribution: 1500 }), {
+        monthlyContribution: 0,
+        contributions: [{
+            name: 'Annual ISA contribution',
+            amount: 1200,
+            assetId: 'asset-isa',
+            cadence: 'annually'
+        }]
+    });
+});

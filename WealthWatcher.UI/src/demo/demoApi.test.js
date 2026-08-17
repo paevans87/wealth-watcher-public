@@ -8,6 +8,19 @@ import {
     resetDemoState
 } from './demoApi.js';
 
+const BUDGET_CATEGORIES = ['income', 'bills', 'savings', 'spend'];
+const CADENCE_MONTHS = { monthly: 1, quarterly: 3, annually: 12 };
+const DEMO_STORAGE_KEY = 'wealth-watcher:live-demo-ledger:v4';
+
+const monthlyAmount = item => Number(item.amount || 0) / (CADENCE_MONTHS[item.cadence] || 1);
+const budgetTotals = budget => Object.fromEntries(BUDGET_CATEGORIES.map(category => [
+    category,
+    Number((budget[category] || []).reduce((total, item) => total + monthlyAmount(item), 0).toFixed(2))
+]));
+const readBudgetSettings = async () => JSON.parse(
+    (await handleDemoRequest('/api/settings').then(response => response.json())).wealthWatcherBudgetSettings
+);
+
 test.beforeEach(() => {
     resetDemoState();
 });
@@ -50,6 +63,241 @@ test('milestone settings persist through the demo contract and reset cleanly', a
     resetDemoState();
     const resetSettings = await (await handleDemoRequest('/api/settings')).json();
     assert.deepEqual(JSON.parse(resetSettings.wealthWatcherMilestoneSettings), { targets: [] });
+});
+
+test('seed budget settings expose the production-shaped monthly plan', async () => {
+    const budget = await readBudgetSettings();
+    for (const category of BUDGET_CATEGORIES) {
+        assert.ok(Array.isArray(budget[category]));
+        assert.ok(budget[category].every(item => (
+            Object.keys(item).sort().join(',') === 'amount,assetId,cadence,id,name'
+        )));
+        assert.ok(budget[category].every(item => item.cadence === 'monthly'));
+        assert.ok(budget[category].every(item => item.name === item.name.trim()));
+    }
+    assert.equal(budget.savings.find(item => item.name === 'Index fund contribution').assetId, 'asset-isa');
+    assert.equal(budgetTotals(budget).income, 7150);
+    assert.equal(budgetTotals(budget).bills, 1870);
+    assert.equal(budgetTotals(budget).savings, 1950);
+    assert.equal(budgetTotals(budget).spend, 1480);
+    assert.equal(7150 - 1870 - 1950 - 1480, 1850);
+});
+
+test('budget settings round-trip cadence, asset mappings, and discard derived Sankey fields', async () => {
+    const write = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+            wealthWatcherFeatureSettings: JSON.stringify({ fire: true, tracker: true, forecast: true, budget: true, milestones: false }),
+            wealthWatcherBudgetSettings: JSON.stringify({
+                totals: { income: 999999 },
+                sankey: { nodes: ['not persisted'] },
+                income: [{ id: 'income-round-trip', name: '  Salary  ', amount: 6000, cadence: 'monthly', assetId: 'asset-isa', sankeyWidth: 42 }],
+                bills: [{ id: 'bill-round-trip', name: 'Annual insurance', amount: 1200, cadence: 'annual' }],
+                savings: [
+                    { id: 'saving-linked', name: '  ISA contribution ', amount: 500, cadence: 'quarterly', assetId: 'asset-isa' },
+                    { id: 'saving-unlinked', name: 'Rainy day fund', amount: 250, cadence: 'monthly', assetId: null }
+                ],
+                spend: [{ id: 'spend-round-trip', name: 'Groceries', amount: 450, cadence: 'monthly', assetId: null }]
+            })
+        })
+    });
+    assert.equal(write.status, 200);
+
+    const settings = await (await handleDemoRequest('/api/settings')).json();
+    assert.deepEqual(JSON.parse(settings.wealthWatcherFeatureSettings), {
+        fire: true,
+        tracker: true,
+        forecast: true,
+        budget: true,
+        milestones: false
+    });
+    const budget = JSON.parse(settings.wealthWatcherBudgetSettings);
+    assert.deepEqual(budget.income, [{ id: 'income-round-trip', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: 'asset-isa' }]);
+    assert.deepEqual(budget.bills, [{ id: 'bill-round-trip', name: 'Annual insurance', amount: 1200, cadence: 'annually', assetId: null }]);
+    assert.deepEqual(budget.savings, [
+        { id: 'saving-linked', name: 'ISA contribution', amount: 500, cadence: 'quarterly', assetId: 'asset-isa' },
+        { id: 'saving-unlinked', name: 'Rainy day fund', amount: 250, cadence: 'monthly', assetId: null }
+    ]);
+    assert.deepEqual(budget.spend, [{ id: 'spend-round-trip', name: 'Groceries', amount: 450, cadence: 'monthly', assetId: null }]);
+    assert.equal(Object.prototype.hasOwnProperty.call(budget, 'totals'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(budget, 'sankey'), false);
+    assert.equal(Object.values(budget).flat().some(item => Object.prototype.hasOwnProperty.call(item, 'sankeyWidth')), false);
+});
+
+test('strict budget writes reject invalid cadence, amounts, and destinations atomically', async () => {
+    const before = await readBudgetSettings();
+    const write = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+            wealthWatcherBudgetSettings: JSON.stringify({
+                income: [{ id: 'income-invalid', name: 'Invalid cadence', amount: 100, cadence: 'weekly' }],
+                bills: [],
+                savings: [],
+                spend: []
+            })
+        })
+    });
+    assert.equal(write.status, 400);
+    assert.deepEqual(await readBudgetSettings(), before);
+
+    const amountWrite = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+            wealthWatcherBudgetSettings: JSON.stringify({
+                income: [{ id: 'income-invalid', name: 'Invalid amount', amount: -1, cadence: 'monthly' }],
+                bills: [],
+                savings: [],
+                spend: []
+            })
+        })
+    });
+    assert.equal(amountWrite.status, 400);
+    assert.deepEqual(await readBudgetSettings(), before);
+
+    const assetWrite = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+            wealthWatcherBudgetSettings: JSON.stringify({
+                income: [],
+                bills: [],
+                savings: [{ id: 'saving-invalid', name: 'Unknown destination', amount: 1, cadence: 'monthly', assetId: 'missing-asset' }],
+                spend: []
+            })
+        })
+    });
+    assert.equal(assetWrite.status, 400);
+    assert.deepEqual(await readBudgetSettings(), before);
+});
+
+test('legacy budget rows normalize on read and retain only valid destinations', async () => {
+    getDemoStore().settings.wealthWatcherBudgetSettings = JSON.stringify({
+        income: [{ Name: '  Legacy salary ', Amount: '1200', Cadence: 'weekly', AssetId: 'missing-asset', Sankey: { width: 9 } }],
+        Bills: [{ Name: 'Legacy bill', Amount: 300, Cadence: 'yearly' }],
+        savings: [{ Name: 'Legacy saving', Amount: 100, Cadence: 'quarterly', AssetId: 'asset-cash' }],
+        spend: [{ Name: 'Legacy spend', Amount: 50, Cadence: 'monthly' }],
+        totals: { income: 12345 }
+    });
+
+    const budget = await readBudgetSettings();
+    assert.deepEqual(budget.income, [{
+        id: 'budget-income-1',
+        name: 'Legacy salary',
+        amount: 1200,
+        cadence: 'monthly',
+        assetId: null
+    }]);
+    assert.deepEqual(budget.bills, [{
+        id: 'budget-bills-1',
+        name: 'Legacy bill',
+        amount: 300,
+        cadence: 'annually',
+        assetId: null
+    }]);
+    assert.equal(budget.savings[0].assetId, 'asset-cash');
+    assert.equal(Object.prototype.hasOwnProperty.call(budget, 'totals'), false);
+    assert.equal(Object.values(budget).flat().some(item => Object.prototype.hasOwnProperty.call(item, 'Sankey')), false);
+});
+
+test('budget fixture supports empty, cadence, funding-gap, and disabled states without losing rows', async () => {
+    const emptyWrite = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify({ income: [], bills: [], savings: [], spend: [] }) })
+    });
+    assert.equal(emptyWrite.status, 200);
+    assert.deepEqual(await readBudgetSettings(), { income: [], bills: [], savings: [], spend: [] });
+
+    const cadenceBudget = {
+        income: [
+            { id: 'income-monthly', name: 'Monthly income', amount: 6000, cadence: 'monthly' },
+            { id: 'income-quarterly', name: 'Quarterly income', amount: 3000, cadence: 'quarterly' }
+        ],
+        bills: [
+            { id: 'bill-monthly', name: 'Monthly bills', amount: 1800, cadence: 'monthly' },
+            { id: 'bill-annual', name: 'Annual bills', amount: 1200, cadence: 'annually' }
+        ],
+        savings: [
+            { id: 'saving-monthly', name: 'Monthly saving', amount: 300, cadence: 'monthly', assetId: null },
+            { id: 'saving-annual', name: 'Annual saving', amount: 1200, cadence: 'annually', assetId: 'asset-isa' }
+        ],
+        spend: [
+            { id: 'spend-quarterly', name: 'Quarterly spend', amount: 900, cadence: 'quarterly' },
+            { id: 'spend-monthly', name: 'Monthly spend', amount: 400, cadence: 'monthly' }
+        ]
+    };
+    const cadenceWrite = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify(cadenceBudget) })
+    });
+    assert.equal(cadenceWrite.status, 200);
+    const cadenceTotals = budgetTotals(await readBudgetSettings());
+    assert.deepEqual(cadenceTotals, { income: 7000, bills: 1900, savings: 400, spend: 700 });
+    assert.equal(7000 - 1900 - 400 - 700, 4000);
+
+    const fundingGapBudget = {
+        income: [{ id: 'income-gap', name: 'Income', amount: 7150, cadence: 'monthly' }],
+        bills: [{ id: 'bill-gap', name: 'Bills', amount: 1870, cadence: 'monthly' }],
+        savings: [{ id: 'saving-gap', name: 'Savings', amount: 1950, cadence: 'monthly', assetId: 'asset-isa' }],
+        spend: [
+            { id: 'spend-gap-baseline', name: 'Planned spend', amount: 1480, cadence: 'monthly' },
+            { id: 'spend-gap', name: 'Gap fixture', amount: 2000, cadence: 'monthly' }
+        ]
+    };
+    const gapWrite = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify(fundingGapBudget) })
+    });
+    assert.equal(gapWrite.status, 200);
+    const gapTotals = budgetTotals(await readBudgetSettings());
+    assert.equal(gapTotals.spend, 3480);
+    assert.equal(7150 - 1870 - 1950 - 3480, -150);
+
+    const disabled = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ wealthWatcherFeatureSettings: JSON.stringify({ fire: true, tracker: true, forecast: true, budget: false, milestones: false }) })
+    });
+    assert.equal(disabled.status, 200);
+    const disabledSettings = await (await handleDemoRequest('/api/settings')).json();
+    assert.equal(JSON.parse(disabledSettings.wealthWatcherFeatureSettings).budget, false);
+    assert.equal(JSON.parse(disabledSettings.wealthWatcherBudgetSettings).spend.length, 2);
+});
+
+test('invalid budget input fails atomically and reset keeps unrelated localStorage preferences', async () => {
+    const before = await readBudgetSettings();
+    const invalid = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify({
+            income: [{ name: 'Invalid amount', amount: 'not-a-number', cadence: 'monthly' }],
+            bills: [],
+            savings: [],
+            spend: []
+        }) })
+    });
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(await readBudgetSettings(), before);
+
+    const previousStorage = globalThis.localStorage;
+    const values = new Map();
+    globalThis.localStorage = {
+        getItem: key => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, String(value)),
+        removeItem: key => values.delete(key)
+    };
+    try {
+        values.set('wealthwatcher_pane_monthly-budget', 'open');
+        const saved = await handleDemoRequest('/api/settings', {
+            method: 'POST',
+            body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify({ income: [{ name: 'Temporary', amount: 10 }], bills: [], savings: [], spend: [] }) })
+        });
+        assert.equal(saved.status, 200);
+        assert.ok(values.has(DEMO_STORAGE_KEY));
+        resetDemoState();
+        assert.equal(values.has(DEMO_STORAGE_KEY), false);
+        assert.equal(values.get('wealthwatcher_pane_monthly-budget'), 'open');
+        assert.equal((await readBudgetSettings()).income.some(item => item.name === 'Temporary'), false);
+    } finally {
+        if (previousStorage === undefined) delete globalThis.localStorage;
+        else globalThis.localStorage = previousStorage;
+    }
 });
 
 test('seed data provides dense history across the past year and a bit', () => {
@@ -180,13 +428,16 @@ test('forecast applies linked contributions using their configured cadence', asy
     const baseline = await (await makeForecast([])).json();
     const monthly = await (await makeForecast([{ amount: 100, assetId: 'asset-isa', cadence: 'monthly' }])).json();
     const quarterly = await (await makeForecast([{ amount: 100, assetId: 'asset-isa', cadence: 'quarterly' }])).json();
+    const annually = await (await makeForecast([{ amount: 1200, assetId: 'asset-isa', cadence: 'annually' }])).json();
     const baselineJanuary = baseline.Projection.find((point, index) => index > 0 && point.Date.endsWith('-01-01'))
         || baseline.Projection.at(-1);
     const monthlyJanuary = monthly.Projection.find(point => point.Date === baselineJanuary.Date);
     const quarterlyJanuary = quarterly.Projection.find(point => point.Date === baselineJanuary.Date);
+    const annualJanuary = annually.Projection.find(point => point.Date === baselineJanuary.Date);
 
     assert.ok(monthlyJanuary.Values.Investments > quarterlyJanuary.Values.Investments);
     assert.ok(quarterlyJanuary.Values.Investments > baselineJanuary.Values.Investments);
+    assert.ok(annualJanuary.Values.Investments > quarterlyJanuary.Values.Investments);
 });
 
 test('demo settings preserve intentional zero values and tolerate malformed JSON', async () => {
@@ -195,7 +446,7 @@ test('demo settings preserve intentional zero values and tolerate malformed JSON
         body: JSON.stringify({
             wealthWatcherFireSettings: JSON.stringify({ targetIncome: 0, swr: 0, statePensionAmount: 0 }),
             wealthWatcherForecastSettings: JSON.stringify({ annualReturn: 0, monthlyContribution: 0 }),
-            wealthWatcherBudgetSettings: JSON.stringify({ income: [], bills: [], savings: [{ amount: 0, cadence: 'annually' }], spend: [] })
+            wealthWatcherBudgetSettings: JSON.stringify({ income: [], bills: [], savings: [{ name: 'Zero saving', amount: 0, cadence: 'annually' }], spend: [] })
         })
     });
     assert.equal(saved.status, 200);

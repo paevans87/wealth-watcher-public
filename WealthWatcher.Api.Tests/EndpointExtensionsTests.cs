@@ -108,6 +108,281 @@ public sealed class EndpointExtensionsTests
     }
 
     [Fact]
+    public async Task Budget_settings_round_trip_preserves_line_ids_and_asset_mappings()
+    {
+        var mappedAsset = new Asset { DisplayName = "Emergency fund" };
+        var incomeId = Guid.NewGuid();
+        var savingsId = Guid.NewGuid();
+        await using var host = await ForecastHost.CreateAsync([], assets: [mappedAsset]);
+
+        host.Db.BudgetLines.AddRange(
+            new BudgetLine
+            {
+                Id = incomeId,
+                Category = BudgetLineCategory.Income,
+                Name = "Salary",
+                Amount = 6_500m,
+                Cadence = BudgetCadence.Monthly
+            },
+            new BudgetLine
+            {
+                Id = savingsId,
+                Category = BudgetLineCategory.Savings,
+                Name = "Emergency fund",
+                Amount = 450m,
+                Cadence = BudgetCadence.Quarterly
+            });
+        host.Db.BudgetLineAssetMappings.Add(new BudgetLineAssetMapping
+        {
+            BudgetLineId = savingsId,
+            AssetId = mappedAsset.Id
+        });
+        await host.Db.SaveChangesAsync();
+
+        var getResponse = await host.GetSettingsAsync();
+        var budgetJson = getResponse.Body!.RootElement
+            .GetProperty("wealthWatcherBudgetSettings")
+            .GetString()!;
+
+        var postResponse = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherBudgetSettings"] = budgetJson
+        });
+
+        Assert.Equal(StatusCodes.Status200OK, postResponse.StatusCode);
+        var lines = await host.Db.BudgetLines
+            .Include(line => line.AssetMappings)
+            .OrderBy(line => line.Category)
+            .ToListAsync();
+        Assert.Equal([incomeId, savingsId], lines.Select(line => line.Id));
+        Assert.Equal(
+            (savingsId, mappedAsset.Id),
+            (lines.Single(line => line.Id == savingsId).Id,
+                lines.Single(line => line.Id == savingsId).AssetMappings.Single().AssetId));
+    }
+
+    [Fact]
+    public async Task Budget_settings_edit_updates_existing_rows_without_recreating_them()
+    {
+        var firstAsset = new Asset { DisplayName = "Emergency fund" };
+        var replacementAsset = new Asset { DisplayName = "Stocks ISA" };
+        var savingsId = Guid.NewGuid();
+        await using var host = await ForecastHost.CreateAsync(
+            [],
+            assets: [firstAsset, replacementAsset]);
+
+        host.Db.BudgetLines.Add(new BudgetLine
+        {
+            Id = savingsId,
+            Category = BudgetLineCategory.Savings,
+            Name = "Emergency fund",
+            Amount = 450m,
+            Cadence = BudgetCadence.Monthly
+        });
+        host.Db.BudgetLineAssetMappings.Add(new BudgetLineAssetMapping
+        {
+            BudgetLineId = savingsId,
+            AssetId = firstAsset.Id
+        });
+        await host.Db.SaveChangesAsync();
+
+        var response = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherBudgetSettings"] = BudgetJson(
+                savings: [BudgetItem(savingsId, "Index fund", 600m, "annually", replacementAsset.Id)])
+        });
+
+        Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
+        var saved = await host.Db.BudgetLines
+            .Include(line => line.AssetMappings)
+            .SingleAsync();
+        Assert.Equal(savingsId, saved.Id);
+        Assert.Equal("Index fund", saved.Name);
+        Assert.Equal(600m, saved.Amount);
+        Assert.Equal(BudgetCadence.Annually, saved.Cadence);
+        Assert.Equal(replacementAsset.Id, saved.AssetMappings.Single().AssetId);
+    }
+
+    [Fact]
+    public async Task Budget_settings_omitted_rows_are_deleted_and_null_ids_receive_new_uuids()
+    {
+        var retainedId = Guid.NewGuid();
+        var removedId = Guid.NewGuid();
+        await using var host = await ForecastHost.CreateAsync([]);
+        host.Db.BudgetLines.AddRange(
+            new BudgetLine
+            {
+                Id = retainedId,
+                Category = BudgetLineCategory.Bills,
+                Name = "Mortgage",
+                Amount = 1_450m
+            },
+            new BudgetLine
+            {
+                Id = removedId,
+                Category = BudgetLineCategory.Bills,
+                Name = "Council tax",
+                Amount = 190m
+            });
+        await host.Db.SaveChangesAsync();
+
+        var response = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherBudgetSettings"] = BudgetJson(
+                bills:
+                [
+                    BudgetItem(retainedId, "Mortgage", 1_450m),
+                    BudgetItem(null, "Utilities", 230m)
+                ])
+        });
+
+        Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
+        var lines = await host.Db.BudgetLines.OrderBy(line => line.Name).ToListAsync();
+        Assert.Equal(["Mortgage", "Utilities"], lines.Select(line => line.Name));
+        Assert.Contains(lines, line => line.Id == retainedId);
+        Assert.DoesNotContain(lines, line => line.Id == removedId);
+        var newLine = lines.Single(line => line.Name == "Utilities");
+        Assert.NotEqual(Guid.Empty, newLine.Id);
+    }
+
+    [Fact]
+    public async Task Budget_settings_reject_duplicate_and_unknown_ids_atomically()
+    {
+        var existingId = Guid.NewGuid();
+        var preference = new AppPreference { GeneralJson = "{\"original\":true}" };
+        await using var host = await ForecastHost.CreateAsync([], preference: preference);
+        host.Db.BudgetLines.Add(new BudgetLine
+        {
+            Id = existingId,
+            Category = BudgetLineCategory.Income,
+            Name = "Salary",
+            Amount = 6_500m
+        });
+        await host.Db.SaveChangesAsync();
+
+        var duplicateResponse = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherGeneralSettings"] = "{\"original\":false}",
+            ["wealthWatcherBudgetSettings"] = BudgetJson(
+                income:
+                [
+                    BudgetItem(existingId, "Salary", 6_500m),
+                    BudgetItem(existingId, "Duplicate", 1m)
+                ])
+        });
+
+        Assert.Equal(StatusCodes.Status400BadRequest, duplicateResponse.StatusCode);
+        Assert.Equal("{\"original\":true}", host.Db.AppPreferences.Single().GeneralJson);
+        Assert.Equal("Salary", host.Db.BudgetLines.Single().Name);
+
+        var unknownId = Guid.NewGuid();
+        var unknownResponse = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherBudgetSettings"] = BudgetJson(
+                income: [BudgetItem(unknownId, "Unknown", 1m)])
+        });
+
+        Assert.Equal(StatusCodes.Status400BadRequest, unknownResponse.StatusCode);
+        Assert.Equal(existingId, host.Db.BudgetLines.Single().Id);
+        Assert.Equal("Salary", host.Db.BudgetLines.Single().Name);
+    }
+
+    [Fact]
+    public async Task Budget_settings_reject_invalid_values_and_preserve_previous_state()
+    {
+        var existingId = Guid.NewGuid();
+        var existingAsset = new Asset { DisplayName = "ISA" };
+        var preference = new AppPreference { GeneralJson = "{\"original\":true}" };
+        await using var host = await ForecastHost.CreateAsync(
+            [],
+            assets: [existingAsset],
+            preference: preference);
+        host.Db.BudgetLines.Add(new BudgetLine
+        {
+            Id = existingId,
+            Category = BudgetLineCategory.Savings,
+            Name = "ISA contribution",
+            Amount = 500m,
+            Cadence = BudgetCadence.Monthly
+        });
+        host.Db.BudgetLineAssetMappings.Add(new BudgetLineAssetMapping
+        {
+            BudgetLineId = existingId,
+            AssetId = existingAsset.Id
+        });
+        await host.Db.SaveChangesAsync();
+
+        var invalidPayloads = new[]
+        {
+            BudgetJson(savings: [BudgetItem(existingId, "ISA contribution", -1m, assetId: existingAsset.Id)]),
+            BudgetJson(savings: [BudgetItem(existingId, " ", 500m, assetId: existingAsset.Id)]),
+            BudgetJson(savings: [BudgetItem(existingId, "ISA contribution", 500m, "weekly", existingAsset.Id)]),
+            BudgetJson(savings: [BudgetItem(existingId, "ISA contribution", 500m, assetId: Guid.NewGuid())]),
+            BudgetJson(income: [BudgetItem(existingId, "ISA contribution", 500m, assetId: existingAsset.Id)])
+        };
+
+        foreach (var invalidPayload in invalidPayloads)
+        {
+            var response = await host.PostSettingsAsync(new Dictionary<string, string?>
+            {
+                ["wealthWatcherGeneralSettings"] = "{\"original\":false}",
+                ["wealthWatcherBudgetSettings"] = invalidPayload
+            });
+
+            Assert.Equal(StatusCodes.Status400BadRequest, response.StatusCode);
+            Assert.Equal("{\"original\":true}", host.Db.AppPreferences.Single().GeneralJson);
+            var line = host.Db.BudgetLines.Single();
+            Assert.Equal(existingId, line.Id);
+            Assert.Equal("ISA contribution", line.Name);
+            Assert.Equal(500m, line.Amount);
+            Assert.Equal(BudgetCadence.Monthly, line.Cadence);
+            Assert.Equal(existingAsset.Id, host.Db.BudgetLineAssetMappings.Single().AssetId);
+        }
+    }
+
+    [Fact]
+    public async Task Budget_settings_preserves_mapping_when_asset_id_is_omitted_and_changes_it_when_requested()
+    {
+        var existingAsset = new Asset { DisplayName = "Emergency fund" };
+        var replacementAsset = new Asset { DisplayName = "Stocks ISA" };
+        var savingsId = Guid.NewGuid();
+        await using var host = await ForecastHost.CreateAsync(
+            [],
+            assets: [existingAsset, replacementAsset]);
+        host.Db.BudgetLines.Add(new BudgetLine
+        {
+            Id = savingsId,
+            Category = BudgetLineCategory.Savings,
+            Name = "Emergency fund",
+            Amount = 450m
+        });
+        host.Db.BudgetLineAssetMappings.Add(new BudgetLineAssetMapping
+        {
+            BudgetLineId = savingsId,
+            AssetId = existingAsset.Id
+        });
+        await host.Db.SaveChangesAsync();
+
+        var omittedAssetResponse = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherBudgetSettings"] = BudgetJson(
+                savings: [BudgetItem(savingsId, "Emergency fund", 500m, includeAssetId: false)])
+        });
+
+        Assert.Equal(StatusCodes.Status200OK, omittedAssetResponse.StatusCode);
+        Assert.Equal(existingAsset.Id, host.Db.BudgetLineAssetMappings.Single().AssetId);
+
+        var changedAssetResponse = await host.PostSettingsAsync(new Dictionary<string, string?>
+        {
+            ["wealthWatcherBudgetSettings"] = BudgetJson(
+                savings: [BudgetItem(savingsId, "Emergency fund", 500m, assetId: replacementAsset.Id)])
+        });
+
+        Assert.Equal(StatusCodes.Status200OK, changedAssetResponse.StatusCode);
+        Assert.Equal(replacementAsset.Id, host.Db.BudgetLineAssetMappings.Single().AssetId);
+    }
+
+    [Fact]
     public async Task Settings_get_returns_safe_objects_for_malformed_persisted_documents()
     {
         var preference = new AppPreference
@@ -1241,6 +1516,59 @@ public sealed class EndpointExtensionsTests
 
     private static DateTimeOffset ParseBucketStart(JsonElement point) =>
         DateTimeOffset.Parse(point.GetProperty("Time").GetString()!, System.Globalization.CultureInfo.InvariantCulture);
+
+    private static BudgetTestItem BudgetItem(
+        Guid? id,
+        string name,
+        decimal amount,
+        string cadence = "monthly",
+        Guid? assetId = null,
+        string? category = null,
+        bool includeAssetId = true) =>
+        new(id, name, amount, cadence, assetId, category, includeAssetId);
+
+    private static string BudgetJson(
+        IEnumerable<BudgetTestItem>? income = null,
+        IEnumerable<BudgetTestItem>? bills = null,
+        IEnumerable<BudgetTestItem>? savings = null,
+        IEnumerable<BudgetTestItem>? spend = null)
+    {
+        static object[] SerializeItems(IEnumerable<BudgetTestItem>? items) =>
+            (items ?? Array.Empty<BudgetTestItem>())
+                .Select(item =>
+                {
+                    var payload = new Dictionary<string, object?>
+                    {
+                        ["id"] = item.Id,
+                        ["name"] = item.Name,
+                        ["amount"] = item.Amount,
+                        ["cadence"] = item.Cadence
+                    };
+                    if (item.IncludeAssetId)
+                        payload["assetId"] = item.AssetId;
+                    if (item.Category is not null)
+                        payload["category"] = item.Category;
+                    return (object)payload;
+                })
+                .ToArray();
+
+        return JsonSerializer.Serialize(new
+        {
+            income = SerializeItems(income),
+            bills = SerializeItems(bills),
+            savings = SerializeItems(savings),
+            spend = SerializeItems(spend)
+        });
+    }
+
+    private sealed record BudgetTestItem(
+        Guid? Id,
+        string Name,
+        decimal Amount,
+        string Cadence,
+        Guid? AssetId,
+        string? Category,
+        bool IncludeAssetId);
 
     private static void AssertHourlyTimeline(JsonElement[] data, string timeZone, DateTime firstLocalHour, DateTime lastLocalHour)
     {

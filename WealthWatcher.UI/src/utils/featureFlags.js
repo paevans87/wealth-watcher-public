@@ -25,6 +25,7 @@ export const FEATURE_DEFINITIONS = Object.freeze({
     budget: Object.freeze({
         navId: 'nav-budget',
         route: '#budget',
+        keepNavVisibleWhenDisabled: true,
         defaultEnabled: true
     }),
     milestones: Object.freeze({
@@ -70,7 +71,9 @@ export function applyFeatureVisibility() {
         if (!definition.navId) return;
         const nav = document.getElementById(definition.navId);
         if (nav) {
-            nav.hidden = !isFeatureEnabled(featureKey);
+            nav.hidden = definition.keepNavVisibleWhenDisabled
+                ? false
+                : !isFeatureEnabled(featureKey);
         }
     });
 }

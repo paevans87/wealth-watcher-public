@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WealthWatcher.Api.Caching;
@@ -1073,6 +1074,16 @@ public static class EndpointExtensions
                     return Results.BadRequest(new { Error = milestoneError });
             }
 
+            BudgetSettingsPlan? budgetPlan = null;
+            if (hasBudgetSettings)
+            {
+                var preparation = await PrepareBudgetSettingsAsync(db, budgetDocument!);
+                if (preparation.Plan is null)
+                    return Results.BadRequest(new { Error = preparation.Error });
+
+                budgetPlan = preparation.Plan;
+            }
+
             var preference = await db.AppPreferences.FindAsync(1);
             if (preference is null)
             {
@@ -1102,10 +1113,25 @@ public static class EndpointExtensions
             if (normalizedMilestoneJson is not null)
                 preference.MilestoneJson = normalizedMilestoneJson;
 
-            if (hasBudgetSettings)
-                await ReplaceBudgetSettingsAsync(db, budgetDocument!);
+            if (budgetPlan is not null)
+                ApplyBudgetSettings(db, budgetPlan);
 
-            await db.SaveChangesAsync(cancellationToken);
+            await using var transaction = db.Database.IsRelational()
+                ? await db.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                if (transaction is not null)
+                    await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                if (transaction is not null)
+                    await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+
             await invalidator.InvalidateWealthAsync(cancellationToken);
             return Results.Ok();
         });
@@ -1911,56 +1937,248 @@ public static class EndpointExtensions
         assetId = line.AssetMappings.FirstOrDefault()?.AssetId
     };
 
-    private static async Task ReplaceBudgetSettingsAsync(
+    private static async Task<(BudgetSettingsPlan? Plan, string? Error)> PrepareBudgetSettingsAsync(
         WealthDbContext db,
         BudgetSettingsDocument document)
     {
-        db.BudgetLineAssetMappings.RemoveRange(await db.BudgetLineAssetMappings.ToListAsync());
-        db.BudgetLines.RemoveRange(await db.BudgetLines.ToListAsync());
+        var existingLines = await db.BudgetLines
+            .Include(line => line.AssetMappings)
+            .ToListAsync();
+        var existingById = existingLines.ToDictionary(line => line.Id);
         var validAssetIds = (await db.Assets.Select(asset => asset.Id).ToListAsync()).ToHashSet();
-        AddBudgetLines(db, document.Income, BudgetLineCategory.Income, validAssetIds);
-        AddBudgetLines(db, document.Bills, BudgetLineCategory.Bills, validAssetIds);
-        AddBudgetLines(db, document.Savings, BudgetLineCategory.Savings, validAssetIds);
-        AddBudgetLines(db, document.Spend, BudgetLineCategory.Spend, validAssetIds);
+        var submittedIds = new HashSet<Guid>();
+        var submittedLines = new List<BudgetLineRequest>();
+
+        var categories = new[]
+        {
+            (Name: "income", Items: document.Income, Category: BudgetLineCategory.Income),
+            (Name: "bills", Items: document.Bills, Category: BudgetLineCategory.Bills),
+            (Name: "savings", Items: document.Savings, Category: BudgetLineCategory.Savings),
+            (Name: "spend", Items: document.Spend, Category: BudgetLineCategory.Spend)
+        };
+
+        foreach (var category in categories)
+        {
+            if (category.Items is null)
+            {
+                return (null,
+                    $"wealthWatcherBudgetSettings.{category.Name} must be a JSON array.");
+            }
+
+            var index = 0;
+            foreach (var item in category.Items)
+            {
+                if (item is null)
+                {
+                    return (null,
+                        $"wealthWatcherBudgetSettings.{category.Name}[{index}] must be a JSON object.");
+                }
+
+                var itemPath = $"wealthWatcherBudgetSettings.{category.Name}[{index}]";
+                if (item.Id is Guid id)
+                {
+                    if (id == Guid.Empty)
+                    {
+                        return (null, $"{itemPath}.id must be a non-empty UUID.");
+                    }
+
+                    if (!submittedIds.Add(id))
+                    {
+                        return (null,
+                            $"{itemPath}.id contains a duplicate budget line id '{id:D}'.");
+                    }
+
+                    if (!existingById.TryGetValue(id, out var existing))
+                    {
+                        return (null,
+                            $"{itemPath}.id references an unknown budget line '{id:D}'.");
+                    }
+
+                    if (existing.Category != category.Category)
+                    {
+                        return (null,
+                            $"{itemPath}.id belongs to category '{existing.Category.ToString().ToLowerInvariant()}', " +
+                            $"but was submitted under '{category.Name}'.");
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(item.Category) &&
+                    (!TryParseBudgetCategory(item.Category, out var declaredCategory) ||
+                     declaredCategory != category.Category))
+                {
+                    return (null,
+                        $"{itemPath}.category must match the budget category '{category.Name}'.");
+                }
+
+                if (string.IsNullOrWhiteSpace(item.Name))
+                {
+                    return (null, $"{itemPath}.name must not be blank.");
+                }
+
+                if (item.Amount < 0)
+                {
+                    return (null, $"{itemPath}.amount must be zero or greater.");
+                }
+
+                if (item.Amount > 99_999_999_999_999_999.99m ||
+                    decimal.Round(item.Amount, 2) != item.Amount)
+                {
+                    return (null,
+                        $"{itemPath}.amount must fit the budget amount precision of decimal(18,2).");
+                }
+
+                if (!TryParseCadence(item.Cadence, out var cadence))
+                {
+                    return (null,
+                        $"{itemPath}.cadence must be monthly, quarterly, or annually.");
+                }
+
+                if (item.AssetId is Guid assetId)
+                {
+                    if (assetId == Guid.Empty || !validAssetIds.Contains(assetId))
+                    {
+                        return (null,
+                            $"{itemPath}.assetId references an unknown asset '{assetId:D}'.");
+                    }
+                }
+
+                submittedLines.Add(new BudgetLineRequest
+                {
+                    Id = item.Id,
+                    Category = category.Category,
+                    Name = item.Name.Trim(),
+                    Amount = item.Amount,
+                    Cadence = cadence,
+                    AssetId = item.AssetId,
+                    AssetIdSpecified = item.AssetIdSpecified
+                });
+                index++;
+            }
+        }
+
+        return (new BudgetSettingsPlan(existingLines, existingById, submittedLines), null);
     }
 
-    private static void AddBudgetLines(
+    private static void ApplyBudgetSettings(
         WealthDbContext db,
-        IEnumerable<BudgetItemDocument>? items,
-        BudgetLineCategory category,
-        ISet<Guid> validAssetIds)
+        BudgetSettingsPlan plan)
     {
-        foreach (var item in items ?? [])
+        var submittedIds = plan.SubmittedLines
+            .Where(line => line.Id.HasValue)
+            .Select(line => line.Id!.Value)
+            .ToHashSet();
+
+        foreach (var line in plan.ExistingLines.Where(line => !submittedIds.Contains(line.Id)))
         {
-            if (item is null)
-                continue;
-            if (string.IsNullOrWhiteSpace(item.Name))
-                continue;
-            var line = new BudgetLine
+            db.BudgetLineAssetMappings.RemoveRange(line.AssetMappings.ToList());
+            db.BudgetLines.Remove(line);
+        }
+
+        var reservedIds = plan.ExistingLines.Select(line => line.Id).ToHashSet();
+        foreach (var request in plan.SubmittedLines)
+        {
+            BudgetLine line;
+            if (request.Id is Guid id)
             {
-                Id = item.Id.GetValueOrDefault(Guid.NewGuid()),
-                Category = category,
-                Name = item.Name.Trim(),
-                Amount = item.Amount,
-                Cadence = ParseCadence(item.Cadence)
-            };
-            db.BudgetLines.Add(line);
-            if (item.AssetId.HasValue && validAssetIds.Contains(item.AssetId.Value))
-                db.BudgetLineAssetMappings.Add(new BudgetLineAssetMapping
-                {
-                    BudgetLine = line,
-                    AssetId = item.AssetId.Value
-                });
+                line = plan.ExistingById[id];
+            }
+            else
+            {
+                var newId = Guid.NewGuid();
+                while (!reservedIds.Add(newId))
+                    newId = Guid.NewGuid();
+
+                line = new BudgetLine { Id = newId };
+                db.BudgetLines.Add(line);
+            }
+
+            line.Category = request.Category;
+            line.Name = request.Name;
+            line.Amount = request.Amount;
+            line.Cadence = request.Cadence;
+
+            if (request.AssetIdSpecified)
+                ReplaceBudgetLineAssetMapping(db, line, request.AssetId);
         }
     }
 
-    private static BudgetCadence ParseCadence(string? cadence) =>
-        cadence?.Trim().ToLowerInvariant() switch
+    private static void ReplaceBudgetLineAssetMapping(
+        WealthDbContext db,
+        BudgetLine line,
+        Guid? assetId)
+    {
+        var currentMappings = line.AssetMappings.ToList();
+        if (assetId.HasValue &&
+            currentMappings.Count == 1 &&
+            currentMappings[0].AssetId == assetId.Value)
+        {
+            return;
+        }
+
+        if (!assetId.HasValue && currentMappings.Count == 0)
+            return;
+
+        db.BudgetLineAssetMappings.RemoveRange(currentMappings);
+        if (assetId.HasValue)
+        {
+            db.BudgetLineAssetMappings.Add(new BudgetLineAssetMapping
+            {
+                BudgetLine = line,
+                BudgetLineId = line.Id,
+                AssetId = assetId.Value
+            });
+        }
+    }
+
+    private static bool TryParseBudgetCategory(
+        string category,
+        out BudgetLineCategory parsed)
+    {
+        parsed = category.Trim().ToLowerInvariant() switch
+        {
+            "income" => BudgetLineCategory.Income,
+            "bills" => BudgetLineCategory.Bills,
+            "savings" => BudgetLineCategory.Savings,
+            "spend" => BudgetLineCategory.Spend,
+            _ => (BudgetLineCategory)0
+        };
+        return parsed != 0;
+    }
+
+    private static bool TryParseCadence(
+        string? cadence,
+        out BudgetCadence parsed)
+    {
+        parsed = cadence?.Trim().ToLowerInvariant() switch
         {
             "quarterly" => BudgetCadence.Quarterly,
             "annually" or "annual" or "yearly" => BudgetCadence.Annually,
-            _ => BudgetCadence.Monthly
+            null or "" or "monthly" => BudgetCadence.Monthly,
+            _ => (BudgetCadence)0
         };
+        return parsed != 0;
+    }
+
+    private sealed class BudgetSettingsPlan(
+        IReadOnlyList<BudgetLine> existingLines,
+        IReadOnlyDictionary<Guid, BudgetLine> existingById,
+        IReadOnlyList<BudgetLineRequest> submittedLines)
+    {
+        public IReadOnlyList<BudgetLine> ExistingLines { get; } = existingLines;
+        public IReadOnlyDictionary<Guid, BudgetLine> ExistingById { get; } = existingById;
+        public IReadOnlyList<BudgetLineRequest> SubmittedLines { get; } = submittedLines;
+    }
+
+    private sealed class BudgetLineRequest
+    {
+        public Guid? Id { get; init; }
+        public BudgetLineCategory Category { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public decimal Amount { get; init; }
+        public BudgetCadence Cadence { get; init; }
+        public Guid? AssetId { get; init; }
+        public bool AssetIdSpecified { get; init; }
+    }
 }
 
 public class WealthEntryDto
@@ -2045,5 +2263,20 @@ public sealed class BudgetItemDocument
     public string Name { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public string Cadence { get; set; } = "monthly";
-    public Guid? AssetId { get; set; }
+    public string? Category { get; set; }
+
+    private Guid? assetId;
+
+    public Guid? AssetId
+    {
+        get => assetId;
+        set
+        {
+            assetId = value;
+            AssetIdSpecified = true;
+        }
+    }
+
+    [JsonIgnore]
+    public bool AssetIdSpecified { get; private set; }
 }

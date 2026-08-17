@@ -30,6 +30,38 @@ test('the demo adapter explicitly covers the current API-backed UI contract', as
     }
 });
 
+test('budget contract stays on /api/settings and returns usable four-category rows', async () => {
+    const featureWrite = DEMO_API_CONTRACT.find(operation => (
+        operation.method === 'POST'
+        && operation.path === '/api/settings'
+        && Object.prototype.hasOwnProperty.call(operation.body || {}, 'wealthWatcherFeatureSettings')
+    ));
+    const budgetWrite = DEMO_API_CONTRACT.find(operation => (
+        operation.method === 'POST'
+        && operation.path === '/api/settings'
+        && Object.prototype.hasOwnProperty.call(operation.body || {}, 'wealthWatcherBudgetSettings')
+    ));
+    assert.ok(featureWrite);
+    assert.ok(budgetWrite);
+    assert.equal(DEMO_API_CONTRACT.some(operation => operation.path === '/api/budget'), false);
+
+    assert.equal((await handleDemoRequest(featureWrite.path, {
+        method: featureWrite.method,
+        body: JSON.stringify(featureWrite.body)
+    })).status, 200);
+    assert.equal((await handleDemoRequest(budgetWrite.path, {
+        method: budgetWrite.method,
+        body: JSON.stringify(budgetWrite.body)
+    })).status, 200);
+
+    const settings = await (await handleDemoRequest('/api/settings')).json();
+    const budget = JSON.parse(settings.wealthWatcherBudgetSettings);
+    assert.deepEqual(Object.keys(budget).sort(), ['bills', 'income', 'savings', 'spend']);
+    assert.ok(budget.income.every(item => item.cadence));
+    assert.equal(budget.savings.find(item => item.name === 'ISA contribution').assetId, 'asset-isa');
+    assert.equal(budget.savings.find(item => item.name === 'Rainy day fund').assetId, null);
+});
+
 test('core demo response shapes remain usable by their pages', async () => {
     const dashboard = await (await handleDemoRequest('/api/dashboard?period=1M')).json();
     assert.ok(Array.isArray(dashboard.Categories));
@@ -56,6 +88,17 @@ test('core demo response shapes remain usable by their pages', async () => {
     })).json();
     assert.ok(Array.isArray(forecast.Projection));
     assert.ok(forecast.Projection.every(point => point.Values && Number.isFinite(point.Total)));
+
+    const settings = await (await handleDemoRequest('/api/settings')).json();
+    const budget = JSON.parse(settings.wealthWatcherBudgetSettings);
+    assert.deepEqual(Object.keys(budget).sort(), ['bills', 'income', 'savings', 'spend']);
+    assert.ok(Object.values(budget).flat().every(item => (
+        typeof item.id === 'string'
+        && typeof item.name === 'string'
+        && Number.isFinite(item.amount)
+        && ['monthly', 'quarterly', 'annually'].includes(item.cadence)
+        && (item.assetId === null || typeof item.assetId === 'string')
+    )));
 });
 
 test('application source has one browser-network boundary', async () => {

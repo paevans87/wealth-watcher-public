@@ -12,6 +12,7 @@ import {
 } from './FormFields.js';
 import { escapeHtml } from '../utils/html.js';
 import { closeManagedModal, openManagedModal, setupModalController } from './ModalController.js';
+import { closeFormFlyout, openFormFlyout } from './FormFlyout.js';
 
 let generalSaveTimer;
 let fireSaveTimer;
@@ -308,11 +309,18 @@ export function openModal(id) {
         'property-delete-modal': () => window.cancelPropertyRemoval?.(),
         'classification-edit-modal': () => window.closeClassificationEditor?.()
     };
+    if (Object.prototype.hasOwnProperty.call(modal.dataset || {}, 'formFlyout')) {
+        return openFormFlyout(modal, { onEscape: escapeHandlers[id] });
+    }
     return openManagedModal(modal, { onEscape: escapeHandlers[id] });
 }
 
 export function closeModal(id) {
-    return closeManagedModal(id);
+    const modal = document.getElementById(id);
+    if (Object.prototype.hasOwnProperty.call(modal?.dataset || {}, 'formFlyout')) {
+        return closeFormFlyout(modal);
+    }
+    return closeManagedModal(modal || id);
 }
 
 export function populateFireSettings() {

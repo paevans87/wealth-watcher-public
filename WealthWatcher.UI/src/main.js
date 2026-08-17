@@ -34,6 +34,15 @@ globalThis.Chart = Chart;
 globalThis.ChartDataLabels = ChartDataLabels;
 globalThis.flatpickr = flatpickr;
 
+function createBudgetLineId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+        const random = Math.random() * 16 | 0;
+        const value = character === 'x' ? random : (random & 0x3 | 0x8);
+        return value.toString(16);
+    });
+}
+
 const { API_BASE_URL } = apiClient;
 const fetchCached = apiClient.fetchCached;
 const requestJson = apiClient.requestJson;
@@ -217,12 +226,14 @@ async function init() {
             if (!Array.isArray(budget.savings)) budget.savings = [];
             if (!Array.isArray(budget.spend)) budget.spend = [];
             if (!Array.isArray(budget.income)) budget.income = [];
-            budget.savings = budget.savings.map(item => ({
-                ...item,
-                id: item.id || globalThis.crypto?.randomUUID?.() || `saving-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                cadence: item.cadence || 'monthly',
-                assetId: item.assetId || null
-            }));
+            ['income', 'bills', 'savings', 'spend'].forEach(category => {
+                budget[category] = budget[category].map(item => ({
+                    ...(item || {}),
+                    id: item?.id || createBudgetLineId(),
+                    cadence: item?.cadence || 'monthly',
+                    ...(category === 'savings' ? { assetId: item?.assetId || null } : {})
+                }));
+            });
             store.state.budgetSettings = budget;
         } else {
             store.state.budgetSettings = { income: [], bills: [], savings: [], spend: [] };

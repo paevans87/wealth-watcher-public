@@ -259,6 +259,16 @@ test('CollapsiblePane Unit Tests', async (t) => {
         assert.match(indexHtml, /id="general-settings-pane"[\s\S]*?<div class="collapsible-content">[\s\S]*?id="general-settings-form"/);
     });
 
+    await t.test('Budget setup uses the persisted collapsible pane structure', () => {
+        const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+
+        assert.match(indexHtml, /<section id="budget-settings-pane" class="card glass-panel full-width-col budget-configuration-panel collapsible-pane" data-budget-configuration data-collapsible data-pane-id="monthly-budget"/);
+        assert.match(indexHtml, /id="budget-settings-pane"[\s\S]*?<div class="budget-configuration-header collapsible-header">[\s\S]*?Toggle Budget setup/);
+        assert.match(indexHtml, /id="budget-settings-pane"[\s\S]*?<div class="collapsible-content">[\s\S]*?id="budget-plan-editor"/);
+        assert.match(indexHtml, /id="budget-settings-pane"[\s\S]*?data-pane-id="monthly-budget"/);
+        assert.doesNotMatch(indexHtml, /budget-editor-note/);
+    });
+
     await t.test('renders configured helper copy once at the top of the pane content', () => {
         const paneEl = createMockElement('div', {
             id: 'general-settings-pane',

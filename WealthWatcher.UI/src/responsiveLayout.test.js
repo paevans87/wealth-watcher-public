@@ -24,6 +24,7 @@ test('responsive shell and navigation contracts are present', () => {
     }
 
     assert.match(indexMarkup, /id="entry-modal"[\s\S]*?role="dialog"\s+aria-modal="true"/);
+    assert.match(indexMarkup, /id="entry-modal"[^>]*data-form-flyout/);
     assert.match(indexMarkup, /id="audit-modal"[\s\S]*?role="dialog"\s+aria-modal="true"/);
 });
 
@@ -62,20 +63,33 @@ test('feature-gated Milestones card stays under its renderer visibility contract
 test('high-data pages have explicit mobile containment contracts', () => {
     assert.match(stylesheet, /#forecast-view\s+\.forecast-control-actions\s*\{[\s\S]*flex:\s*0 1 auto/);
     assert.match(stylesheet, /#fire-view\s+\.fire-dashboard\s*>\s*\.grid-container\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    assert.match(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*div:first-child\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    assert.match(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*\.card\s*>\s*div\s*\{[\s\S]*height:\s*300px/);
+    assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-flow-visual\s*\{[\s\S]*min-height:\s*0/);
+    assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-flow-mobile-view\s*\{\s*display:\s*block/);
+    assert.match(stylesheet, /\.budget-editor-grid\s*\{[\s\S]*align-items:\s*start/);
+    assert.match(stylesheet, /\.budget-editor-column\s*\{[\s\S]*display:\s*grid[\s\S]*gap:\s*1rem/);
+    assert.match(stylesheet, /\.budget-category-editor\s*\{[\s\S]*align-self:\s*start[\s\S]*min-height:\s*0/);
+    assert.doesNotMatch(stylesheet, /#budget-view\s+#budget-overview-content\s*>\s*\.card\s*>\s*div\s*\{[\s\S]*height:\s*(?:300|360)px/);
     assert.match(stylesheet, /@media\s*\(min-width:\s*769px\)[\s\S]*\.property-table-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(90px,\s*1\.25fr\)/);
 });
 
-test('mobile Budget configuration uses contained controls and card rows', () => {
-    assert.match(indexMarkup, /<table class="budget-table" data-budget-category="income"/);
-    assert.match(indexMarkup, /<table class="budget-table" data-budget-category="savings"/);
-    assert.match(stylesheet, /@media\s*\(max-width:\s*560px\)[\s\S]*#budget-settings-pane\s+\.budget-entry-row\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    assert.match(stylesheet, /#budget-settings-pane\s+\.table-container\s*\{[\s\S]*overflow-x:\s*hidden\s*!important/);
-    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table\s*\{[\s\S]*table-layout:\s*fixed/);
-    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table:has\(\.budget-item-row\)\s+\.budget-item-row\s*\{[\s\S]*display:\s*grid/);
-    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table\[data-budget-category="savings"\]\s+th\s*\{[\s\S]*font-size:\s*0\.68rem\s*!important[\s\S]*word-break:\s*normal/);
-    assert.match(stylesheet, /#budget-settings-pane\s+\.budget-table\[data-budget-category="savings"\]\s+th:nth-child\(2\)\s*\{\s*width:\s*21%\s*!important/);
+test('Budget configuration uses compact grouped lines and a responsive focused editor', () => {
+    assert.match(indexMarkup, /id="budget-plan-editor"[^>]*data-budget-plan-editor/);
+    assert.match(indexMarkup, /id="budget-plan-groups"[^>]*data-budget-plan-groups/);
+    assert.match(indexMarkup, /id="budget-edit-plan-button"[^>]*data-budget-plan-edit/);
+    assert.match(indexMarkup, /id="budget-line-editor"[^>]*data-form-flyout[^>]*data-budget-line-editor/);
+    assert.match(indexMarkup, /id="budget-line-editor-form"[^>]*role="dialog"|role="dialog"[\s\S]*id="budget-line-editor-form"/);
+    assert.doesNotMatch(indexMarkup, /budget-plan-settings-button|>Plan settings</);
+    assert.doesNotMatch(indexMarkup, /budget-save-status|Changes saved/);
+    assert.doesNotMatch(indexMarkup, /budget-summary-grid|budget-total-(?:income|bills|savings|spend)|budget-unallocated/);
+    assert.doesNotMatch(indexMarkup, /<table[^>]+budget-table/);
+    assert.doesNotMatch(indexMarkup, /id="budget-entry-(?:income|bills|savings|spend)"/);
+    assert.match(stylesheet, /\.budget-plan-groups\s*\{[\s\S]*display:\s*grid/);
+    assert.match(stylesheet, /\.budget-plan-line\s*\{[\s\S]*grid-template-columns:/);
+    assert.match(stylesheet, /\.form-flyout\s*\{[\s\S]*position:\s*fixed/);
+    assert.match(stylesheet, /\.form-flyout-dialog\s*\{[\s\S]*position:\s*absolute/);
+    assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.form-flyout-dialog\s*\{[\s\S]*border-radius:\s*16px\s+16px\s+0\s+0/);
+    assert.doesNotMatch(stylesheet, /\.budget-summary-(?:grid|card|label)/);
+    assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-plan-line\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/);
 });
 
 test('settings controls and integrations cannot establish a narrow-screen min-content width', () => {

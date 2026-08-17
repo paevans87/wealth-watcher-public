@@ -34,9 +34,21 @@ globalThis.document = {
 
 let requests = [];
 let saveSucceeds = true;
+let nextSettingsResponse = null;
 globalThis.fetch = async (url, options) => {
     requests.push({ url, options });
-    return { ok: saveSucceeds };
+    if ((options?.method || 'GET') === 'GET') {
+        return {
+            ok: true,
+            status: 200,
+            async json() {
+                return nextSettingsResponse || {
+                    wealthWatcherBudgetSettings: JSON.stringify({ income: [], bills: [], savings: [], spend: [] })
+                };
+            }
+        };
+    }
+    return { ok: saveSucceeds, status: saveSucceeds ? 200 : 500 };
 };
 
 const { store } = await import('../store/store.js');
@@ -46,12 +58,15 @@ const {
     populateBudgetSettings,
     setupBudgetSettings
 } = await import('./Budget.js');
+const { createBudgetFlowModel } = await import('./BudgetFlow.js');
 
 function reset() {
     elements.clear();
     elements.set('budget-setting-enabled', createElement('budget-setting-enabled'));
     elements.set('budget-disabled-description', createElement('budget-disabled-description'));
     elements.set('budget-settings-form', createElement('budget-settings-form'));
+    elements.set('budget-flow-renderer', createElement('budget-flow-renderer'));
+    elements.set('budget-validation-message', createElement('budget-validation-message'));
     const budgetView = createElement('budget-view');
     const budgetHeader = createElement('budget-header');
     budgetHeader.nextElementSibling = null;
@@ -69,28 +84,14 @@ function reset() {
     };
     elements.set('budget-view', budgetView);
     elements.set('budget-overview-content', createElement('budget-overview-content'));
-    ['budget-total-income', 'budget-total-bills', 'budget-total-savings', 'budget-total-spend', 'budget-unallocated']
-        .forEach(id => elements.set(id, createElement(id)));
     elements.set('nav-budget', createElement('nav-budget'));
     requests = [];
     saveSucceeds = true;
+    nextSettingsResponse = null;
     store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: true, milestones: false };
     store.state.budgetSettings = { income: [], bills: [], savings: [], spend: [] };
     store.state.assets = [];
 }
-
-let chartInstances = [];
-globalThis.Chart = function ChartMock(_ctx, configuration) {
-    const chart = {
-        configuration,
-        destroyed: false,
-        destroy() {
-            this.destroyed = true;
-        }
-    };
-    chartInstances.push(chart);
-    return chart;
-};
 
 test('budget settings populate the feature toggle from the runtime cache', () => {
     reset();
@@ -118,7 +119,7 @@ test('budget toggle updates nav visibility and persists feature settings', async
     await checkbox.dispatch('change');
 
     assert.equal(store.state.featureSettings.budget, false);
-    assert.equal(elements.get('nav-budget').hidden, true);
+    assert.equal(elements.get('nav-budget').hidden, false, 'Budget navigation remains reachable while disabled');
     assert.equal(elements.get('budget-disabled-description').hidden, false);
     assert.equal(elements.get('budget-settings-form').hidden, true);
     assert.equal(requests.length, 1);
@@ -143,6 +144,18 @@ test('budget toggle restores its checked state when persistence fails', async ()
     assert.equal(elements.get('budget-settings-form').hidden, false);
 });
 
+test('budget setup is idempotent when boot invokes it more than once', async () => {
+    reset();
+    setupBudgetSettings();
+    setupBudgetSettings();
+
+    const checkbox = elements.get('budget-setting-enabled');
+    checkbox.checked = false;
+    await checkbox.dispatch('change');
+
+    assert.equal(requests.length, 1, 'the second setup pass must not add another toggle listener');
+});
+
 test('budget settings render existing rows when the settings panel is initialised', () => {
     reset();
     const incomeBody = createElement('budget-income-tbody');
@@ -154,6 +167,35 @@ test('budget settings render existing rows when the settings panel is initialise
     assert.equal(incomeBody.children.length, 1);
     assert.match(incomeBody.children[0].innerHTML, /Salary/);
     assert.match(incomeBody.children[0].innerHTML, /4,160\.00/);
+});
+
+test('new budget rows save without client ids and hydrate server ids', async () => {
+    reset();
+    const nameInput = createElement('new-income-name');
+    nameInput.value = 'Browser contract income';
+    const amountInput = createElement('new-income-amount');
+    amountInput.value = '123.45';
+    const cadenceInput = createElement('new-income-cadence');
+    cadenceInput.value = 'monthly';
+    elements.set(nameInput.id, nameInput);
+    elements.set(amountInput.id, amountInput);
+    elements.set(cadenceInput.id, cadenceInput);
+    nextSettingsResponse = {
+        wealthWatcherBudgetSettings: JSON.stringify({
+            income: [{ id: 'server-income-id', name: 'Browser contract income', amount: 123.45, cadence: 'monthly' }],
+            bills: [],
+            savings: [],
+            spend: []
+        })
+    };
+
+    window.addBudgetIncome();
+    await new Promise(resolve => setTimeout(resolve, 350));
+
+    assert.equal(requests.length, 2);
+    const postedSettings = JSON.parse(JSON.parse(requests[0].options.body).wealthWatcherBudgetSettings);
+    assert.equal(postedSettings.income[0].id, null);
+    assert.equal(store.state.budgetSettings.income[0].id, 'server-income-id');
 });
 
 test('budget changes restore the last saved state when persistence fails', async () => {
@@ -208,37 +250,24 @@ test('forecast asset uses the searchable asset typeahead in savings rows', () =>
     assert.doesNotMatch(markup, /<select[^>]+data-budget-saving-asset=/);
 });
 
-test('budget overview explains missing configuration and links to settings', () => {
+test('budget overview explains missing configuration and keeps setup on the Budget page', () => {
     reset();
-    const chartCountBeforeLoad = chartInstances.length;
 
     loadBudgetView();
 
     const emptyState = elements.get('budget-empty-state');
     assert.equal(emptyState.id, 'budget-empty-state');
-    assert.match(emptyState.className, /catalog-workspace/);
-    assert.match(emptyState.innerHTML, /presentation-empty-state-layout/);
-    assert.match(emptyState.innerHTML, /Illustrative example/);
-    assert.match(emptyState.innerHTML, /budget-preview/);
-    assert.match(emptyState.innerHTML, /aria-label="Illustrative example of a configured budget overview"/);
-    assert.match(emptyState.innerHTML, /href="#settings\?panel=monthly-budget"/);
-    assert.match(emptyState.innerHTML, /aria-controls="budget-settings-pane"/);
-    assert.match(emptyState.innerHTML, /No budget data yet/);
+    assert.match(emptyState.className, /budget-page-state/);
+    assert.match(emptyState.innerHTML, /Monthly allocation/);
+    assert.match(emptyState.innerHTML, /Add income, bills, savings and spending below/);
+    assert.doesNotMatch(emptyState.innerHTML, /href="#settings/);
     assert.equal(elements.get('budget-view').children[1], emptyState);
     assert.equal(emptyState.hidden, false);
     assert.equal(elements.get('budget-overview-content').hidden, true);
-    assert.equal(chartInstances.length, chartCountBeforeLoad);
 });
 
-test('budget overview shows configured totals and chart, then hides both when cleared', () => {
+test('budget overview shows configured totals and clickable flow nodes, then hides both when cleared', async () => {
     reset();
-    const totalIncome = elements.get('budget-total-income');
-    const totalBills = elements.get('budget-total-bills');
-    const totalSavings = elements.get('budget-total-savings');
-    const totalSpend = elements.get('budget-total-spend');
-    const unallocated = elements.get('budget-unallocated');
-    elements.set('budget-chart-back-btn', createElement('budget-chart-back-btn'));
-    elements.set('budgetChart', createElement('budgetChart'));
     store.state.budgetSettings = {
         income: [{ name: 'Salary', amount: 5000 }],
         bills: [{ name: 'Rent', amount: 2000 }],
@@ -250,30 +279,62 @@ test('budget overview shows configured totals and chart, then hides both when cl
 
     assert.equal(elements.has('budget-empty-state'), false, 'ready content should not create the no-data experience');
     assert.equal(elements.get('budget-overview-content').hidden, false);
-    assert.equal(totalIncome.innerText, '£5,000.00');
-    assert.equal(totalBills.innerText, '£2,000.00');
-    assert.equal(totalSavings.innerText, '£500.00');
-    assert.equal(totalSpend.innerText, '£300.00');
-    assert.equal(unallocated.innerText, '£2,200.00');
-    assert.deepEqual(chartInstances.at(-1).configuration.data.datasets[0].data, [2000, 500, 300, 2200]);
+    assert.deepEqual(getMonthlyBudgetTotals(store.state.budgetSettings), {
+        income: 5000,
+        bills: 2000,
+        savings: 500,
+        spend: 300,
+        unallocated: 2200
+    });
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /budget-flow-svg/);
+    assert.doesNotMatch(elements.get('budget-flow-renderer').innerHTML, /budget-flow-table/);
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-focus="bills"/);
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /class="budget-flow-node-hit-area"/);
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-mobile/);
+    assert.doesNotMatch(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-status/);
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-drilldown-hint/);
+    assert.equal(elements.get('budget-flow-renderer').dataset.flowState, 'left-to-allocate');
+
+    const flowControl = { dataset: { budgetFlowFocus: 'bills' } };
+    await elements.get('budget-flow-renderer').dispatch('click', {
+        target: { closest: () => flowControl }
+    });
+    const selectedBillsMarkup = elements.get('budget-flow-renderer').innerHTML;
+    assert.match(selectedBillsMarkup, /data-budget-flow-breakdown="bills"/);
+    assert.match(selectedBillsMarkup, /budget-flow-svg-drilldown/);
+    assert.match(selectedBillsMarkup, /data-budget-flow-mobile data-budget-flow-breakdown="bills"/);
+    assert.match(selectedBillsMarkup, /Bills breakdown/);
+    assert.match(selectedBillsMarkup, /Rent/);
+    assert.match(selectedBillsMarkup, /data-budget-flow-clear/);
+    assert.doesNotMatch(selectedBillsMarkup, /data-budget-flow-node="income"/);
+    assert.doesNotMatch(selectedBillsMarkup, /budget-flow-breakdown-item/);
+
+    const backControl = { dataset: { budgetFlowClear: '' } };
+    await elements.get('budget-flow-renderer').dispatch('click', {
+        target: { closest: () => backControl }
+    });
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-node="income"/);
+    assert.doesNotMatch(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-breakdown="bills"/);
+
+    await elements.get('budget-flow-renderer').dispatch('click', {
+        target: { closest: () => flowControl }
+    });
+    await elements.get('budget-flow-renderer').dispatch('keydown', {
+        key: 'Enter',
+        target: { closest: () => backControl }
+    });
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-node="income"/);
 
     store.state.budgetSettings = { income: [], bills: [], savings: [], spend: [] };
     loadBudgetView();
 
     assert.equal(elements.get('budget-empty-state').hidden, false);
     assert.equal(elements.get('budget-overview-content').hidden, true);
-    assert.equal(totalIncome.innerText, '');
-    assert.equal(totalBills.innerText, '');
-    assert.equal(totalSavings.innerText, '');
-    assert.equal(totalSpend.innerText, '');
-    assert.equal(unallocated.innerText, '');
-    assert.equal(chartInstances.at(-1).destroyed, true);
+    assert.equal(elements.get('budget-flow-renderer').innerHTML, '');
 });
 
 test('budget monthly overview normalises income, bills, and savings cadence', () => {
     reset();
-    elements.set('budget-chart-back-btn', createElement('budget-chart-back-btn'));
-    elements.set('budgetChart', createElement('budgetChart'));
     store.state.budgetSettings = {
         income: [
             { name: 'Salary', amount: 6000, cadence: 'monthly' },
@@ -300,9 +361,70 @@ test('budget monthly overview normalises income, bills, and savings cadence', ()
 
     loadBudgetView();
 
-    assert.equal(elements.get('budget-total-income').innerText, '£7,000.00');
-    assert.equal(elements.get('budget-total-bills').innerText, '£1,900.00');
-    assert.equal(elements.get('budget-total-savings').innerText, '£400.00');
-    assert.equal(elements.get('budget-unallocated').innerText, '£4,300.00');
-    assert.deepEqual(chartInstances.at(-1).configuration.data.datasets[0].data, [1900, 400, 400, 4300]);
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /£7,000\.00/);
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /£4,300\.00/);
+});
+
+test('budget flow breakdown formats annual lines and linked assets', async () => {
+    reset();
+    store.state.assets = [{ Id: 'asset-isa', DisplayName: 'Stocks & Shares ISA' }];
+    store.state.budgetSettings = {
+        income: [{ id: 'income-1', name: 'Salary', amount: 4800.86, cadence: 'monthly' }],
+        bills: [{ id: 'bill-council-tax', name: 'Council tax', amount: 2160, cadence: 'annually' }],
+        savings: [{ id: 'saving-isa', name: 'ISA contribution', amount: 500, cadence: 'monthly', assetId: 'asset-isa' }],
+        spend: []
+    };
+
+    loadBudgetView();
+
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /£4,800\.86/);
+
+    const flowControl = { dataset: { budgetFlowFocus: 'bills' } };
+    await elements.get('budget-flow-renderer').dispatch('click', {
+        target: { closest: () => flowControl }
+    });
+    const billsMarkup = elements.get('budget-flow-renderer').innerHTML;
+    assert.match(billsMarkup, /budget-flow-svg-drilldown/);
+    assert.match(billsMarkup, /Council tax/);
+    assert.match(billsMarkup, /£180\.00\/mo · £2,160\.00\/year/);
+
+    const clearControl = { dataset: { budgetFlowClear: '' } };
+    await elements.get('budget-flow-renderer').dispatch('click', {
+        target: { closest: () => clearControl }
+    });
+    assert.match(elements.get('budget-flow-renderer').innerHTML, /data-budget-flow-drilldown-hint/);
+
+    const savingsControl = { dataset: { budgetFlowFocus: 'savings' } };
+    await elements.get('budget-flow-renderer').dispatch('click', {
+        target: { closest: () => savingsControl }
+    });
+    const savingsMarkup = elements.get('budget-flow-renderer').innerHTML;
+    assert.match(savingsMarkup, /data-budget-flow-asset-name="Stocks &amp; Shares ISA"/);
+    assert.match(savingsMarkup, /linked to Stocks &amp; Shares ISA/);
+    await elements.get('budget-flow-renderer').dispatch('click', {
+        target: { closest: () => clearControl }
+    });
+});
+
+test('budget flow reports a funding gap without negative geometry', () => {
+    reset();
+    store.state.budgetSettings = {
+        income: [{ name: 'Income', amount: 1000 }],
+        bills: [{ name: 'Bills', amount: 800 }],
+        savings: [{ name: 'Savings', amount: 400 }],
+        spend: [{ name: 'Spend', amount: 200 }]
+    };
+    loadBudgetView();
+    const rendered = elements.get('budget-flow-renderer').innerHTML;
+    assert.match(rendered, /data-budget-flow-node="funding-gap"/);
+    assert.match(rendered, /data-budget-flow-link="funding-gap-link"/);
+    assert.match(rendered, /stroke="#ef4444"/);
+    assert.doesNotMatch(rendered, /data-budget-flow-link-row/);
+
+    const model = createBudgetFlowModel({ income: 1000, bills: 800, savings: 400, spend: 200 });
+
+    assert.equal(model.status, 'funding-gap');
+    assert.equal(model.fundingGap, 400);
+    assert.ok(model.links.every(link => Number.isFinite(link.amount) && link.amount >= 0));
+    assert.equal(model.nodes.find(node => node.id === 'funding-gap').amount, 400);
 });

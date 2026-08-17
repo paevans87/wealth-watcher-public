@@ -83,7 +83,8 @@ test('feature visibility reflects the enabled state', () => {
     store.state.featureSettings.budget = false;
     store.state.featureSettings.forecast = false;
     applyFeatureVisibility();
-    assert.equal(element('nav-budget').hidden, true);
+    // Budget remains discoverable so its in-page enable action is reachable.
+    assert.equal(element('nav-budget').hidden, false);
     assert.equal(element('nav-forecast').hidden, true);
 
     store.state.featureSettings.forecast = true;
@@ -104,7 +105,7 @@ test('feature changes update the cache, nav, and database setting', async () => 
         budget: false,
         milestones: false
     });
-    assert.equal(element('nav-budget').hidden, true);
+    assert.equal(element('nav-budget').hidden, false);
     assert.equal(requests.length, 1);
     assert.equal(requests[0].url, 'http://localhost:5000/api/settings');
     assert.deepEqual(JSON.parse(requests[0].options.body), {
@@ -124,5 +125,17 @@ test('failed feature persistence restores the previous cache and nav state', asy
         budget: true,
         milestones: false
     });
+    assert.equal(element('nav-budget').hidden, false);
+});
+
+test('budget navigation remains available while its persisted flag is off', async () => {
+    reset();
+
+    assert.equal(await setFeatureEnabled('budget', false), true);
+    assert.equal(store.state.featureSettings.budget, false);
+    assert.equal(element('nav-budget').hidden, false);
+
+    store.state.featureSettings.budget = true;
+    applyFeatureVisibility();
     assert.equal(element('nav-budget').hidden, false);
 });
