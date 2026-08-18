@@ -103,6 +103,8 @@ test('FIRE status includes holistic milestone progress in the shared card', () =
     }), card);
 
     assert.match(card.innerHTML, /Next holistic milestone/);
+    assert.match(card.innerHTML, /fire-status-milestone-label/);
+    assert.match(card.innerHTML, /fire-status-milestone-remaining/);
     assert.match(card.innerHTML, /Holistic milestone progress/);
     assert.match(card.innerHTML, /aria-valuenow="20"/);
 });

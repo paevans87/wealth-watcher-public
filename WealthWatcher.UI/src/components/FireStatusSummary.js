@@ -155,27 +155,31 @@ function renderSetupCard(card, model) {
 function renderMilestoneContext(milestone) {
     if (!milestone) {
         return `<div class="fire-status-milestone fire-status-milestone-disabled">
-            <div><span>Holistic milestones</span><strong>Not enabled</strong></div>
+            <div class="fire-status-milestone-copy"><span class="fire-status-milestone-label">Holistic milestones</span><strong>Not enabled</strong></div>
             <a href="#settings?panel=milestones&focus=milestone-new-target">Manage milestones</a>
         </div>`;
     }
     if (milestone.state === 'unconfigured') {
         return `<div class="fire-status-milestone fire-status-milestone-unconfigured">
-            <div><span>Holistic milestones</span><strong>No targets configured</strong></div>
+            <div class="fire-status-milestone-copy"><span class="fire-status-milestone-label">Holistic milestones</span><strong>No targets configured</strong></div>
             <a href="#settings?panel=milestones&focus=milestone-new-target">Set a milestone</a>
         </div>`;
     }
     if (milestone.state === 'unavailable') return '';
     if (milestone.state === 'complete') {
         return `<div class="fire-status-milestone">
-            <div><span>Holistic milestones</span><strong>Complete</strong></div>
+            <div class="fire-status-milestone-copy"><span class="fire-status-milestone-label">Holistic milestones</span><strong>Complete</strong></div>
             <div class="fire-status-milestone-progress" role="progressbar" aria-label="Holistic milestone progress, complete" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span style="width: 100%"></span></div>
             <a href="#settings?panel=milestones&focus=milestone-new-target">Manage milestones</a>
         </div>`;
     }
     const progress = Math.max(0, Math.min(100, Number(milestone.progress) || 0));
     return `<div class="fire-status-milestone">
-        <div><span>Next holistic milestone</span><strong class="obfuscate-val">${escapeHtml(formatMoney(milestone.nextTarget))}</strong><span class="obfuscate-val">${escapeHtml(formatMoney(milestone.remaining))} to go</span></div>
+        <div class="fire-status-milestone-copy">
+            <span class="fire-status-milestone-label">Next holistic milestone</span>
+            <strong class="fire-status-milestone-target obfuscate-val">${escapeHtml(formatMoney(milestone.nextTarget))}</strong>
+            <span class="fire-status-milestone-remaining obfuscate-val">${escapeHtml(formatMoney(milestone.remaining))} to go</span>
+        </div>
         <div class="fire-status-milestone-progress" role="progressbar" aria-label="Holistic milestone progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width: ${progress}%"></span></div>
         <a href="#settings?panel=milestones&focus=milestone-new-target">Manage milestones</a>
     </div>`;
