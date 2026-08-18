@@ -85,3 +85,23 @@ test('v2 flow makes the left source bar a one-level back control', async () => {
     });
     assert.deepEqual(actions[0], { type: 'back' });
 });
+
+test('v2 flow source bar spans the rendered flow stack', async () => {
+    const target = createTarget();
+    renderBudgetV2Flow(target, model('overview', [
+        { label: 'Bills', value: 2500, color: '#ef4444', action: { type: 'group', groupId: 'bills' } },
+        { label: 'Savings', value: 1500, color: '#f97316', action: { type: 'group', groupId: 'savings' } },
+        { label: 'Spend', value: 1000, color: '#ec4899', action: { type: 'group', groupId: 'spend' } }
+    ]), {
+        formatter: value => `£${value.toFixed(2)}`
+    });
+
+    const rects = [...target.innerHTML.matchAll(/<rect class="budget-v2-flow-node" x="([\d.]+)" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)]
+        .map(match => ({ x: Number(match[1]), y: Number(match[2]), height: Number(match[3]) }));
+    const source = rects.find(rect => rect.x === 48);
+    const targets = rects.filter(rect => rect.x === 690);
+    assert.ok(source);
+    assert.equal(targets.length, 3);
+    assert.ok(Math.abs(source.y - targets[0].y) < 0.01);
+    assert.ok(Math.abs((source.y + source.height) - (targets.at(-1).y + targets.at(-1).height)) < 0.01);
+});

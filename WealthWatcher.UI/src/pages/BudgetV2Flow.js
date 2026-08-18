@@ -1,11 +1,13 @@
 import { escapeHtml, safeCssColor } from '../utils/html.js';
 
 const FLOW_WIDTH = 920;
-const FLOW_HEIGHT = 380;
+const FLOW_HEIGHT = 420;
+const FLOW_TOP = 72;
+const FLOW_BOTTOM = 348;
 const SOURCE_X = 48;
-const TARGET_X = 680;
-const NODE_WIDTH = 24;
-const MAX_NODE_HEIGHT = 190;
+const TARGET_X = 690;
+const NODE_WIDTH = 22;
+const FLOW_GAP = 14;
 
 function finiteAmount(value) {
     const amount = Number(value);
@@ -58,16 +60,23 @@ function buildNode({ x, y, height, labelX, labelY, label, value, color, action, 
         || (action?.type === 'navigation'
             ? `Back from ${label}`
             : `View ${label} breakdown`);
+    const safeHeight = Math.max(Number(height) || 0, 0);
+    const textAnchor = source ? 'end' : 'start';
+    const textY = labelY + Math.max(safeHeight / 2, 4) - 4;
+    const valueY = labelY + Math.max(safeHeight / 2, 4) + 16;
     const roleMarkup = interactive
         ? ` role="button" tabindex="0" aria-label="${escapeHtml(actionLabel)}"${actionMarkup}`
         : '';
-    const hitX = source ? Math.max(0, x - 16) : Math.max(0, x - 230);
-    const hitWidth = source ? 260 : 470;
+    const hitX = Math.max(0, x - 230);
+    const hitRight = source
+        ? x + NODE_WIDTH + 10
+        : Math.min(FLOW_WIDTH, labelX + 230);
+    const hitWidth = Math.max(hitRight - hitX, NODE_WIDTH + 20);
     return `<g class="budget-v2-flow-node-group${interactive ? ' is-interactive' : ''}"${roleMarkup}>
-        ${interactive ? `<rect class="budget-flow-node-hit-area" x="${hitX}" y="${Math.max(0, y - 12)}" width="${hitWidth}" height="${Math.max(height + 24, 48)}" fill="#fff" opacity="0" aria-hidden="true"></rect>` : ''}
-        <rect class="budget-v2-flow-node" x="${x}" y="${y.toFixed(2)}" width="${NODE_WIDTH}" height="${height.toFixed(2)}" rx="6" fill="${safeCssColor(color)}" aria-hidden="true"></rect>
-        <text class="budget-flow-svg-label" x="${labelX}" y="${(labelY + 18).toFixed(2)}"${source ? '' : ' text-anchor="start"'} aria-hidden="true">${escapeHtml(label)}</text>
-        <text class="budget-flow-svg-value obfuscate-val" x="${labelX}" y="${(labelY + 40).toFixed(2)}"${source ? '' : ' text-anchor="start"'} aria-hidden="true">${escapeHtml(formatAmount(value, formatter, obfuscated))}</text>
+        ${interactive ? `<rect class="budget-flow-node-hit-area" x="${hitX.toFixed(2)}" y="${Math.max(0, y - 12).toFixed(2)}" width="${hitWidth.toFixed(2)}" height="${Math.max(safeHeight + 24, 48).toFixed(2)}" fill="#fff" opacity="0" aria-hidden="true"></rect>` : ''}
+        <rect class="budget-v2-flow-node" x="${x}" y="${y.toFixed(2)}" width="${NODE_WIDTH}" height="${safeHeight.toFixed(2)}" rx="5" fill="${safeCssColor(color)}" aria-hidden="true"></rect>
+        <text class="budget-flow-svg-label" x="${labelX}" y="${textY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(label)}</text>
+        <text class="budget-flow-svg-value obfuscate-val" x="${labelX}" y="${valueY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(formatAmount(value, formatter, obfuscated))}</text>
     </g>`;
 }
 
@@ -75,14 +84,19 @@ function buildFlowSvg(model, formatter, obfuscated) {
     const rows = model.rows.filter(row => finiteAmount(row.value) > 0 || row.action);
     const sourceValue = finiteAmount(model.source?.value);
     const rowTotal = rows.reduce((total, row) => total + finiteAmount(row.value), 0);
-    const scale = Math.min(MAX_NODE_HEIGHT / Math.max(sourceValue, rowTotal, 1), 1);
-    const sourceHeight = Math.max(sourceValue > 0 ? sourceValue * scale : 30, 30);
-    const targetHeights = rows.map(row => Math.max(finiteAmount(row.value) * scale, 24));
-    const gap = rows.length > 1 ? 12 : 0;
-    const totalTargetHeight = targetHeights.reduce((total, height) => total + height, 0) + gap * Math.max(0, rows.length - 1);
+    const availableHeight = FLOW_BOTTOM - FLOW_TOP;
+    const gap = rows.length > 1 ? FLOW_GAP : 0;
+    const gapTotal = gap * Math.max(0, rows.length - 1);
+    const scale = Math.min(Math.max(availableHeight - gapTotal, 1) / Math.max(sourceValue, rowTotal, 1), 1);
+    const rawTargetHeights = rows.map(row => Math.max(finiteAmount(row.value) * scale, row.value > 0 ? 0 : 24));
+    const rawStackHeight = rawTargetHeights.reduce((total, height) => total + height, 0) + gapTotal;
+    const fitScale = rawStackHeight > availableHeight ? availableHeight / rawStackHeight : 1;
+    const targetHeights = rawTargetHeights.map(height => height * fitScale);
+    const flowHeight = targetHeights.reduce((total, height) => total + height, 0) + gapTotal;
+    const sourceHeight = rows.length ? flowHeight : 30;
     const sourceY = (FLOW_HEIGHT - sourceHeight) / 2;
-    let targetY = (FLOW_HEIGHT - totalTargetHeight) / 2;
-    let sourceOffset = Math.max(0, (sourceHeight - targetHeights.reduce((total, height) => total + height, 0)) / 2);
+    let targetY = sourceY;
+    let sourceOffset = 0;
     const controlX = SOURCE_X + 310;
     const linkMarkup = [];
     const targetMarkup = [];
@@ -91,7 +105,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
         const height = targetHeights[index];
         const sourceCenter = sourceY + sourceOffset + height / 2;
         const targetCenter = targetY + height / 2;
-        linkMarkup.push(`<path class="budget-v2-flow-link" d="M ${SOURCE_X + NODE_WIDTH} ${sourceCenter.toFixed(2)} C ${controlX} ${sourceCenter.toFixed(2)}, ${controlX} ${targetCenter.toFixed(2)}, ${TARGET_X} ${targetCenter.toFixed(2)}" stroke="${safeCssColor(row.color)}" stroke-width="${Math.max(2, height).toFixed(2)}" opacity="0.62" fill="none" aria-hidden="true"></path>`);
+        linkMarkup.push(`<path class="budget-v2-flow-link" d="M ${SOURCE_X + NODE_WIDTH} ${sourceCenter.toFixed(2)} C ${controlX} ${sourceCenter.toFixed(2)}, ${controlX} ${targetCenter.toFixed(2)}, ${TARGET_X} ${targetCenter.toFixed(2)}" stroke="${safeCssColor(row.color)}" stroke-width="${Math.max(2, height).toFixed(2)}" opacity="0.72" fill="none" aria-hidden="true"></path>`);
         targetMarkup.push(buildNode({
             x: TARGET_X,
             y: targetY,
@@ -105,7 +119,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
             formatter,
             obfuscated
         }));
-        sourceOffset += height;
+        sourceOffset += height + gap;
         targetY += height + gap;
     });
 
@@ -117,7 +131,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
             x: SOURCE_X,
             y: sourceY,
             height: sourceHeight,
-            labelX: SOURCE_X + NODE_WIDTH + 18,
+            labelX: SOURCE_X - 8,
             labelY: sourceY,
             label: model.source?.label || 'Income',
             value: sourceValue,

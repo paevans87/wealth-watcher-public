@@ -7638,39 +7638,6 @@ body.form-flyout-open { overflow: hidden; }
 }
 
 /* --- BUDGET V2 GROUP EDITOR AND FLOW --- */
-.budget-summary-grid {
-    display: grid;
-    gap: 0.75rem;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    min-width: 0;
-}
-
-.budget-summary-card {
-    min-width: 0;
-    padding: 0.9rem 1rem;
-}
-
-.budget-summary-label {
-    color: var(--text-muted);
-    display: block;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-}
-
-.budget-summary-card h2 {
-    font-size: clamp(1.05rem, 2vw, 1.4rem);
-    margin: 0.35rem 0 0;
-}
-
-.budget-summary-income h2 { color: #67e8f9; }
-.budget-summary-bills h2 { color: #fca5a5; }
-.budget-summary-savings h2 { color: #6ee7b7; }
-.budget-summary-spend h2 { color: #c4b5fd; }
-.budget-summary-remaining h2 { color: var(--text-main); }
-
-.budget-custom-summary { margin-top: 0.75rem; }
 
 .budget-flow-card {
     min-width: 0;
@@ -7694,10 +7661,11 @@ body.form-flyout-open { overflow: hidden; }
     background: linear-gradient(180deg, rgba(15, 23, 42, 0.24), rgba(2, 6, 23, 0.16));
     border: 1px solid rgba(148, 163, 184, 0.12);
     border-radius: 12px;
-    margin-top: 1rem;
+    margin-top: 0.75rem;
+    min-height: 17rem;
     min-width: 0;
     overflow: hidden;
-    padding: 0.75rem;
+    padding: 0.5rem 0.75rem 0.75rem;
 }
 
 .budget-v2-flow-navigation {
@@ -7716,8 +7684,9 @@ body.form-flyout-open { overflow: hidden; }
 }
 
 .budget-v2-flow-svg {
+    display: block;
     margin-top: 0.4rem;
-    min-height: 16rem;
+    min-height: 15rem;
 }
 
 .budget-v2-flow-node-group {
@@ -7741,6 +7710,18 @@ body.form-flyout-open { overflow: hidden; }
     list-style: none;
     margin: 0.75rem 0 0;
     padding: 0;
+}
+
+.budget-flow-accessible-list {
+    border: 0;
+    clip: rect(0, 0, 0, 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
 }
 
 .budget-flow-accessible-list li,
@@ -7996,16 +7977,13 @@ body.form-flyout-open { overflow: hidden; }
 }
 
 @media (max-width: 900px) {
-    .budget-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .budget-add-item-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .budget-add-item-form > button { width: 100%; }
 }
 
 @media (max-width: 640px) {
-    .budget-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .budget-flow-svg { display: none; }
     .budget-flow-mobile-view { display: block; }
-    .budget-flow-accessible-list { margin-top: 0.65rem; }
     .budget-group-header { align-items: flex-start; }
     .budget-group-header-total { align-items: flex-end; flex-direction: column; gap: 0.2rem; }
     .budget-group-toolbar { align-items: stretch; }

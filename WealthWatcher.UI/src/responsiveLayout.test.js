@@ -78,6 +78,7 @@ test('Budget configuration uses always-reachable group editing and a responsive 
     assert.match(indexMarkup, /id="budget-migration-note"/);
     assert.match(indexMarkup, /id="budget-line-editor"[^>]*data-form-flyout/);
     assert.match(indexMarkup, /id="budget-line-editor-form"[^>]*data-budget-line-editor-form/);
+    assert.doesNotMatch(indexMarkup, /budget-summary-grid|budget-summary-card/);
     assert.doesNotMatch(indexMarkup, /budget-edit-plan-button|Done editing|Unlock editing/);
     assert.match(stylesheet, /\.budget-groups-editor\s*\{[\s\S]*display:\s*grid/);
     assert.match(stylesheet, /\.budget-group-header\s*\{[\s\S]*cursor:\s*pointer/);
@@ -87,6 +88,7 @@ test('Budget configuration uses always-reachable group editing and a responsive 
     assert.match(stylesheet, /\.budget-add-item-action\s*\{/);
     assert.match(stylesheet, /\.budget-v2-flow-svg\s*\{/);
     assert.match(stylesheet, /\.budget-flow-accessible-list/);
+    assert.match(stylesheet, /\.budget-flow-accessible-list\s*\{[\s\S]*position:\s*absolute/);
     assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-flow-mobile-view\s*\{\s*display:\s*block/);
     assert.match(stylesheet, /@media\s*\(max-width:\s*640px\)[\s\S]*\.budget-v2-table\s*\{/);
 });

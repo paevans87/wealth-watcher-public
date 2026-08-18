@@ -306,8 +306,6 @@ export function loadBudgetView(viewMode = null) {
         return;
     }
 
-    renderBudgetSummary(totals);
-
     const flow = getBudgetFlowData(budgetSettings, currentChartView, totals);
     const v2FlowTarget = document.getElementById('budget-flow-renderer');
     if (v2FlowTarget && Array.isArray(budgetSettings.groups)) {
