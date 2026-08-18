@@ -7,7 +7,7 @@ const FLOW_BOTTOM = 348;
 const SOURCE_X = 48;
 const TARGET_X = 690;
 const NODE_WIDTH = 22;
-const FLOW_GAP = 14;
+const FLOW_GAP = 18;
 
 function finiteAmount(value) {
     const amount = Number(value);
@@ -55,28 +55,36 @@ function buildNavigation(model) {
 
 function buildNode({ x, y, height, labelX, labelY, label, value, color, action, formatter, obfuscated, source = false }) {
     const interactive = Boolean(action);
+    const isCategory = action?.type === 'category' && !source;
     const actionMarkup = actionAttributes(action);
     const actionLabel = action?.ariaLabel
         || (action?.type === 'navigation'
             ? `Back from ${label}`
-            : `View ${label} breakdown`);
+            : action?.type === 'category'
+                ? `View ${label} category breakdown`
+                : `View ${label} breakdown`);
     const safeHeight = Math.max(Number(height) || 0, 0);
     const textAnchor = source ? 'end' : 'start';
     const textY = labelY + Math.max(safeHeight / 2, 4) - 4;
     const valueY = labelY + Math.max(safeHeight / 2, 4) + 16;
+    const visualLabelX = isCategory ? labelX + 10 : labelX;
     const roleMarkup = interactive
         ? ` role="button" tabindex="0" aria-label="${escapeHtml(actionLabel)}"${actionMarkup}`
         : '';
     const hitX = Math.max(0, x - 230);
     const hitRight = source
         ? x + NODE_WIDTH + 10
-        : Math.min(FLOW_WIDTH, labelX + 230);
+        : Math.min(FLOW_WIDTH, visualLabelX + 230);
     const hitWidth = Math.max(hitRight - hitX, NODE_WIDTH + 20);
-    return `<g class="budget-v2-flow-node-group${interactive ? ' is-interactive' : ''}"${roleMarkup}>
+    const categoryMarker = isCategory
+        ? `<circle class="budget-flow-svg-category-marker" cx="${(labelX + 2).toFixed(2)}" cy="${(textY - 4).toFixed(2)}" r="2.5" fill="${safeCssColor(color)}" opacity="0.58" aria-hidden="true"></circle>`
+        : '';
+    return `<g class="budget-v2-flow-node-group${interactive ? ' is-interactive' : ''}${isCategory ? ' is-category' : ''}"${roleMarkup}>
         ${interactive ? `<rect class="budget-flow-node-hit-area" x="${hitX.toFixed(2)}" y="${Math.max(0, y - 12).toFixed(2)}" width="${hitWidth.toFixed(2)}" height="${Math.max(safeHeight + 24, 48).toFixed(2)}" fill="#fff" opacity="0" aria-hidden="true"></rect>` : ''}
         <rect class="budget-v2-flow-node" x="${x}" y="${y.toFixed(2)}" width="${NODE_WIDTH}" height="${safeHeight.toFixed(2)}" rx="5" fill="${safeCssColor(color)}" aria-hidden="true"></rect>
-        <text class="budget-flow-svg-label" x="${labelX}" y="${textY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(label)}</text>
-        <text class="budget-flow-svg-value obfuscate-val" x="${labelX}" y="${valueY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(formatAmount(value, formatter, obfuscated))}</text>
+        ${categoryMarker}
+        <text class="budget-flow-svg-label" x="${visualLabelX}" y="${textY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(label)}</text>
+        <text class="budget-flow-svg-value obfuscate-val" x="${visualLabelX}" y="${valueY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(formatAmount(value, formatter, obfuscated))}</text>
     </g>`;
 }
 
@@ -168,7 +176,10 @@ function buildMobileFlow(model, formatter, obfuscated) {
         </div>
         <ul>${model.rows.map(row => {
             const color = safeCssColor(row.color || model.source?.color);
-            return `<li style="--budget-flow-accent: ${color}">${row.action ? `<button type="button" class="budget-flow-list-button"${actionAttributes(row.action)}><span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong></button>` : `<span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong>`}</li>`;
+            const categoryMarker = row.action?.type === 'category'
+                ? '<span class="budget-flow-mobile-category-marker" aria-hidden="true">●</span>'
+                : '';
+            return `<li style="--budget-flow-accent: ${color}">${row.action ? `<button type="button" class="budget-flow-list-button"${actionAttributes(row.action)}>${categoryMarker}<span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong></button>` : `<span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong>`}</li>`;
         }).join('')}</ul>
     </div>`;
 }

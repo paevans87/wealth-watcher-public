@@ -82,6 +82,21 @@ test('v2 mobile flow keeps the selected source colour on rows without an explici
     assert.match(target.innerHTML, /<li style="--budget-flow-accent: #123abc"><button/);
 });
 
+test('v2 flow marks category rows without marking direct line items', () => {
+    const target = createTarget();
+    renderBudgetV2Flow(target, model('group', [
+        { label: 'Accommodation', value: 1600, color: '#123abc', action: { type: 'category', groupId: 'bills', category: 'Accommodation' } },
+        { label: 'PHC', value: 9.49, color: '#123abc', action: null }
+    ]), {
+        formatter: value => `£${value.toFixed(2)}`
+    });
+
+    assert.match(target.innerHTML, /budget-v2-flow-node-group is-interactive is-category/);
+    assert.match(target.innerHTML, /budget-flow-svg-category-marker/);
+    assert.match(target.innerHTML, /budget-flow-mobile-category-marker/);
+    assert.equal((target.innerHTML.match(/budget-flow-mobile-category-marker/g) || []).length, 1);
+});
+
 test('v2 flow makes the left source bar a one-level back control', async () => {
     const target = createTarget();
     const actions = [];
@@ -119,6 +134,7 @@ test('v2 flow source bar spans the rendered flow stack', async () => {
     assert.ok(source);
     assert.equal(targets.length, 3);
     assert.ok(Math.abs(source.y - targets[0].y) < 0.01);
+    assert.ok(targets[1].y - (targets[0].y + targets[0].height) >= 18);
     assert.ok(Math.abs((source.y + source.height) - (targets.at(-1).y + targets.at(-1).height)) < 0.01);
 });
 

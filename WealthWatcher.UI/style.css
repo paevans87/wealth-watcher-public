@@ -6652,6 +6652,10 @@ body.obfuscated h1 .obfuscate-val {
     font-weight: 700;
 }
 
+.budget-flow-svg-category-marker {
+    pointer-events: none;
+}
+
 .budget-flow-svg-value {
     fill: var(--text-muted);
     font-size: 14px;
@@ -7819,6 +7823,18 @@ body.form-flyout-open { overflow: hidden; }
 .budget-flow-mobile-view .budget-flow-list-button:hover,
 .budget-flow-mobile-view .budget-flow-list-button:focus-visible {
     border-left-color: var(--budget-flow-accent, rgba(148, 163, 184, 0.3));
+}
+
+.budget-flow-mobile-category-marker {
+    color: var(--budget-flow-accent, var(--text-muted));
+    flex: 0 0 auto;
+    font-size: 0.52rem;
+    line-height: 1;
+    opacity: 0.72;
+}
+
+.budget-flow-mobile-view .budget-flow-list-button > span:not(.budget-flow-mobile-category-marker) {
+    flex: 1 1 auto;
 }
 
 .budget-flow-list-button span,
