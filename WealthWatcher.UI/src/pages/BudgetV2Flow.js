@@ -160,10 +160,16 @@ function buildAccessibleFlowList(model, formatter, obfuscated) {
 }
 
 function buildMobileFlow(model, formatter, obfuscated) {
+    const sourceColor = safeCssColor(model.source?.color || '#06b6d4');
     return `<div class="budget-flow-mobile-view" data-budget-flow-mobile aria-label="${escapeHtml(model.summary)} mobile budget flow">
-        <strong>${escapeHtml(model.source?.label || 'Income')}</strong>
-        <span class="obfuscate-val">${escapeHtml(formatAmount(model.source?.value, formatter, obfuscated))}</span>
-        <ul>${model.rows.map(row => `<li>${row.action ? `<button type="button" class="budget-flow-list-button"${actionAttributes(row.action)}><span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong></button>` : `<span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong>`}</li>`).join('')}</ul>
+        <div class="budget-v2-flow-mobile-source" style="--budget-flow-accent: ${sourceColor}">
+            <strong>${escapeHtml(model.source?.label || 'Income')}</strong>
+            <span class="obfuscate-val">${escapeHtml(formatAmount(model.source?.value, formatter, obfuscated))}</span>
+        </div>
+        <ul>${model.rows.map(row => {
+            const color = safeCssColor(row.color || model.source?.color);
+            return `<li style="--budget-flow-accent: ${color}">${row.action ? `<button type="button" class="budget-flow-list-button"${actionAttributes(row.action)}><span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong></button>` : `<span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong>`}</li>`;
+        }).join('')}</ul>
     </div>`;
 }
 

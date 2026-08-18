@@ -43,6 +43,8 @@ test('v2 flow renders SVG, mobile and accessible equivalents with group actions'
     assert.match(target.innerHTML, /data-budget-flow-mobile/);
     assert.match(target.innerHTML, /data-budget-flow-accessible/);
     assert.match(target.innerHTML, /data-budget-v2-flow-action="group" data-budget-group="bills"/);
+    assert.match(target.innerHTML, /class="budget-v2-flow-mobile-source" style="--budget-flow-accent: #06b6d4"/);
+    assert.match(target.innerHTML, /<li style="--budget-flow-accent: #ef4444"><button/);
 
     await target.dispatch('click', {
         target: { closest: () => ({ dataset: { budgetV2FlowAction: 'group', budgetGroup: 'bills' } }) }
@@ -64,6 +66,20 @@ test('v2 flow exposes All and Back navigation at nested levels', async () => {
         target: { closest: () => ({ dataset: { budgetV2FlowNavigation: 'back' } }) }
     });
     assert.deepEqual(actions[0], { type: 'back' });
+});
+
+test('v2 mobile flow keeps the selected source colour on rows without an explicit colour', () => {
+    const target = createTarget();
+    renderBudgetV2Flow(target, model(
+        'group',
+        [{ label: 'Mortgage', value: 1600, action: { type: 'category', groupId: 'bills', category: 'Accommodation' } }],
+        { label: 'Bills', value: 1600, color: '#123abc' }
+    ), {
+        formatter: value => `£${value.toFixed(2)}`
+    });
+
+    assert.match(target.innerHTML, /class="budget-v2-flow-mobile-source" style="--budget-flow-accent: #123abc"/);
+    assert.match(target.innerHTML, /<li style="--budget-flow-accent: #123abc"><button/);
 });
 
 test('v2 flow makes the left source bar a one-level back control', async () => {
