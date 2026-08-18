@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented here.
 
-The latest stable release is `v0.6.0`. Changes that have not yet been released are grouped under `Unreleased`.
+The latest stable release is `v0.7.0`. Changes that have not yet been released are grouped under `Unreleased`.
+
+## 0.7.0 - 2026-08-18
+
+- Rebuild Budget as a group-based planner with custom group names and colours, item categories, monthly-equivalent flow drill-down, responsive views, and accessible list output.
+- Add version-2 budget persistence with a database migration, legacy-array compatibility, stable item and Forecast asset-link handling, and atomic validation of grouped settings.
+- Move application release information to a dedicated Application page with a direct app-bar link, legacy deep-link redirect, and explicit missing-metadata state.
+- Update FIRE and Forecast budget calculations and milestone context for grouped budgets, and expand browser-demo, API, UI, routing, and responsive-layout coverage.
+- Fix budget flow navigation, mobile colour accents, uncategorised item visibility, built-in Income editing, Forecast typeahead persistence, and responsive editor layout issues.
 
 ## 0.6.0 - 2026-08-17
 
