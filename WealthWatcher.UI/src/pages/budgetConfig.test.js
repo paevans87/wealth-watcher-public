@@ -20,6 +20,8 @@ test('legacy budget documents normalize to v2 groups and request migration', () 
     assert.equal(settings.groups.length, 4);
     assert.equal(settings.groups[0].name, 'Income');
     assert.equal(settings.groups[0].builtIn, true);
+    assert.equal(settings.groups[0].color, '#06b6d4');
+    assert.equal(settings.groups[1].color, '#ef4444');
     assert.equal(settings.groups[1].items[0].category, 'Accommodation');
     assert.equal(isIncomeBudgetGroup(settings.groups[0]), true);
 });
@@ -29,7 +31,7 @@ test('v2 normalization keeps income locked and supports custom groups and catego
         version: 2,
         needsUpdate: true,
         groups: [
-            { id: 'travel', name: 'Travel', kind: 'custom', builtIn: false, items: [{ id: 'flights', name: 'Flights', amount: 300, category: '' }] },
+            { id: 'travel', name: 'Travel', kind: 'custom', builtIn: false, color: '#123abc', items: [{ id: 'flights', name: 'Flights', amount: 300, category: '' }] },
             { id: 'income', name: 'Renamed income', kind: 'income', builtIn: true, items: [] }
         ]
     });
@@ -39,6 +41,7 @@ test('v2 normalization keeps income locked and supports custom groups and catego
     assert.equal(settings.groups[0].name, 'Income');
     assert.equal(settings.groups[0].builtIn, true);
     assert.equal(settings.groups[1].name, 'Travel');
+    assert.equal(settings.groups[1].color, '#123abc');
     assert.equal(getBudgetItemCategory(settings.groups[1].items[0]), 'Uncategorised');
 });
 

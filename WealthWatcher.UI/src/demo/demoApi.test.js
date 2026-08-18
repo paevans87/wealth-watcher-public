@@ -100,6 +100,7 @@ test('budget v2 settings round-trip groups, categories, cadence, and asset mappi
                 kind: 'income',
                 role: 'income',
                 builtIn: true,
+                color: '#06b6d4',
                 items: [{ id: 'income-round-trip', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null, category: 'Employment' }]
             },
             {
@@ -107,6 +108,7 @@ test('budget v2 settings round-trip groups, categories, cadence, and asset mappi
                 name: 'Household bills',
                 role: 'bills',
                 builtIn: false,
+                color: '#123ABC',
                 items: [{ id: 'mortgage-round-trip', name: 'Mortgage', amount: 1450, cadence: 'monthly', assetId: null, category: 'Accommodation' }]
             },
             {
@@ -114,6 +116,7 @@ test('budget v2 settings round-trip groups, categories, cadence, and asset mappi
                 name: 'Future plans',
                 kind: 'custom',
                 builtIn: false,
+                color: '#abc',
                 items: [{ id: 'saving-round-trip', name: 'ISA contribution', amount: 500, cadence: 'quarterly', assetId: 'asset-isa', category: 'Investing' }]
             }
         ]
@@ -134,6 +137,7 @@ test('budget v2 settings round-trip groups, categories, cadence, and asset mappi
             kind: 'income',
             role: 'income',
             builtIn: true,
+            color: '#06b6d4',
             items: [{ id: 'income-round-trip', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null, category: 'Employment' }]
         },
         {
@@ -142,6 +146,7 @@ test('budget v2 settings round-trip groups, categories, cadence, and asset mappi
             kind: 'custom',
             role: 'bills',
             builtIn: false,
+            color: '#123abc',
             items: [{ id: 'mortgage-round-trip', name: 'Mortgage', amount: 1450, cadence: 'monthly', assetId: null, category: 'Accommodation' }]
         },
         {
@@ -150,6 +155,7 @@ test('budget v2 settings round-trip groups, categories, cadence, and asset mappi
             kind: 'custom',
             role: 'custom',
             builtIn: false,
+            color: '#aabbcc',
             items: [{ id: 'saving-round-trip', name: 'ISA contribution', amount: 500, cadence: 'quarterly', assetId: 'asset-isa', category: 'Investing' }]
         }
     ]);

@@ -135,7 +135,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
             labelY: sourceY,
             label: model.source?.label || 'Income',
             value: sourceValue,
-            color: '#06b6d4',
+            color: model.source?.color || '#06b6d4',
             action: model.sourceAction,
             formatter,
             obfuscated,

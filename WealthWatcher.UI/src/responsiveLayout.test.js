@@ -76,6 +76,8 @@ test('Budget configuration uses always-reachable group editing and a responsive 
     assert.doesNotMatch(indexMarkup, /id="budgetChart"/, 'the v2 page should not mount the retired doughnut chart');
     assert.match(indexMarkup, /id="budget-groups-editor"[^>]*class="[^"]*budget-groups-editor/);
     assert.match(indexMarkup, /id="budget-migration-note"/);
+    assert.match(indexMarkup, /id="budget-group-editor"[^>]*data-form-flyout/);
+    assert.match(indexMarkup, /id="budget-group-editor-form"[^>]*data-budget-group-editor-form/);
     assert.match(indexMarkup, /id="budget-line-editor"[^>]*data-form-flyout/);
     assert.match(indexMarkup, /id="budget-line-editor-form"[^>]*data-budget-line-editor-form/);
     assert.doesNotMatch(indexMarkup, /budget-summary-grid|budget-summary-card/);
@@ -85,6 +87,7 @@ test('Budget configuration uses always-reachable group editing and a responsive 
     assert.match(stylesheet, /\.budget-v2-table-container\s*\{[^}]*overflow-x:\s*hidden/);
     assert.match(stylesheet, /\.budget-v2-table\s*\{[^}]*table-layout:\s*fixed/);
     assert.match(stylesheet, /\.budget-item-edit-button\s*\{/);
+    assert.match(stylesheet, /\.budget-group-editor-color-control\s+input\[type="color"\]/);
     assert.match(stylesheet, /\.budget-add-item-action\s*\{/);
     assert.match(stylesheet, /\.budget-v2-flow-svg\s*\{/);
     assert.match(stylesheet, /\.budget-flow-accessible-list/);

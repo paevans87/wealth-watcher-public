@@ -105,3 +105,16 @@ test('v2 flow source bar spans the rendered flow stack', async () => {
     assert.ok(Math.abs(source.y - targets[0].y) < 0.01);
     assert.ok(Math.abs((source.y + source.height) - (targets.at(-1).y + targets.at(-1).height)) < 0.01);
 });
+
+test('v2 flow uses the source colour for the drilldown source bar', () => {
+    const target = createTarget();
+    renderBudgetV2Flow(target, model(
+        'group',
+        [{ label: 'Accommodation', value: 1600, color: '#123abc', action: { type: 'category', groupId: 'bills', category: 'Accommodation' } }],
+        { label: 'Bills', value: 1600, color: '#123abc' }
+    ), {
+        formatter: value => `£${value.toFixed(2)}`
+    });
+
+    assert.match(target.innerHTML, /<rect class="budget-v2-flow-node" x="48"[^>]+fill="#123abc"/);
+});

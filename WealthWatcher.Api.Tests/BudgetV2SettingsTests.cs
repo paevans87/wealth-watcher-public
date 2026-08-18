@@ -65,7 +65,8 @@ public sealed class BudgetV2SettingsTests
                     "custom",
                     false,
                     Item(mortgageId, "Mortgage", 1_450m, "monthly", mortgageAsset.Id, "Accommodation"),
-                    role: "bills"))
+                    role: "bills",
+                    color: "#0ea5e9"))
         });
 
         Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
@@ -92,6 +93,7 @@ public sealed class BudgetV2SettingsTests
         Assert.Equal("Bills", bills.GetProperty("name").GetString());
         Assert.Equal("custom", bills.GetProperty("kind").GetString());
         Assert.Equal("bills", bills.GetProperty("role").GetString());
+        Assert.Equal("#0ea5e9", bills.GetProperty("color").GetString());
         Assert.Equal(
             "Accommodation",
             bills.GetProperty("items")[0].GetProperty("category").GetString());
@@ -266,7 +268,8 @@ public sealed class BudgetV2SettingsTests
         bool builtIn,
         object item,
         object? item2 = null,
-        string? role = null)
+        string? role = null,
+        string? color = null)
         => new
         {
             id,
@@ -274,6 +277,7 @@ public sealed class BudgetV2SettingsTests
             kind,
             role,
             builtIn,
+            color,
             items = item2 is null ? new[] { item } : new[] { item, item2 }
         };
 

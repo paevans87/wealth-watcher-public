@@ -284,6 +284,31 @@
                 </div>
             </section>
 
+            <div id="budget-group-editor" class="form-flyout budget-group-editor-flyout" data-form-flyout data-budget-group-editor hidden aria-hidden="true">
+                <div class="form-flyout-backdrop budget-group-editor-backdrop" data-flyout-close></div>
+                <section class="form-flyout-dialog budget-group-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="budget-group-editor-title" tabindex="-1">
+                    <div class="form-flyout-header budget-line-editor-header">
+                        <div>
+                            <span class="budget-section-kicker">Edit group</span>
+                            <h4 id="budget-group-editor-title">Budget group</h4>
+                        </div>
+                        <button class="form-flyout-close budget-line-editor-close" type="button" data-flyout-close aria-label="Close budget group editor">&times;</button>
+                    </div>
+                    <p id="budget-group-editor-copy" class="form-flyout-copy budget-line-editor-copy"></p>
+                    <form id="budget-group-editor-form" class="budget-group-editor-form" data-budget-group-editor-form aria-label="Budget group editor" novalidate>
+                        <div id="budget-group-editor-fields" class="budget-line-editor-fields"></div>
+                        <p id="budget-group-editor-validation" class="budget-line-editor-validation" role="alert" hidden></p>
+                        <div class="budget-line-editor-actions budget-group-editor-actions">
+                            <div></div>
+                            <div class="budget-line-editor-actions-right">
+                                <button class="action-btn budget-line-editor-cancel" type="button" data-flyout-close>Cancel</button>
+                                <button class="action-btn catalog-add-button" type="submit">Save group</button>
+                            </div>
+                        </div>
+                    </form>
+                </section>
+            </div>
+
             <div id="budget-line-editor" class="form-flyout budget-line-editor" data-form-flyout data-budget-line-editor hidden aria-hidden="true">
                 <div class="form-flyout-backdrop budget-line-editor-backdrop" data-flyout-close></div>
                 <section class="form-flyout-dialog budget-line-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="budget-line-editor-title" tabindex="-1">

@@ -20,6 +20,7 @@ public sealed class BudgetV2GroupDocument
     public string? Kind { get; set; }
     public string? Role { get; set; }
     public bool? BuiltIn { get; set; }
+    public string? Color { get; set; }
     public List<BudgetV2ItemDocument>? Items { get; set; }
 }
 

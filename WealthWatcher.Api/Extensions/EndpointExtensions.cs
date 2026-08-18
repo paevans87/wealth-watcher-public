@@ -2290,6 +2290,7 @@ public static class EndpointExtensions
                 Kind = isIncome ? "income" : "custom",
                 Role = isIncome ? "income" : role ?? kind ?? "custom",
                 BuiltIn = isIncome,
+                Color = string.IsNullOrWhiteSpace(group.Color) ? null : group.Color.Trim(),
                 Items = new List<BudgetV2ItemDocument>(group.Items.Count)
             };
             var compatibilityCategory = isIncome

@@ -1,5 +1,11 @@
 export const UNCATEGORISED_LABEL = 'Uncategorised';
 
+export const BUDGET_GROUP_COLORS = Object.freeze([
+    '#06b6d4', '#ef4444', '#10b981', '#8b5cf6', '#f59e0b',
+    '#ec4899', '#14b8a6', '#84cc16', '#3b82f6', '#d946ef',
+    '#f43f5e', '#22c55e', '#0ea5e9', '#6366f1', '#f97316'
+]);
+
 // These exports keep the legacy global handlers and the existing settings
 // copy compatible while the stored document moves to the group-based model.
 export const BUDGET_CATEGORY_CONFIG = Object.freeze({
@@ -74,6 +80,15 @@ function readAmount(value) {
     return Number.isFinite(number) ? number : 0;
 }
 
+function readColor(...values) {
+    const color = readString(...values);
+    if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+    if (/^#[0-9a-f]{3}$/i.test(color)) {
+        return `#${color.slice(1).split('').map(part => part + part).join('')}`;
+    }
+    return '';
+}
+
 function normalizeCadence(value) {
     const cadence = readString(value).toLowerCase();
     if (['quarterly', 'quarter', '3m'].includes(cadence)) return 'quarterly';
@@ -132,6 +147,7 @@ function normalizeGroup(source, fallback, index, forceIncome = false, usedGroupI
         kind: isIncome ? 'income' : 'custom',
         role: normalizedRole,
         builtIn: isIncome,
+        color: readColor(input.color, input.Color) || BUDGET_GROUP_COLORS[index % BUDGET_GROUP_COLORS.length],
         items
     };
 }

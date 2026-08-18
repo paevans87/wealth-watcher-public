@@ -27,6 +27,7 @@ import { escapeHtml, safeCssColor } from '../utils/html.js';
 import {
     BUDGET_CATEGORIES,
     BUDGET_CATEGORY_CONFIG,
+    BUDGET_GROUP_COLORS,
     getBudgetGroupTotal,
     getBudgetGroups,
     getBudgetItemCategory,
@@ -47,6 +48,7 @@ let budgetStorageMode = 'v2';
 let legacyFlowSelection = null;
 let collapsedBudgetGroupIds = new Set();
 let budgetLineEditorState = null;
+let budgetGroupEditorState = null;
 
 const BUDGET_SETTINGS_KEY = 'wealthWatcherBudgetSettings';
 const BUDGET_CADENCE_MONTHS = Object.freeze({
@@ -190,6 +192,10 @@ function getBudgetGroupByLegacyCategory(category, settings = ensureBudgetSetting
 function getBudgetItem(groupId, itemId, settings = ensureBudgetSettings()) {
     const group = getBudgetGroup(groupId, settings);
     return group?.items.find(item => String(item.id) === String(itemId)) || null;
+}
+
+function getBudgetGroupColor(group, index = 0) {
+    return safeCssColor(group?.color, BUDGET_GROUP_COLORS[index % BUDGET_GROUP_COLORS.length]);
 }
 
 function renderBudgetEnabledToggle() {
@@ -407,6 +413,27 @@ function hasConfiguredBudgetData(budgetSettings) {
     return BUDGET_CATEGORIES.some(category => Array.isArray(budgetSettings?.[category]) && budgetSettings[category].length > 0);
 }
 
+function refreshBudgetViewAfterSettingsChange(settings = ensureBudgetSettings()) {
+    if (!document.getElementById('budget-flow-renderer')) return;
+
+    const selectedGroup = currentChartView.groupId
+        ? getBudgetGroup(currentChartView.groupId, settings)
+        : null;
+    if (currentChartView.level !== 'overview' && !selectedGroup) {
+        loadBudgetView('overview');
+        return;
+    }
+
+    if (currentChartView.level === 'item' && selectedGroup && !selectedGroup.items.some(item =>
+        getBudgetItemCategory(item) === currentChartView.category
+    )) {
+        loadBudgetView({ groupId: selectedGroup.id });
+        return;
+    }
+
+    loadBudgetView();
+}
+
 function showBudgetReadyState() {
     const emptyState = document.getElementById('budget-empty-state');
     if (emptyState) emptyState.hidden = true;
@@ -486,19 +513,20 @@ function renderBudgetSummary(totals) {
         customSummary.innerHTML = extraGroups.map((group, index) => `
             <article class="card glass-panel budget-summary-card" data-budget-summary-group="${escapeHtml(group.id)}">
                 <span class="budget-summary-label" data-budget-summary-label>${escapeHtml(group.name)}</span>
-                <h2 class="obfuscate-val" data-budget-summary-value style="color: ${safeCssColor(BUDGET_COLORS[index % BUDGET_COLORS.length])}">${escapeHtml(formatter.format(totals.groupTotals[group.id] || 0))}</h2>
+                <h2 class="obfuscate-val" data-budget-summary-value style="color: ${safeCssColor(getBudgetGroupColor(group, index + 1))}">${escapeHtml(formatter.format(totals.groupTotals[group.id] || 0))}</h2>
             </article>`).join('');
     }
 }
 
 function getBudgetFlowData(settings, view, totals) {
     if (view.level === 'overview') {
+        const incomeGroup = settings.groups.find(isIncomeBudgetGroup);
         const rows = settings.groups
             .filter(group => !isIncomeBudgetGroup(group))
             .map((group, index) => ({
                 label: group.name,
                 value: totals.groupTotals[group.id] || 0,
-                color: BUDGET_COLORS[index % BUDGET_COLORS.length],
+                color: getBudgetGroupColor(group, index + 1),
                 action: { type: 'group', groupId: group.id }
             }))
             .filter(row => row.value > 0 || settings.groups.some(group => group.name === row.label && group.items.length > 0));
@@ -510,7 +538,7 @@ function getBudgetFlowData(settings, view, totals) {
         });
         return {
             rows,
-            source: { label: 'Income', value: totals.income },
+            source: { label: 'Income', value: totals.income, color: getBudgetGroupColor(incomeGroup) },
             sourceAction: null,
             summary: 'Budget groups',
             caption: 'Select a group to see its categories, then select a category to see its line items.'
@@ -530,13 +558,13 @@ function getBudgetFlowData(settings, view, totals) {
             categories.set(category, (categories.get(category) || 0) + getMonthlyBudgetAmount(item));
         });
         return {
-            rows: Array.from(categories.entries()).map(([category, value], index) => ({
+            rows: Array.from(categories.entries()).map(([category, value]) => ({
                 label: category,
                 value,
-                color: BUDGET_COLORS[index % BUDGET_COLORS.length],
+                color: getBudgetGroupColor(group),
                 action: { type: 'category', groupId: group.id, category }
             })),
-            source: { label: group.name, value: totals.groupTotals[group.id] || 0 },
+            source: { label: group.name, value: totals.groupTotals[group.id] || 0, color: getBudgetGroupColor(group) },
             sourceAction: {
                 type: 'navigation',
                 navigation: 'all',
@@ -550,13 +578,17 @@ function getBudgetFlowData(settings, view, totals) {
 
     const items = group.items.filter(item => getBudgetItemCategory(item) === view.category);
     return {
-        rows: items.map((item, index) => ({
+        rows: items.map(item => ({
             label: item.name,
             value: getMonthlyBudgetAmount(item),
-            color: BUDGET_COLORS[index % BUDGET_COLORS.length],
+            color: getBudgetGroupColor(group),
             action: null
         })),
-        source: { label: `${group.name} · ${view.category}`, value: items.reduce((total, item) => total + getMonthlyBudgetAmount(item), 0) },
+        source: {
+            label: `${group.name} · ${view.category}`,
+            value: items.reduce((total, item) => total + getMonthlyBudgetAmount(item), 0),
+            color: getBudgetGroupColor(group)
+        },
         sourceAction: {
             type: 'navigation',
             navigation: 'back',
@@ -766,7 +798,7 @@ function renderBudgetGroup(group, index, totalGroups) {
     const income = isIncomeBudgetGroup(group);
     const canMoveUp = !income && index > 1;
     const canMoveDown = !income && index < totalGroups - 1;
-    const groupColor = BUDGET_COLORS[index % BUDGET_COLORS.length];
+    const groupColor = getBudgetGroupColor(group, index);
     return `<section class="budget-group-editor${collapsed ? ' is-collapsed' : ''}" data-budget-group-id="${escapeHtml(group.id)}">
         <button type="button" class="budget-group-header" data-budget-toggle-group aria-expanded="${String(!collapsed)}" aria-controls="${groupContentId}">
             <span class="budget-group-header-main"><span class="budget-group-color" aria-hidden="true" style="background: ${safeCssColor(groupColor)}"></span><span><strong>${escapeHtml(group.name)}</strong><small>${income ? 'Built-in group · name locked' : `${group.items.length} line item${group.items.length === 1 ? '' : 's'}`}</small></span></span>
@@ -776,8 +808,8 @@ function renderBudgetGroup(group, index, totalGroups) {
             <div class="budget-group-toolbar">
                 ${income
                     ? '<span class="budget-group-locked-note">Income is built in. Add and edit its line items below.</span>'
-                    : `<label class="budget-group-name-field"><span>Group name</span><input type="text" data-budget-group-name value="${escapeHtml(group.name)}" aria-label="Name for ${escapeHtml(group.name)}"></label>
-                    <div class="budget-group-actions"><button type="button" class="action-btn" data-budget-group-move="up"${canMoveUp ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} up">Move up</button><button type="button" class="action-btn" data-budget-group-move="down"${canMoveDown ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} down">Move down</button><button type="button" class="action-btn danger-outline" data-budget-remove-group aria-label="Remove ${escapeHtml(group.name)}">Remove group</button></div>`}
+                    : `<span class="budget-group-edit-summary"><span class="budget-group-edit-summary-label">Custom group</span><strong>${escapeHtml(group.name)}</strong></span>
+                    <div class="budget-group-actions"><button type="button" class="action-btn" data-budget-edit-group data-budget-group-id="${escapeHtml(group.id)}" aria-label="Edit ${escapeHtml(group.name)} group">Edit group</button><button type="button" class="action-btn" data-budget-group-move="up"${canMoveUp ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} up">Move up</button><button type="button" class="action-btn" data-budget-group-move="down"${canMoveDown ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} down">Move down</button><button type="button" class="action-btn danger-outline" data-budget-remove-group aria-label="Remove ${escapeHtml(group.name)}">Remove group</button></div>`}
             </div>
             <div class="table-container budget-v2-table-container"><table class="budget-table budget-v2-table"><thead><tr><th scope="col">Name</th><th scope="col">Amount (£)</th><th scope="col">Category</th><th scope="col">Cadence</th><th scope="col">Forecast asset</th><th scope="col">Actions</th></tr></thead><tbody>${group.items.length ? group.items.map(item => renderBudgetItemRow(group, item)).join('') : '<tr><td colspan="6" class="budget-group-empty">No line items yet. Add one to start planning this group.</td></tr>'}</tbody></table></div>
             <div class="budget-group-item-actions"><button type="button" class="action-btn budget-add-item-action" data-budget-add-item data-budget-group-id="${escapeHtml(group.id)}">+ Add line item</button></div>
@@ -793,6 +825,106 @@ function renderBudgetGroups(settings) {
             <label><span>Add custom group</span><input id="budget-new-group-name" type="text" placeholder="e.g. Giving or Travel"></label>
             <button type="button" class="action-btn" data-budget-add-group>Add group</button>
         </div>`;
+}
+
+function renderBudgetGroupEditorFields() {
+    const fields = document.getElementById('budget-group-editor-fields');
+    const state = budgetGroupEditorState;
+    if (!fields || !state) return;
+
+    fields.innerHTML = `
+        <label class="budget-line-editor-field">
+            <span>Group name</span>
+            <input id="budget-group-editor-name" type="text" value="${escapeHtml(state.draft.name)}" data-budget-group-editor-field="name" autocomplete="off" required>
+        </label>
+        <label class="budget-line-editor-field budget-group-editor-color-field">
+            <span>Group colour</span>
+            <span class="budget-group-editor-color-control">
+                <input id="budget-group-editor-color" type="color" value="${escapeHtml(state.draft.color)}" data-budget-group-editor-field="color" aria-label="Group colour">
+                <code>${escapeHtml(state.draft.color)}</code>
+            </span>
+            <small class="budget-line-editor-help">Categories and their flow links will use this colour.</small>
+        </label>`;
+}
+
+function updateBudgetGroupEditorField(input) {
+    const state = budgetGroupEditorState;
+    if (!state || !input?.dataset?.budgetGroupEditorField) return;
+    const field = input.dataset.budgetGroupEditorField;
+    if (field === 'name') state.draft.name = input.value;
+    if (field === 'color') state.draft.color = safeCssColor(input.value, state.draft.color);
+    if (field === 'color') {
+        const value = input.closest?.('.budget-group-editor-color-control')?.querySelector?.('code');
+        if (value) value.textContent = state.draft.color;
+    }
+    const validation = document.getElementById('budget-group-editor-validation');
+    if (validation && state.showValidation) {
+        validation.hidden = Boolean(String(state.draft.name || '').trim());
+        validation.textContent = validation.hidden ? '' : 'Add a name for this group.';
+    }
+}
+
+function openBudgetGroupEditor(groupId) {
+    const settings = ensureBudgetSettings();
+    const group = getBudgetGroup(groupId, settings);
+    const panel = document.getElementById('budget-group-editor');
+    if (!group || isIncomeBudgetGroup(group) || !panel) return false;
+
+    budgetGroupEditorState = {
+        groupId: group.id,
+        showValidation: false,
+        draft: {
+            name: group.name,
+            color: getBudgetGroupColor(group)
+        }
+    };
+
+    const title = document.getElementById('budget-group-editor-title');
+    const copy = document.getElementById('budget-group-editor-copy');
+    if (title) title.textContent = group.name;
+    if (copy) copy.textContent = `Update ${group.name}'s name and colour. Categories in this group inherit the selected colour.`;
+    renderBudgetGroupEditorFields();
+    openFormFlyout(panel, {
+        initialFocus: document.getElementById('budget-group-editor-name')
+    });
+    return true;
+}
+
+function closeBudgetGroupEditor(options = {}) {
+    return closeFormFlyout(document.getElementById('budget-group-editor'), options);
+}
+
+function submitBudgetGroupEditor(event) {
+    event.preventDefault?.();
+    const state = budgetGroupEditorState;
+    if (!state) return;
+    state.showValidation = true;
+    const name = String(state.draft.name || '').trim();
+    if (!name) {
+        const validation = document.getElementById('budget-group-editor-validation');
+        if (validation) {
+            validation.hidden = false;
+            validation.textContent = 'Add a name for this group.';
+        }
+        document.getElementById('budget-group-editor-name')?.focus?.();
+        return;
+    }
+
+    const settings = ensureBudgetSettings();
+    const group = getBudgetGroup(state.groupId, settings);
+    if (!group || isIncomeBudgetGroup(group)) return;
+    const color = getBudgetGroupColor({ color: state.draft.color });
+    const saved = updateBudgetState(current => {
+        const currentGroup = getBudgetGroup(state.groupId, current);
+        if (!currentGroup || isIncomeBudgetGroup(currentGroup)) return false;
+        currentGroup.name = name;
+        currentGroup.color = color;
+        return true;
+    }, {
+        title: 'Budget group updated',
+        message: `${name} was updated successfully.`
+    });
+    if (saved) closeBudgetGroupEditor({ restoreFocus: false });
 }
 
 function getBudgetLineEditorValidationErrors(draft) {
@@ -958,10 +1090,6 @@ function submitBudgetLineEditor(event) {
         return;
     }
 
-    const settings = ensureBudgetSettings();
-    const group = getBudgetGroup(state.groupId, settings);
-    if (!group) return;
-    const previousSettings = cloneBudgetSettings(settings);
     const payload = {
         name: String(state.draft.name).trim(),
         amount: Number.parseFloat(String(state.draft.amount).replace(/,/g, '')),
@@ -969,21 +1097,22 @@ function submitBudgetLineEditor(event) {
         cadence: state.draft.cadence,
         assetId: String(state.draft.assetId || '').trim() || null
     };
-    if (state.isNew) {
-        group.items.push({ id: createBudgetId(), ...payload });
-    } else {
+    const saved = updateBudgetState(settings => {
+        const group = getBudgetGroup(state.groupId, settings);
+        if (!group) return false;
+        if (state.isNew) {
+            group.items.push({ id: createBudgetId(), ...payload });
+            return true;
+        }
         const item = getBudgetItem(state.groupId, state.itemId, settings);
-        if (!item) return;
+        if (!item) return false;
         Object.assign(item, payload);
-    }
-
-    const context = {
+        return true;
+    }, {
         title: state.isNew ? 'Budget item added' : 'Budget item updated',
-        message: state.isNew ? `${payload.name} was added to ${group.name}.` : `${payload.name} was updated successfully.`
-    };
-    closeBudgetLineEditor({ restoreFocus: false });
-    populateBudgetSettings();
-    scheduleBudgetSave(context, previousSettings);
+        message: state.isNew ? `${payload.name} was added to your budget.` : `${payload.name} was updated successfully.`
+    });
+    if (saved) closeBudgetLineEditor({ restoreFocus: false });
 }
 
 async function deleteBudgetLineEditor() {
@@ -1089,6 +1218,7 @@ function updateBudgetState(mutator, context) {
     if (mutator(settings) === false) return false;
     store.state.budgetSettings = normalizeBudgetSettings(settings);
     populateBudgetSettings();
+    refreshBudgetViewAfterSettingsChange(store.state.budgetSettings);
     scheduleBudgetSave(context, previousSettings);
     return true;
 }
@@ -1127,6 +1257,7 @@ function addLegacyBudgetItem(category, nameInputId, amountInputId) {
     nameInput.value = '';
     amountInput.value = '';
     populateBudgetSettings();
+    refreshBudgetViewAfterSettingsChange(store.state.budgetSettings);
     scheduleBudgetSave({ title: 'Budget item added', message: `${normalizedName} was added successfully.` }, previousSettings);
     return true;
 }
@@ -1154,6 +1285,7 @@ function removeBudgetItem(category, index) {
         const previousSettings = cloneBudgetSettings(settings);
         settings[category].splice(Number(index), 1);
         populateBudgetSettings();
+        refreshBudgetViewAfterSettingsChange(settings);
         scheduleBudgetSave({ title: 'Budget item removed', message: 'The budget item was removed successfully.' }, previousSettings);
         return true;
     }
@@ -1220,17 +1352,6 @@ function addBudgetGroup(name) {
         if (input) input.value = '';
     }
     return saved;
-}
-
-function updateBudgetGroupName(groupId, name) {
-    const normalizedName = String(name || '').trim();
-    if (!normalizedName) return false;
-    return updateBudgetState(settings => {
-        const group = getBudgetGroup(groupId, settings);
-        if (!group || isIncomeBudgetGroup(group)) return false;
-        group.name = normalizedName;
-        return true;
-    }, { title: 'Budget group updated', message: 'The budget group name was updated successfully.' });
 }
 
 function moveBudgetGroup(groupId, direction) {
@@ -1300,6 +1421,12 @@ export function setupBudgetSettings() {
                 openBudgetLineEditor(editItemButton.dataset.budgetGroupId, editItemButton.dataset.budgetItemId);
                 return;
             }
+            const editGroupButton = event.target?.closest?.('[data-budget-edit-group]');
+            if (editGroupButton) {
+                event.preventDefault();
+                openBudgetGroupEditor(editGroupButton.dataset.budgetGroupId);
+                return;
+            }
             const removeGroupButton = event.target?.closest?.('[data-budget-remove-group]');
             if (removeGroupButton) {
                 event.preventDefault();
@@ -1333,10 +1460,6 @@ export function setupBudgetSettings() {
                 updateBudgetItemField(groupEl?.dataset?.budgetGroupId, itemEl.dataset.budgetItemId, target.dataset.budgetItemField, target.value);
                 return;
             }
-            if (groupEl && target.matches?.('[data-budget-group-name]')) {
-                updateBudgetGroupName(groupEl.dataset.budgetGroupId, target.value);
-                return;
-            }
             const oldCadence = target.closest?.('[data-budget-saving-cadence]');
             if (oldCadence) window.updateBudgetSavingCadence(oldCadence.dataset.budgetSavingCadence, oldCadence.value);
         });
@@ -1346,16 +1469,7 @@ export function setupBudgetSettings() {
             const itemEl = target.closest?.('[data-budget-item-id]');
             if (itemEl && target.dataset.budgetItemField && target.dataset.budgetItemField !== 'cadence') {
                 updateBudgetItemField(groupEl?.dataset?.budgetGroupId, itemEl.dataset.budgetItemId, target.dataset.budgetItemField, target.value);
-            } else if (groupEl && target.matches?.('[data-budget-group-name]')) {
-                updateBudgetGroupName(groupEl.dataset.budgetGroupId, target.value);
             }
-        });
-        form.addEventListener('keydown', event => {
-            if (event.key !== 'Enter') return;
-            const input = event.target?.closest?.('[data-budget-group-name]');
-            if (!input) return;
-            event.preventDefault();
-            input.blur?.();
         });
     }
 
@@ -1380,6 +1494,22 @@ export function setupBudgetSettings() {
         });
     }
 
+    const groupEditorPanel = document.getElementById('budget-group-editor');
+    if (groupEditorPanel) {
+        initFormFlyout(groupEditorPanel, {
+            onClose: () => {
+                budgetGroupEditorState = null;
+            }
+        });
+    }
+    const groupEditorForm = document.getElementById('budget-group-editor-form');
+    if (groupEditorForm && groupEditorForm.dataset.budgetGroupEditorInit !== 'true') {
+        groupEditorForm.dataset.budgetGroupEditorInit = 'true';
+        groupEditorForm.addEventListener('submit', submitBudgetGroupEditor);
+        groupEditorForm.addEventListener('input', event => updateBudgetGroupEditorField(event.target?.closest?.('[data-budget-group-editor-field]')));
+        groupEditorForm.addEventListener('change', event => updateBudgetGroupEditorField(event.target?.closest?.('[data-budget-group-editor-field]')));
+    }
+
     populateBudgetSettings();
 }
 
@@ -1402,6 +1532,7 @@ function scheduleBudgetSave(context = null, previousSettings = null) {
             if (saveSnapshot) {
                 store.state.budgetSettings = saveSnapshot;
                 populateBudgetSettings();
+                refreshBudgetViewAfterSettingsChange(store.state.budgetSettings);
             }
             showToast({ title: 'Unable to save budget', message: 'Your budget changes could not be saved.', type: 'error', key: 'budget-settings' });
             return;
@@ -1426,6 +1557,7 @@ function scheduleBudgetSave(context = null, previousSettings = null) {
         }
         store.clearCache();
         populateBudgetSettings();
+        refreshBudgetViewAfterSettingsChange(store.state.budgetSettings);
         globalThis.refreshDashboardFireStatus?.();
         showToast({ ...saveContext, type: 'success', key: 'budget-settings' });
     }, 300);
@@ -1439,6 +1571,7 @@ window.updateBudgetSavingAsset = (index, assetId) => {
         const previousSettings = cloneBudgetSettings(settings);
         item.assetId = String(assetId || '').trim() || null;
         populateBudgetSettings();
+        refreshBudgetViewAfterSettingsChange(settings);
         scheduleBudgetSave({ title: 'Budget saving updated', message: 'The saving allocation was updated successfully.' }, previousSettings);
         return;
     }
@@ -1456,6 +1589,7 @@ window.updateBudgetSavingCadence = (index, cadence) => {
         const previousSettings = cloneBudgetSettings(settings);
         item.cadence = cadence || 'monthly';
         populateBudgetSettings();
+        refreshBudgetViewAfterSettingsChange(settings);
         scheduleBudgetSave({ title: 'Budget saving updated', message: 'The saving cadence was updated successfully.' }, previousSettings);
         return;
     }

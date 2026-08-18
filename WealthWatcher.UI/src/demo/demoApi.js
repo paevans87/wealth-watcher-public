@@ -278,6 +278,16 @@ function normalizeBudgetV2Category(value, path) {
     return value.trim();
 }
 
+function normalizeBudgetV2Color(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const candidate = String(value).trim();
+    if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(candidate)) return null;
+    if (candidate.length === 4) {
+        return `#${candidate[1]}${candidate[1]}${candidate[2]}${candidate[2]}${candidate[3]}${candidate[3]}`.toLowerCase();
+    }
+    return candidate.toLowerCase();
+}
+
 function normalizeBudgetV2SettingsDocument(document) {
     if (document.version !== BUDGET_V2_VERSION) {
         return { error: 'wealthWatcherBudgetSettings.version must be 2 when groups are supplied.' };
@@ -339,6 +349,7 @@ function normalizeBudgetV2SettingsDocument(document) {
             kind: isIncome ? 'income' : 'custom',
             role: isIncome ? 'income' : (role || kind || 'custom'),
             builtIn: isIncome,
+            color: normalizeBudgetV2Color(readProperty(group, 'color', 'Color')),
             items: []
         };
 

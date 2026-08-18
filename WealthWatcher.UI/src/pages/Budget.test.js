@@ -54,6 +54,7 @@ globalThis.fetch = async (url, options) => {
 const { store } = await import('../store/store.js');
 const {
     getMonthlyBudgetTotals,
+    getBudgetFlowData,
     loadBudgetView,
     populateBudgetSettings,
     setupBudgetSettings
@@ -363,6 +364,38 @@ test('budget monthly overview normalises income, bills, and savings cadence', ()
 
     assert.match(elements.get('budget-flow-renderer').innerHTML, /£7,000\.00/);
     assert.match(elements.get('budget-flow-renderer').innerHTML, /£4,300\.00/);
+});
+
+test('budget v2 flow carries the selected group colour through every level', () => {
+    reset();
+    const settings = {
+        version: 2,
+        groups: [
+            {
+                id: 'income',
+                name: 'Income',
+                kind: 'income',
+                role: 'income',
+                builtIn: true,
+                color: '#06b6d4',
+                items: [{ id: 'salary', name: 'Salary', amount: 5000, category: 'Employment' }]
+            },
+            {
+                id: 'bills',
+                name: 'Bills',
+                kind: 'custom',
+                role: 'bills',
+                builtIn: false,
+                color: '#123abc',
+                items: [{ id: 'mortgage', name: 'Mortgage', amount: 1600, category: 'Accommodation' }]
+            }
+        ]
+    };
+    const totals = getMonthlyBudgetTotals(settings);
+
+    assert.equal(getBudgetFlowData(settings, { level: 'overview' }, totals).rows[0].color, '#123abc');
+    assert.equal(getBudgetFlowData(settings, { level: 'group', groupId: 'bills' }, totals).rows[0].color, '#123abc');
+    assert.equal(getBudgetFlowData(settings, { level: 'item', groupId: 'bills', category: 'Accommodation' }, totals).rows[0].color, '#123abc');
 });
 
 test('budget flow breakdown formats annual lines and linked assets', async () => {

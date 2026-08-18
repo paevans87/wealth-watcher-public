@@ -7297,6 +7297,27 @@ body.obfuscated h1 .obfuscate-val {
 
 .budget-line-editor-field input[type="number"] { text-align: right; }
 
+.budget-group-editor-color-control {
+    align-items: center;
+    display: flex;
+    gap: 0.65rem;
+}
+
+.budget-group-editor-color-control input[type="color"] {
+    background: rgba(2, 6, 23, 0.42);
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 8px;
+    cursor: pointer;
+    height: 2.5rem;
+    padding: 0.2rem;
+    width: 4.5rem;
+}
+
+.budget-group-editor-color-control code {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+}
+
 .budget-line-editor-asset-picker .asset-typeahead-search { min-height: 2.5rem; width: 100%; }
 
 .budget-line-editor-help {
@@ -7849,6 +7870,25 @@ body.form-flyout-open { overflow: hidden; }
     gap: 0.65rem;
     justify-content: space-between;
     min-width: 0;
+}
+
+.budget-group-edit-summary {
+    color: var(--text-muted);
+    display: grid;
+    gap: 0.12rem;
+    min-width: 0;
+}
+
+.budget-group-edit-summary-label {
+    font-size: 0.67rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.budget-group-edit-summary strong {
+    color: var(--text-main);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
 }
 
 .budget-group-name-field,
