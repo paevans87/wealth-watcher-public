@@ -23,6 +23,9 @@ function formatAmount(value, formatter, obfuscated) {
 
 function actionAttributes(action) {
     if (!action) return '';
+    if (action.type === 'navigation') {
+        return ` data-budget-v2-flow-navigation="${escapeHtml(action.navigation)}"`;
+    }
     if (action.type === 'group') {
         return ` data-budget-v2-flow-action="group" data-budget-group="${escapeHtml(action.groupId)}"`;
     }
@@ -51,8 +54,12 @@ function buildNavigation(model) {
 function buildNode({ x, y, height, labelX, labelY, label, value, color, action, formatter, obfuscated, source = false }) {
     const interactive = Boolean(action);
     const actionMarkup = actionAttributes(action);
+    const actionLabel = action?.ariaLabel
+        || (action?.type === 'navigation'
+            ? `Back from ${label}`
+            : `View ${label} breakdown`);
     const roleMarkup = interactive
-        ? ` role="button" tabindex="0" aria-label="View ${escapeHtml(label)} breakdown"${actionMarkup}`
+        ? ` role="button" tabindex="0" aria-label="${escapeHtml(actionLabel)}"${actionMarkup}`
         : '';
     const hitX = source ? Math.max(0, x - 16) : Math.max(0, x - 230);
     const hitWidth = source ? 260 : 470;
@@ -115,6 +122,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
             label: model.source?.label || 'Income',
             value: sourceValue,
             color: '#06b6d4',
+            action: model.sourceAction,
             formatter,
             obfuscated,
             source: true

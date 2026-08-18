@@ -307,6 +307,32 @@
                     </form>
                 </div>
             </section>
+
+            <div id="budget-line-editor" class="form-flyout budget-line-editor" data-form-flyout data-budget-line-editor hidden aria-hidden="true">
+                <div class="form-flyout-backdrop budget-line-editor-backdrop" data-flyout-close></div>
+                <section class="form-flyout-dialog budget-line-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="budget-line-editor-title" tabindex="-1">
+                    <div class="form-flyout-header budget-line-editor-header">
+                        <div>
+                            <span id="budget-line-editor-kicker" class="budget-section-kicker">Add line item</span>
+                            <h4 id="budget-line-editor-title">New budget line</h4>
+                        </div>
+                        <button class="form-flyout-close budget-line-editor-close" type="button" data-flyout-close aria-label="Close budget line editor">&times;</button>
+                    </div>
+                    <p id="budget-line-editor-copy" class="form-flyout-copy budget-line-editor-copy"></p>
+                    <form id="budget-line-editor-form" class="budget-line-editor-form" data-budget-line-editor-form aria-label="Budget line editor" novalidate>
+                        <div id="budget-line-editor-fields" class="budget-line-editor-fields"></div>
+                        <div id="budget-line-editor-preview" class="budget-line-editor-preview" role="status" aria-live="polite"></div>
+                        <p id="budget-line-editor-validation" class="budget-line-editor-validation" role="alert" hidden></p>
+                        <div class="budget-line-editor-actions">
+                            <button id="budget-line-editor-delete" class="budget-line-editor-delete action-btn" type="button" data-budget-editor-delete hidden>Delete line</button>
+                            <div class="budget-line-editor-actions-right">
+                                <button class="action-btn budget-line-editor-cancel" type="button" data-flyout-close>Cancel</button>
+                                <button class="action-btn catalog-add-button" type="submit">Save line</button>
+                            </div>
+                        </div>
+                    </form>
+                </section>
+            </div>
         </div>
 
         <!-- History View -->

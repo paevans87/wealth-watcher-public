@@ -7330,6 +7330,11 @@ body.obfuscated h1 .obfuscate-val {
     font-size: 0.86rem;
 }
 
+.budget-line-editor-preview small {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
 .budget-line-editor-validation {
     color: #fecaca;
     font-size: 0.72rem;
@@ -7911,8 +7916,18 @@ body.form-flyout-open { overflow: hidden; }
 .budget-v2-table { min-width: 48rem; }
 .budget-v2-table th { font-size: 0.64rem; }
 .budget-v2-table td { padding: 0.45rem; }
-.budget-v2-table .asset-typeahead { min-width: 10rem; }
-.budget-v2-table .budget-remove-button { background: transparent; border: 0; }
+.budget-v2-item-row { transition: background 160ms ease; }
+.budget-v2-item-row:hover { background: rgba(6, 182, 212, 0.06); }
+.budget-v2-item-row td { vertical-align: middle; }
+.budget-v2-item-name { display: grid; gap: 0.15rem; min-width: 0; }
+.budget-v2-item-name strong { overflow-wrap: anywhere; }
+.budget-v2-item-name small,
+.budget-v2-item-row td[data-label="Category"],
+.budget-v2-item-row td[data-label="Cadence"],
+.budget-v2-item-row td[data-label="Forecast asset"] { color: var(--text-muted); font-size: 0.72rem; }
+.budget-item-edit-button { min-width: 4.4rem; white-space: nowrap; }
+.budget-group-item-actions { display: flex; justify-content: flex-start; margin-top: 0.7rem; }
+.budget-add-item-action { border-style: dashed; }
 .budget-group-empty { color: var(--text-muted); font-size: 0.76rem; padding: 0.8rem !important; }
 
 .budget-add-item-form {

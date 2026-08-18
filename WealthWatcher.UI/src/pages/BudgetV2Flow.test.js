@@ -17,10 +17,11 @@ function createTarget() {
     };
 }
 
-function model(level, rows, source = { label: 'Income', value: 5000 }) {
+function model(level, rows, source = { label: 'Income', value: 5000 }, sourceAction = null) {
     return {
         view: { level },
         source,
+        sourceAction,
         rows,
         summary: level === 'overview' ? 'Budget groups' : 'Bills categories',
         caption: 'Select the next level to continue.',
@@ -59,6 +60,26 @@ test('v2 flow exposes All and Back navigation at nested levels', async () => {
 
     assert.match(target.innerHTML, /data-budget-v2-flow-navigation="all"/);
     assert.match(target.innerHTML, /data-budget-v2-flow-navigation="back"/);
+    await target.dispatch('click', {
+        target: { closest: () => ({ dataset: { budgetV2FlowNavigation: 'back' } }) }
+    });
+    assert.deepEqual(actions[0], { type: 'back' });
+});
+
+test('v2 flow makes the left source bar a one-level back control', async () => {
+    const target = createTarget();
+    const actions = [];
+    renderBudgetV2Flow(target, model('item', [{ label: 'Mortgage', value: 1600, color: '#ef4444' }], { label: 'Bills · Accommodation', value: 1600 }, {
+        type: 'navigation',
+        navigation: 'back',
+        ariaLabel: 'Back to Bills categories'
+    }), {
+        formatter: value => `£${value.toFixed(2)}`,
+        onNavigate: action => actions.push(action)
+    });
+
+    assert.match(target.innerHTML, /data-budget-v2-flow-navigation="back"/);
+    assert.match(target.innerHTML, /aria-label="Back to Bills categories"/);
     await target.dispatch('click', {
         target: { closest: () => ({ dataset: { budgetV2FlowNavigation: 'back' } }) }
     });

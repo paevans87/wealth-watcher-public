@@ -18,6 +18,11 @@ import {
     renderFeatureToggle,
     renderSelectField
 } from '../components/FormFields.js';
+import {
+    closeFormFlyout,
+    initFormFlyout,
+    openFormFlyout
+} from '../components/FormFlyout.js';
 import { escapeHtml, safeCssColor } from '../utils/html.js';
 import {
     BUDGET_CATEGORIES,
@@ -41,6 +46,7 @@ let budgetBoundForm = null;
 let budgetStorageMode = 'v2';
 let legacyFlowSelection = null;
 let collapsedBudgetGroupIds = new Set();
+let budgetLineEditorState = null;
 
 const BUDGET_SETTINGS_KEY = 'wealthWatcherBudgetSettings';
 const BUDGET_CADENCE_MONTHS = Object.freeze({
@@ -314,6 +320,10 @@ export function loadBudgetView(viewMode = null) {
             onNavigate: action => {
                 if (action.type === 'all' || action.type === 'overview') return loadBudgetView('overview');
                 if (action.type === 'back') return loadBudgetView({ groupId: currentChartView.groupId });
+                if (action.type === 'navigation') {
+                    if (action.navigation === 'all') return loadBudgetView('overview');
+                    if (action.navigation === 'back') return loadBudgetView({ groupId: currentChartView.groupId });
+                }
                 if (action.type === 'group') return loadBudgetView({ groupId: action.groupId });
                 if (action.type === 'category') return loadBudgetView({ groupId: action.groupId, category: action.category });
             }
@@ -503,6 +513,7 @@ function getBudgetFlowData(settings, view, totals) {
         return {
             rows,
             source: { label: 'Income', value: totals.income },
+            sourceAction: null,
             summary: 'Budget groups',
             caption: 'Select a group to see its categories, then select a category to see its line items.'
         };
@@ -528,6 +539,11 @@ function getBudgetFlowData(settings, view, totals) {
                 action: { type: 'category', groupId: group.id, category }
             })),
             source: { label: group.name, value: totals.groupTotals[group.id] || 0 },
+            sourceAction: {
+                type: 'navigation',
+                navigation: 'all',
+                ariaLabel: 'Back to all budget groups'
+            },
             groupName: group.name,
             summary: `${group.name} categories`,
             caption: 'Select a category to see the line items assigned to it.'
@@ -543,6 +559,11 @@ function getBudgetFlowData(settings, view, totals) {
             action: null
         })),
         source: { label: `${group.name} · ${view.category}`, value: items.reduce((total, item) => total + getMonthlyBudgetAmount(item), 0) },
+        sourceAction: {
+            type: 'navigation',
+            navigation: 'back',
+            ariaLabel: `Back to ${group.name} categories`
+        },
         groupName: group.name,
         summary: `${group.name} · ${view.category}`,
         caption: 'Line items assigned to this category.'
@@ -728,13 +749,16 @@ function renderBudgetCadenceOptions(cadence) {
 
 function renderBudgetItemRow(group, item) {
     const itemLabel = `${item.name} in ${group.name}`;
+    const category = getBudgetItemCategory(item);
+    const cadence = String(item.cadence || 'monthly');
+    const assetName = isSavingsBudgetGroup(group) ? getSelectedAssetName(item.assetId) : '';
     return `<tr class="budget-v2-item-row" data-budget-item-id="${escapeHtml(item.id)}">
-        <td data-label="Name"><input type="text" class="budget-inline-input" data-budget-item-field="name" value="${escapeHtml(item.name)}" aria-label="Name for ${escapeHtml(itemLabel)}"></td>
-        <td data-label="Amount"><input type="number" class="budget-inline-input budget-inline-amount" data-budget-item-field="amount" value="${escapeHtml(Number(item.amount).toFixed(2))}" min="0" step="0.01" inputmode="decimal" aria-label="Amount for ${escapeHtml(itemLabel)}"></td>
-        <td data-label="Category"><input type="text" class="budget-inline-input" data-budget-item-field="category" value="${escapeHtml(item.category)}" placeholder="${UNCATEGORISED_LABEL}" aria-label="Category for ${escapeHtml(itemLabel)}"></td>
-        <td data-label="Cadence"><select class="budget-inline-input" data-budget-item-field="cadence" aria-label="Cadence for ${escapeHtml(itemLabel)}">${renderBudgetCadenceOptions(item.cadence)}</select></td>
-        <td data-label="Forecast asset">${renderBudgetItemAsset(item, group)}</td>
-        <td class="budget-row-actions" data-label="Actions"><button type="button" class="action-btn icon-only budget-remove-button" data-budget-remove-item aria-label="Remove ${escapeHtml(itemLabel)}" title="Remove ${escapeHtml(itemLabel)}">&times;</button></td>
+        <td data-label="Name"><span class="budget-v2-item-name"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(category)}</small></span></td>
+        <td data-label="Amount" class="obfuscate-val">${escapeHtml(formatter.format(Number(item.amount) || 0))}</td>
+        <td data-label="Category">${escapeHtml(category)}</td>
+        <td data-label="Cadence">${escapeHtml(cadence[0].toUpperCase() + cadence.slice(1))}</td>
+        <td data-label="Forecast asset">${escapeHtml(assetName || (isSavingsBudgetGroup(group) ? 'Unallocated' : '—'))}</td>
+        <td class="budget-row-actions" data-label="Actions"><button type="button" class="action-btn budget-item-edit-button" data-budget-edit-item data-budget-group-id="${escapeHtml(group.id)}" data-budget-item-id="${escapeHtml(item.id)}" aria-label="Edit ${escapeHtml(itemLabel)}">Edit</button></td>
     </tr>`;
 }
 
@@ -757,14 +781,8 @@ function renderBudgetGroup(group, index, totalGroups) {
                     : `<label class="budget-group-name-field"><span>Group name</span><input type="text" data-budget-group-name value="${escapeHtml(group.name)}" aria-label="Name for ${escapeHtml(group.name)}"></label>
                     <div class="budget-group-actions"><button type="button" class="action-btn" data-budget-group-move="up"${canMoveUp ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} up">Move up</button><button type="button" class="action-btn" data-budget-group-move="down"${canMoveDown ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} down">Move down</button><button type="button" class="action-btn danger-outline" data-budget-remove-group aria-label="Remove ${escapeHtml(group.name)}">Remove group</button></div>`}
             </div>
-            <div class="table-container budget-v2-table-container"><table class="budget-table budget-v2-table"><thead><tr><th scope="col">Name</th><th scope="col">Amount (£)</th><th scope="col">Category</th><th scope="col">Cadence</th><th scope="col">Forecast asset</th><th scope="col">Actions</th></tr></thead><tbody>${group.items.length ? group.items.map(item => renderBudgetItemRow(group, item)).join('') : '<tr><td colspan="6" class="budget-group-empty">No line items yet. Add one below.</td></tr>'}</tbody></table></div>
-            <div class="budget-add-item-form" data-budget-add-item-form>
-                <label><span>New line item</span><input type="text" data-budget-new-field="name" placeholder="e.g. Mortgage"></label>
-                <label><span>Amount (£)</span><input type="number" data-budget-new-field="amount" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></label>
-                <label><span>Category</span><input type="text" data-budget-new-field="category" placeholder="${UNCATEGORISED_LABEL}"></label>
-                <label><span>Cadence</span><select data-budget-new-field="cadence">${renderBudgetCadenceOptions('monthly')}</select></label>
-                <button type="button" class="action-btn" data-budget-add-item>Add line item</button>
-            </div>
+            <div class="table-container budget-v2-table-container"><table class="budget-table budget-v2-table"><thead><tr><th scope="col">Name</th><th scope="col">Amount (£)</th><th scope="col">Category</th><th scope="col">Cadence</th><th scope="col">Forecast asset</th><th scope="col">Actions</th></tr></thead><tbody>${group.items.length ? group.items.map(item => renderBudgetItemRow(group, item)).join('') : '<tr><td colspan="6" class="budget-group-empty">No line items yet. Add one to start planning this group.</td></tr>'}</tbody></table></div>
+            <div class="budget-group-item-actions"><button type="button" class="action-btn budget-add-item-action" data-budget-add-item data-budget-group-id="${escapeHtml(group.id)}">+ Add line item</button></div>
         </div>
     </section>`;
 }
@@ -777,6 +795,219 @@ function renderBudgetGroups(settings) {
             <label><span>Add custom group</span><input id="budget-new-group-name" type="text" placeholder="e.g. Giving or Travel"></label>
             <button type="button" class="action-btn" data-budget-add-group>Add group</button>
         </div>`;
+}
+
+function getBudgetLineEditorValidationErrors(draft) {
+    const errors = [];
+    const name = String(draft?.name || '').trim();
+    const amount = Number.parseFloat(String(draft?.amount ?? '').replace(/,/g, ''));
+    const cadence = String(draft?.cadence || '').toLowerCase();
+    if (!name) errors.push('Add a name for this line item.');
+    if (!Number.isFinite(amount) || amount < 0) errors.push('The amount must be zero or positive.');
+    if (!['monthly', 'quarterly', 'annually'].includes(cadence)) errors.push('Choose a supported cadence.');
+    return errors;
+}
+
+function renderBudgetLineEditorPreview() {
+    const preview = document.getElementById('budget-line-editor-preview');
+    const validation = document.getElementById('budget-line-editor-validation');
+    const state = budgetLineEditorState;
+    if (!preview || !state) return;
+
+    const group = getBudgetGroup(state.groupId);
+    const amount = Number.parseFloat(String(state.draft.amount ?? '').replace(/,/g, ''));
+    const cadence = ['monthly', 'quarterly', 'annually'].includes(state.draft.cadence)
+        ? state.draft.cadence
+        : 'monthly';
+    const monthly = Number.isFinite(amount) && amount >= 0
+        ? getMonthlyBudgetAmount({ amount, cadence })
+        : null;
+    const impact = monthly === null
+        ? 'Enter an amount to preview the monthly plan impact.'
+        : `${formatter.format(monthly)} planned each month`;
+    const category = String(state.draft.category || '').trim() || UNCATEGORISED_LABEL;
+    preview.innerHTML = `<span class="budget-line-editor-preview-label">Monthly plan impact</span><strong class="obfuscate-val">${escapeHtml(globalThis.window?.isObfuscated ? 'Amount hidden' : impact)}</strong><small>${escapeHtml(`${category} · ${group?.name || 'Budget group'}`)}</small>`;
+
+    if (validation) {
+        const errors = state.showValidation ? getBudgetLineEditorValidationErrors(state.draft) : [];
+        validation.hidden = errors.length === 0;
+        validation.textContent = errors[0] || '';
+    }
+}
+
+function renderBudgetLineEditorFields() {
+    const fields = document.getElementById('budget-line-editor-fields');
+    const state = budgetLineEditorState;
+    const group = state ? getBudgetGroup(state.groupId) : null;
+    if (!fields || !state || !group) return;
+
+    const key = safeBudgetId(`${state.groupId}-${state.itemId || 'new'}`);
+    const assetField = isSavingsBudgetGroup(group)
+        ? `<div class="budget-line-editor-field budget-line-editor-asset-field">
+            <span class="budget-line-editor-field-label">Forecast asset <small>optional</small></span>
+            ${renderAssetTypeahead({
+                id: `budget-editor-asset-${key}`,
+                selectedAssetId: state.draft.assetId || '',
+                selectedAssetName: getSelectedAssetName(state.draft.assetId),
+                ariaLabel: `Forecast asset for ${state.draft.name || 'saving'}`,
+                pickerClass: 'budget-line-editor-asset-picker',
+                pickerAttributes: { 'data-budget-editor-asset-picker': 'true' },
+                valueAttributes: { 'data-budget-editor-asset-value': 'true' },
+                searchAttributes: { 'data-budget-editor-asset-search': 'true' },
+                optionsAttributes: { 'data-budget-editor-asset-options': 'true' },
+                emptyChoiceLabel: 'Unallocated'
+            })}
+            <small class="budget-line-editor-help">Link this item to a Forecast asset if it should contribute to a tracked balance.</small>
+        </div>`
+        : '';
+
+    fields.innerHTML = `
+        <label class="budget-line-editor-field">
+            <span>Line item name</span>
+            <input id="budget-editor-${key}-name" type="text" value="${escapeHtml(state.draft.name)}" placeholder="e.g. Mortgage" data-budget-editor-field="name" autocomplete="off" required>
+        </label>
+        <label class="budget-line-editor-field">
+            <span>Amount (£)</span>
+            <input id="budget-editor-${key}-amount" type="number" value="${escapeHtml(state.draft.amount)}" min="0" step="0.01" inputmode="decimal" placeholder="0.00" data-budget-editor-field="amount" required>
+        </label>
+        <label class="budget-line-editor-field">
+            <span>Category <small>optional</small></span>
+            <input id="budget-editor-${key}-category" type="text" value="${escapeHtml(state.draft.category)}" placeholder="e.g. Accommodation" data-budget-editor-field="category" autocomplete="off">
+        </label>
+        <label class="budget-line-editor-field">
+            <span>Cadence</span>
+            <select id="budget-editor-${key}-cadence" data-budget-editor-field="cadence">${renderBudgetCadenceOptions(state.draft.cadence)}</select>
+        </label>
+        ${assetField}`;
+}
+
+function chooseBudgetEditorAsset(_picker, assetId) {
+    if (!budgetLineEditorState) return;
+    budgetLineEditorState.draft.assetId = String(assetId || '').trim() || null;
+    renderBudgetLineEditorPreview();
+}
+
+function updateBudgetLineEditorField(input) {
+    const state = budgetLineEditorState;
+    if (!state || !input?.dataset?.budgetEditorField) return;
+    const field = input.dataset.budgetEditorField;
+    if (field === 'name') state.draft.name = input.value;
+    if (field === 'amount') state.draft.amount = input.value;
+    if (field === 'category') state.draft.category = input.value;
+    if (field === 'cadence') state.draft.cadence = input.value;
+    if (field === 'name' && input.value.trim()) {
+        const title = document.getElementById('budget-line-editor-title');
+        if (title) title.textContent = input.value.trim();
+    }
+    renderBudgetLineEditorPreview();
+}
+
+function openBudgetLineEditor(groupId, itemId = null) {
+    const settings = ensureBudgetSettings();
+    const group = getBudgetGroup(groupId, settings);
+    const item = itemId === null || itemId === undefined
+        ? null
+        : getBudgetItem(groupId, itemId, settings);
+    const panel = document.getElementById('budget-line-editor');
+    if (!group || (itemId !== null && itemId !== undefined && !item) || !panel) return false;
+
+    budgetLineEditorState = {
+        groupId: group.id,
+        itemId: item?.id || null,
+        isNew: !item,
+        showValidation: false,
+        draft: {
+            name: item?.name || '',
+            amount: item ? String(item.amount ?? '') : '',
+            category: item?.category || '',
+            cadence: item?.cadence || 'monthly',
+            assetId: item?.assetId || null
+        }
+    };
+
+    const kicker = document.getElementById('budget-line-editor-kicker');
+    const title = document.getElementById('budget-line-editor-title');
+    const copy = document.getElementById('budget-line-editor-copy');
+    const deleteButton = document.getElementById('budget-line-editor-delete');
+    if (kicker) kicker.textContent = item ? 'Edit line item' : 'Add line item';
+    if (title) title.textContent = item?.name || 'New budget line';
+    if (copy) copy.textContent = item
+        ? `Update this line in ${group.name}. Changes are saved when you choose Save line.`
+        : `Add a line to ${group.name}. You can assign a category now or leave it uncategorised.`;
+    if (deleteButton) deleteButton.hidden = !item;
+
+    renderBudgetLineEditorFields();
+    renderBudgetLineEditorPreview();
+    openFormFlyout(panel, {
+        initialFocus: document.querySelector('[data-budget-editor-field="name"]')
+    });
+    return true;
+}
+
+function closeBudgetLineEditor(options = {}) {
+    return closeFormFlyout(document.getElementById('budget-line-editor'), options);
+}
+
+function submitBudgetLineEditor(event) {
+    event.preventDefault?.();
+    const state = budgetLineEditorState;
+    if (!state) return;
+    state.showValidation = true;
+    const errors = getBudgetLineEditorValidationErrors(state.draft);
+    if (errors.length) {
+        renderBudgetLineEditorPreview();
+        document.querySelector('[data-budget-editor-field="name"]')?.focus?.();
+        return;
+    }
+
+    const settings = ensureBudgetSettings();
+    const group = getBudgetGroup(state.groupId, settings);
+    if (!group) return;
+    const previousSettings = cloneBudgetSettings(settings);
+    const payload = {
+        name: String(state.draft.name).trim(),
+        amount: Number.parseFloat(String(state.draft.amount).replace(/,/g, '')),
+        category: String(state.draft.category || '').trim(),
+        cadence: state.draft.cadence,
+        assetId: String(state.draft.assetId || '').trim() || null
+    };
+    if (state.isNew) {
+        group.items.push({ id: createBudgetId(), ...payload });
+    } else {
+        const item = getBudgetItem(state.groupId, state.itemId, settings);
+        if (!item) return;
+        Object.assign(item, payload);
+    }
+
+    const context = {
+        title: state.isNew ? 'Budget item added' : 'Budget item updated',
+        message: state.isNew ? `${payload.name} was added to ${group.name}.` : `${payload.name} was updated successfully.`
+    };
+    closeBudgetLineEditor({ restoreFocus: false });
+    populateBudgetSettings();
+    scheduleBudgetSave(context, previousSettings);
+}
+
+async function deleteBudgetLineEditor() {
+    const state = budgetLineEditorState;
+    if (!state || state.isNew) return;
+    const settings = ensureBudgetSettings();
+    const group = getBudgetGroup(state.groupId, settings);
+    const item = getBudgetItem(state.groupId, state.itemId, settings);
+    if (!group || !item) return;
+    const confirmed = await requestConfirmation({
+        title: `Delete ${item.name}?`,
+        message: `This removes the line from ${group.name}.`,
+        confirmLabel: 'Delete line'
+    });
+    if (!confirmed) return;
+    closeBudgetLineEditor({ restoreFocus: false });
+    updateBudgetState(current => {
+        const currentGroup = getBudgetGroup(state.groupId, current);
+        if (!currentGroup) return false;
+        currentGroup.items = currentGroup.items.filter(candidate => candidate.id !== state.itemId);
+        return true;
+    }, { title: 'Budget item removed', message: `${item.name} was removed from ${group.name}.` });
 }
 
 function updateBudgetDisabledDescription() {
@@ -1061,10 +1292,14 @@ export function setupBudgetSettings() {
             if (addItemButton) {
                 event.preventDefault();
                 const groupEl = addItemButton.closest?.('[data-budget-group-id]');
-                const addForm = addItemButton.closest?.('[data-budget-add-item-form]');
-                const values = addForm ? readBudgetAddItemForm(addForm) : {};
-                const saved = addBudgetItemToGroup(groupEl?.dataset?.budgetGroupId, values.name, values.amount, values.category, values.cadence);
-                if (saved) addForm.querySelectorAll?.('input').forEach(input => { input.value = ''; });
+                openBudgetLineEditor(groupEl?.dataset?.budgetGroupId);
+                return;
+            }
+
+            const editItemButton = event.target?.closest?.('[data-budget-edit-item]');
+            if (editItemButton) {
+                event.preventDefault();
+                openBudgetLineEditor(editItemButton.dataset.budgetGroupId, editItemButton.dataset.budgetItemId);
                 return;
             }
             const removeGroupButton = event.target?.closest?.('[data-budget-remove-group]');
@@ -1123,6 +1358,27 @@ export function setupBudgetSettings() {
             if (!input) return;
             event.preventDefault();
             input.blur?.();
+        });
+    }
+
+    const editorPanel = document.getElementById('budget-line-editor');
+    if (editorPanel) {
+        initFormFlyout(editorPanel, {
+            onClose: () => {
+                closeAssetTypeaheads(editorPanel);
+                budgetLineEditorState = null;
+            }
+        });
+    }
+    const editorForm = document.getElementById('budget-line-editor-form');
+    if (editorForm && editorForm.dataset.budgetLineEditorInit !== 'true') {
+        editorForm.dataset.budgetLineEditorInit = 'true';
+        setupAssetTypeahead(editorForm, { emptyChoiceLabel: 'Unallocated', onChoose: chooseBudgetEditorAsset });
+        editorForm.addEventListener('submit', submitBudgetLineEditor);
+        editorForm.addEventListener('input', event => updateBudgetLineEditorField(event.target?.closest?.('[data-budget-editor-field]')));
+        editorForm.addEventListener('change', event => updateBudgetLineEditorField(event.target?.closest?.('[data-budget-editor-field]')));
+        editorForm.addEventListener('click', event => {
+            if (event.target?.closest?.('[data-budget-editor-delete]')) void deleteBudgetLineEditor();
         });
     }
 
