@@ -7295,6 +7295,16 @@ body.obfuscated h1 .obfuscate-val {
     outline: none;
 }
 
+.budget-line-editor-field select.integration-select {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+    background-position: calc(100% - 1.05rem) 50%, calc(100% - 0.7rem) 50%;
+    background-repeat: no-repeat;
+    background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+    color-scheme: dark;
+    padding-right: 2.25rem;
+}
+
 .budget-line-editor-field input[type="number"] { text-align: right; }
 
 .budget-group-editor-color-control {
@@ -7319,6 +7329,8 @@ body.obfuscated h1 .obfuscate-val {
 }
 
 .budget-line-editor-asset-picker .asset-typeahead-search { min-height: 2.5rem; width: 100%; }
+.budget-line-editor-category-typeahead { min-width: 0; width: 100%; }
+.budget-line-editor-category-typeahead .asset-typeahead-search { min-height: 2.5rem; width: 100%; }
 
 .budget-line-editor-help {
     color: var(--text-muted);

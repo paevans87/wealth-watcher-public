@@ -53,10 +53,12 @@ globalThis.fetch = async (url, options) => {
 
 const { store } = await import('../store/store.js');
 const {
+    getBudgetCategoryOptions,
     getMonthlyBudgetTotals,
     getBudgetFlowData,
     loadBudgetView,
     populateBudgetSettings,
+    renderBudgetLineEditorFieldMarkup,
     setupBudgetSettings
 } = await import('./Budget.js');
 const { createBudgetFlowModel } = await import('./BudgetFlow.js');
@@ -249,6 +251,51 @@ test('forecast asset uses the searchable asset typeahead in savings rows', () =>
     assert.match(markup, /data-asset-typeahead/);
     assert.match(markup, /aria-autocomplete="list"/);
     assert.doesNotMatch(markup, /<select[^>]+data-budget-saving-asset=/);
+});
+
+test('budget line editor uses the shared select and typeahead components', () => {
+    reset();
+    const settings = {
+        version: 2,
+        groups: [
+            {
+                id: 'income',
+                name: 'Income',
+                kind: 'income',
+                role: 'income',
+                builtIn: true,
+                items: [{ id: 'salary', name: 'Salary', amount: 5000, category: 'Employment' }]
+            },
+            {
+                id: 'bills',
+                name: 'Bills',
+                kind: 'custom',
+                role: 'bills',
+                builtIn: false,
+                items: [
+                    { id: 'mortgage', name: 'Mortgage', amount: 1600, cadence: 'quarterly', category: 'Accommodation' },
+                    { id: 'water', name: 'Water', amount: 30, category: 'Utilities' },
+                    { id: 'legacy', name: 'Legacy', amount: 10, category: 'Uncategorised' }
+                ]
+            }
+        ]
+    };
+    const categoryOptions = getBudgetCategoryOptions(settings);
+    assert.deepEqual(categoryOptions.map(option => option.DisplayName), ['Employment', 'Accommodation', 'Utilities']);
+
+    const markup = renderBudgetLineEditorFieldMarkup({
+        groupId: 'bills',
+        itemId: 'mortgage',
+        draft: { name: 'Mortgage', amount: '1600', category: 'Accommodation', cadence: 'quarterly', assetId: null }
+    }, settings.groups[1]);
+
+    assert.match(markup, /class="asset-typeahead budget-line-editor-category-typeahead"/);
+    assert.match(markup, /placeholder="Search or enter a category…"/);
+    assert.match(markup, /data-budget-editor-field="category"/);
+    assert.match(markup, /data-asset-typeahead-empty-label="No category"/);
+    assert.match(markup, /class="integration-select budget-line-editor-select"/);
+    assert.match(markup, /<option value="quarterly" selected>Quarterly<\/option>/);
+    assert.doesNotMatch(markup, /id="budget-editor-bills-mortgage-category"/);
 });
 
 test('budget overview explains missing configuration and keeps setup on the Budget page', () => {

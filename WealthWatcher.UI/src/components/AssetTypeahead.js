@@ -101,8 +101,8 @@ export function getAssetTypeaheadState(picker) {
     return { picker, value, search, options };
 }
 
-function getAssets(getAssetsForPicker) {
-    const assets = getAssetsForPicker?.() ?? store.state.assets ?? [];
+function getAssets(getAssetsForPicker, picker) {
+    const assets = getAssetsForPicker?.(picker) ?? store.state.assets ?? [];
     return assets
         .filter(asset => !asset.ArchivedAt)
         .filter(asset => asset.DisplayName);
@@ -116,7 +116,7 @@ export function renderAssetTypeaheadOptions(
 
     const selectedId = String(state.value?.value || '');
     const normalizedQuery = String(query || '').trim().toLowerCase();
-    const assets = getAssets(getAssetsForPicker)
+    const assets = getAssets(getAssetsForPicker, picker)
         .filter(asset => String(asset.DisplayName).toLowerCase().includes(normalizedQuery));
     const label = emptyChoiceLabel
         || picker?.dataset?.assetTypeaheadEmptyLabel
@@ -262,6 +262,7 @@ export function setupAssetTypeahead(
     if (root.dataset) root.dataset.assetTypeaheadInit = 'true';
 
     const ownsPicker = picker => root === picker || root.contains?.(picker) !== false;
+    const getEmptyChoiceLabel = picker => picker?.dataset?.assetTypeaheadEmptyLabel || emptyChoiceLabel;
     const openPicker = search => {
         const picker = findPicker(search);
         if (!picker || !ownsPicker(picker)) return;
@@ -270,14 +271,14 @@ export function setupAssetTypeahead(
         if (state.value?.value) {
             state.search.select?.();
             renderAssetTypeaheadOptions(picker, {
-                emptyChoiceLabel,
+                emptyChoiceLabel: getEmptyChoiceLabel(picker),
                 includeEmptyChoice,
                 getAssets: getAssetsForPicker
             });
         } else {
             renderAssetTypeaheadOptions(picker, {
                 query: state.search?.value,
-                emptyChoiceLabel,
+                emptyChoiceLabel: getEmptyChoiceLabel(picker),
                 includeEmptyChoice,
                 getAssets: getAssetsForPicker
             });
@@ -370,7 +371,7 @@ export function setupAssetTypeahead(
         }
         renderAssetTypeaheadOptions(picker, {
             query: search.value,
-            emptyChoiceLabel,
+            emptyChoiceLabel: getEmptyChoiceLabel(picker),
             includeEmptyChoice,
             getAssets: getAssetsForPicker
         });

@@ -778,6 +778,20 @@ function getSelectedAssetName(assetId) {
     return asset?.DisplayName || asset?.Name || '';
 }
 
+function getBudgetCategoryOptions(settings = ensureBudgetSettings()) {
+    const seen = new Set();
+    return (settings?.groups || [])
+        .flatMap(group => Array.isArray(group.items) ? group.items : [])
+        .map(item => getRealBudgetItemCategory(item))
+        .filter(category => {
+            const key = category.toLowerCase();
+            if (!category || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        })
+        .map(category => ({ Id: category, DisplayName: category }));
+}
+
 function isSavingsBudgetGroup(group) {
     return group.id.toLowerCase() === 'savings' || group.name.toLowerCase().includes('saving');
 }
@@ -993,12 +1007,7 @@ function renderBudgetLineEditorPreview() {
     }
 }
 
-function renderBudgetLineEditorFields() {
-    const fields = document.getElementById('budget-line-editor-fields');
-    const state = budgetLineEditorState;
-    const group = state ? getBudgetGroup(state.groupId) : null;
-    if (!fields || !state || !group) return;
-
+function renderBudgetLineEditorFieldMarkup(state, group) {
     const key = safeBudgetId(`${state.groupId}-${state.itemId || 'new'}`);
     const assetField = isSavingsBudgetGroup(group)
         ? `<div class="budget-line-editor-field budget-line-editor-asset-field">
@@ -1019,7 +1028,7 @@ function renderBudgetLineEditorFields() {
         </div>`
         : '';
 
-    fields.innerHTML = `
+    return `
         <label class="budget-line-editor-field">
             <span>Line item name</span>
             <input id="budget-editor-${key}-name" type="text" value="${escapeHtml(state.draft.name)}" placeholder="e.g. Mortgage" data-budget-editor-field="name" autocomplete="off" required>
@@ -1028,21 +1037,74 @@ function renderBudgetLineEditorFields() {
             <span>Amount (£)</span>
             <input id="budget-editor-${key}-amount" type="number" value="${escapeHtml(state.draft.amount)}" min="0" step="0.01" inputmode="decimal" placeholder="0.00" data-budget-editor-field="amount" required>
         </label>
-        <label class="budget-line-editor-field">
-            <span>Category <small>optional</small></span>
-            <input id="budget-editor-${key}-category" type="text" value="${escapeHtml(state.draft.category)}" placeholder="e.g. Accommodation" data-budget-editor-field="category" autocomplete="off">
-        </label>
+        <div class="budget-line-editor-field">
+            <span class="budget-line-editor-field-label">Category <small>optional</small></span>
+            ${renderAssetTypeahead({
+                id: `budget-editor-category-${key}`,
+                selectedAssetId: state.draft.category,
+                selectedAssetName: state.draft.category,
+                ariaLabel: `Category for ${state.draft.name || 'budget line'}`,
+                placeholder: 'Search or enter a category…',
+                pickerClass: 'budget-line-editor-category-typeahead',
+                pickerAttributes: { 'data-budget-editor-category-picker': 'true' },
+                valueAttributes: { 'data-budget-editor-category-value': 'true' },
+                searchAttributes: { 'data-budget-editor-field': 'category', 'data-budget-editor-category-search': 'true' },
+                optionsAttributes: { 'data-budget-editor-category-options': 'true' },
+                emptyChoiceLabel: 'No category'
+            })}
+        </div>
         <label class="budget-line-editor-field">
             <span>Cadence</span>
-            <select id="budget-editor-${key}-cadence" data-budget-editor-field="cadence">${renderBudgetCadenceOptions(state.draft.cadence)}</select>
+            ${renderSelectField({
+                id: `budget-editor-${key}-cadence`,
+                className: 'integration-select budget-line-editor-select',
+                options: renderBudgetCadenceOptions(state.draft.cadence),
+                attributes: { 'data-budget-editor-field': 'cadence' }
+            })}
         </label>
         ${assetField}`;
 }
 
+function renderBudgetLineEditorFields() {
+    const fields = document.getElementById('budget-line-editor-fields');
+    const state = budgetLineEditorState;
+    const group = state ? getBudgetGroup(state.groupId) : null;
+    if (!fields || !state || !group) return;
+    fields.innerHTML = renderBudgetLineEditorFieldMarkup(state, group);
+}
+
 function chooseBudgetEditorAsset(_picker, assetId) {
     if (!budgetLineEditorState) return;
-    budgetLineEditorState.draft.assetId = String(assetId || '').trim() || null;
+    const normalizedAssetId = String(assetId || '').trim() || null;
+    budgetLineEditorState.draft.assetId = normalizedAssetId;
+    const typeahead = getAssetTypeaheadState(_picker);
+    if (typeahead.value) typeahead.value.value = normalizedAssetId || '';
+    if (typeahead.search) typeahead.search.value = getSelectedAssetName(normalizedAssetId);
     renderBudgetLineEditorPreview();
+}
+
+function chooseBudgetEditorCategory(_picker, category) {
+    if (!budgetLineEditorState) return;
+    const normalizedCategory = String(category || '').trim();
+    budgetLineEditorState.draft.category = normalizedCategory;
+    const typeahead = getAssetTypeaheadState(_picker);
+    if (typeahead.value) typeahead.value.value = normalizedCategory;
+    if (typeahead.search) typeahead.search.value = normalizedCategory;
+    renderBudgetLineEditorPreview();
+}
+
+function getBudgetLineEditorTypeaheadAssets(picker) {
+    return picker?.dataset?.budgetEditorCategoryPicker
+        ? getBudgetCategoryOptions()
+        : undefined;
+}
+
+function chooseBudgetLineEditorTypeahead(picker, value) {
+    if (picker?.dataset?.budgetEditorCategoryPicker) {
+        chooseBudgetEditorCategory(picker, value);
+        return;
+    }
+    chooseBudgetEditorAsset(picker, value);
 }
 
 function updateBudgetLineEditorField(input) {
@@ -1513,7 +1575,11 @@ export function setupBudgetSettings() {
     const editorForm = document.getElementById('budget-line-editor-form');
     if (editorForm && editorForm.dataset.budgetLineEditorInit !== 'true') {
         editorForm.dataset.budgetLineEditorInit = 'true';
-        setupAssetTypeahead(editorForm, { emptyChoiceLabel: 'Unallocated', onChoose: chooseBudgetEditorAsset });
+        setupAssetTypeahead(editorForm, {
+            emptyChoiceLabel: 'Unallocated',
+            getAssets: getBudgetLineEditorTypeaheadAssets,
+            onChoose: chooseBudgetLineEditorTypeahead
+        });
         editorForm.addEventListener('submit', submitBudgetLineEditor);
         editorForm.addEventListener('input', event => updateBudgetLineEditorField(event.target?.closest?.('[data-budget-editor-field]')));
         editorForm.addEventListener('change', event => updateBudgetLineEditorField(event.target?.closest?.('[data-budget-editor-field]')));
@@ -1637,4 +1703,9 @@ window.removeBudgetSaving = index => removeBudgetItem('savings', index);
 window.addBudgetSpend = () => addBudgetItem('spend', 'new-spend-name', 'new-spend-amount');
 window.removeBudgetSpend = index => removeBudgetItem('spend', index);
 
-export { ensureBudgetSettings, getBudgetFlowData };
+export {
+    ensureBudgetSettings,
+    getBudgetCategoryOptions,
+    getBudgetFlowData,
+    renderBudgetLineEditorFieldMarkup
+};
