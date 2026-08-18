@@ -135,7 +135,8 @@ function buildFlowSvg(model, formatter, obfuscated) {
         targetY += height + gap;
     });
 
-    return `<svg class="budget-flow-svg budget-v2-flow-svg" data-budget-v2-flow-svg viewBox="0 0 ${FLOW_WIDTH} ${svgHeight}" role="img" aria-labelledby="budget-v2-flow-title budget-v2-flow-caption">
+    const densityClass = rows.length >= 12 ? ' is-dense' : '';
+    return `<svg class="budget-flow-svg budget-v2-flow-svg${densityClass}" data-budget-v2-flow-svg viewBox="0 0 ${FLOW_WIDTH} ${svgHeight}" role="img" aria-labelledby="budget-v2-flow-title budget-v2-flow-caption">
         <title id="budget-v2-flow-title">${escapeHtml(model.summary)}</title>
         <desc id="budget-v2-flow-caption">${escapeHtml(model.caption)}</desc>
         ${linkMarkup.join('')}

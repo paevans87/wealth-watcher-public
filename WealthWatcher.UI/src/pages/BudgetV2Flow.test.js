@@ -188,6 +188,7 @@ test('v2 flow expands its canvas for large item lists', () => {
 
     const targetRects = [...target.innerHTML.matchAll(/<rect class="budget-v2-flow-node" x="690" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)];
     assert.equal(targetRects.length, rows.length);
+    assert.match(target.innerHTML, /class="budget-flow-svg budget-v2-flow-svg is-dense"/);
     const lastRect = targetRects.at(-1);
     assert.ok(Number(lastRect[1]) + Number(lastRect[2]) < svgHeight);
     assert.doesNotMatch(target.innerHTML, /y="-/);
