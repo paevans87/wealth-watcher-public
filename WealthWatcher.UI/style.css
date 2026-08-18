@@ -261,6 +261,10 @@ body.demo-mode {
     text-underline-offset: 0.2rem;
 }
 
+.nav-brand-version[aria-current="page"] {
+    color: var(--cyan);
+}
+
 .release-update-badge {
     background: rgba(250, 204, 21, 0.14);
     border: 1px solid rgba(250, 204, 21, 0.45);
@@ -3793,6 +3797,83 @@ body.obfuscated h1 .obfuscate-val {
 }
 
 #settings-view .collapsible-content {
+    margin-top: 1rem;
+}
+
+#application-view > header,
+#application-view > .application-release-card {
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+}
+
+#application-view .application-page-header {
+    margin-bottom: 1.5rem;
+}
+
+#application-view .application-page-header .header-left h1 {
+    color: var(--text-main);
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.04em;
+    margin: 0;
+}
+
+#application-view .application-release-card {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(8, 47, 73, 0.5));
+    border-color: rgba(34, 211, 238, 0.28);
+    min-height: 0;
+    padding: 1.5rem;
+}
+
+#application-view .application-release-card:hover {
+    transform: none;
+}
+
+.application-release-banner {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.application-release-mark {
+    align-items: center;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    border-radius: 0.65rem;
+    color: var(--cyan);
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 1.15rem;
+    height: 2.2rem;
+    justify-content: center;
+    width: 2.2rem;
+}
+
+.application-release-summary {
+    background: rgba(8, 47, 73, 0.35);
+    border: 1px solid rgba(34, 211, 238, 0.22);
+    border-radius: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 1rem;
+    padding: 1rem 1.1rem;
+}
+
+.application-release-summary strong {
+    color: var(--text-main);
+    font-size: 0.95rem;
+}
+
+.application-release-summary span {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.application-release-content {
     margin-top: 1rem;
 }
 

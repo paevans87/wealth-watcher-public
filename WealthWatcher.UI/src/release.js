@@ -292,6 +292,18 @@ function renderReleaseState({ currentRelease, latestRelease, updateAvailable, er
     const elements = releaseElements();
     if (!currentRelease) {
         setHidden(elements.appBarVersion, true);
+        setHidden(elements.releaseLink, true);
+        if (elements.currentVersion) elements.currentVersion.textContent = 'Version unavailable';
+        if (elements.currentReleaseDate) elements.currentReleaseDate.textContent = 'Release date unavailable';
+        if (elements.releaseUpdateStatus) {
+            elements.releaseUpdateStatus.textContent = 'Version metadata is unavailable.';
+            elements.releaseUpdateStatus.classList.remove('is-update-available');
+        }
+        if (elements.releaseUpdateDetails) {
+            elements.releaseUpdateDetails.textContent = 'Release information could not be loaded. Try again later or contact the deployment owner.';
+        }
+        if (elements.releaseNotesVersion) elements.releaseNotesVersion.textContent = '';
+        renderReleaseNotes(elements.releaseNotes, 'Release notes are unavailable until version metadata can be loaded.');
         if (elements.checkMessage) elements.checkMessage.textContent = 'Version metadata is unavailable.';
         return;
     }
@@ -304,6 +316,7 @@ function renderReleaseState({ currentRelease, latestRelease, updateAvailable, er
     if (elements.currentReleaseDate) elements.currentReleaseDate.textContent = formatReleasedAt(currentRelease.releasedAt);
     if (elements.releaseNotesVersion) elements.releaseNotesVersion.textContent = `v${displayedRelease.version}`;
     if (elements.releaseLink) {
+        setHidden(elements.releaseLink, false);
         elements.releaseLink.href = displayedRelease.releaseUrl;
         elements.releaseLink.textContent = updateAvailable ? `View v${displayedRelease.version} release` : 'View release details';
     }

@@ -25,6 +25,14 @@ function syncActiveNavState() {
     });
 }
 
+function syncApplicationLinkState(route) {
+    const applicationLink = document.getElementById('app-bar-version');
+    if (!applicationLink) return;
+
+    if (route === '#application') applicationLink.setAttribute('aria-current', 'page');
+    else applicationLink.removeAttribute('aria-current');
+}
+
 /**
  * Reads the optional settings target from a direct settings hash link.
  * Examples: #settings?panel=monthly-budget and
@@ -56,6 +64,21 @@ export function getSettingsPanelTarget(hash = '') {
 export function getDeprecatedRouteRedirect(hash = '') {
     const target = getSettingsPanelTarget(hash);
     return target?.panelId === 'monthly-budget' ? '#budget' : null;
+}
+
+/**
+ * Redirects the old Application release deep link to the dedicated route.
+ * @param {string} hash
+ * @returns {string|null}
+ */
+export function getLegacyApplicationRedirect(hash = '') {
+    const [route, query = ''] = String(hash || '').split('?');
+    if (route !== '#settings') return null;
+
+    const params = new URLSearchParams(query);
+    return params.get('panel')?.trim() === 'application-version'
+        ? '#application'
+        : null;
 }
 
 /**
@@ -114,7 +137,7 @@ export function handleRouting() {
     const hash = window.location.hash || '#dashboard';
     const route = hash.split('?')[0];
 
-    const redirectRoute = getDeprecatedRouteRedirect(hash);
+    const redirectRoute = getDeprecatedRouteRedirect(hash) || getLegacyApplicationRedirect(hash);
     if (redirectRoute) {
         if (window.location.hash !== redirectRoute) {
             window.location.hash = redirectRoute;
@@ -139,6 +162,7 @@ export function handleRouting() {
             window.location.hash = '#dashboard';
         }
         syncActiveNavState();
+        syncApplicationLinkState('#dashboard');
         updateHourlyRefreshLifecycle({ immediate: true });
         return;
     }
@@ -193,6 +217,9 @@ export function handleRouting() {
             loadForecastView();
             store.state.isForecastLoaded = true;
         }
+    } else if (route === '#application') {
+        const applicationView = document.getElementById('application-view');
+        if (applicationView) applicationView.classList.add('active');
     } else if (route === '#settings') {
         const settingsView = document.getElementById('settings-view');
         const navSettings = document.getElementById('nav-settings');
@@ -218,5 +245,6 @@ export function handleRouting() {
     }
 
     syncActiveNavState();
+    syncApplicationLinkState(route);
     updateHourlyRefreshLifecycle({ immediate: route === '#dashboard' });
 }

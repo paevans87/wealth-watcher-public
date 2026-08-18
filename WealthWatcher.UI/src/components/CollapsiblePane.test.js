@@ -389,24 +389,6 @@ test('CollapsiblePane Unit Tests', async (t) => {
         assert.equal(paneEl.classList.contains('collapsed'), true, 'Single click should toggle once back to collapsed');
     });
 
-    await t.test('initCollapsiblePane uses the pane default only when no saved state exists', () => {
-        const paneEl = createMockElement('div', {
-            id: 'application-version-pane',
-            dataset: { paneId: 'application-version', defaultCollapsed: 'true' }
-        });
-        const headerEl = createMockElement('div', { className: 'collapsible-header' });
-        paneEl.appendChild(headerEl);
-
-        initCollapsiblePane(paneEl);
-        assert.equal(paneEl.classList.contains('collapsed'), true, 'Application version should be collapsed by default');
-        assert.equal(headerEl.getAttribute('aria-expanded'), 'false');
-
-        setPaneState('application-version', false);
-        initCollapsiblePane(paneEl);
-        assert.equal(paneEl.classList.contains('collapsed'), false, 'Saved expanded state should override the default');
-        assert.equal(headerEl.getAttribute('aria-expanded'), 'true');
-    });
-
     await t.test('initAllCollapsiblePanes initializes all matching panes in container or document', () => {
         const container = createMockElement('div', { id: 'settings-view' });
 
