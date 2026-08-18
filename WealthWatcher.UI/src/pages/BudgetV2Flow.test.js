@@ -131,8 +131,8 @@ test('v2 flow source bar spans the rendered flow stack', async () => {
 
     const rects = [...target.innerHTML.matchAll(/<rect class="budget-v2-flow-node" x="([\d.]+)" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)]
         .map(match => ({ x: Number(match[1]), y: Number(match[2]), height: Number(match[3]) }));
-    const source = rects.find(rect => rect.x === 48);
-    const targets = rects.filter(rect => rect.x === 690);
+    const source = rects.find(rect => rect.x === 220);
+    const targets = rects.filter(rect => rect.x === 620);
     assert.ok(source);
     assert.equal(targets.length, 3);
     assert.ok(Math.abs(source.y - targets[0].y) < 0.01);
@@ -167,7 +167,7 @@ test('v2 flow uses the source colour for the drilldown source bar', () => {
         formatter: value => `£${value.toFixed(2)}`
     });
 
-    assert.match(target.innerHTML, /<rect class="budget-v2-flow-node" x="48"[^>]+fill="#123abc"/);
+    assert.match(target.innerHTML, /<rect class="budget-v2-flow-node" x="220"[^>]+fill="#123abc"/);
 });
 
 test('v2 flow expands its canvas for large item lists', () => {
@@ -186,7 +186,7 @@ test('v2 flow expands its canvas for large item lists', () => {
     const svgHeight = Number(viewBox[1]);
     assert.ok(svgHeight > 420);
 
-    const targetRects = [...target.innerHTML.matchAll(/<rect class="budget-v2-flow-node" x="690" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)];
+    const targetRects = [...target.innerHTML.matchAll(/<rect class="budget-v2-flow-node" x="620" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)];
     assert.equal(targetRects.length, rows.length);
     assert.match(target.innerHTML, /class="budget-flow-svg budget-v2-flow-svg is-dense"/);
     const lastRect = targetRects.at(-1);

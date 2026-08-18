@@ -4,8 +4,8 @@ const FLOW_WIDTH = 920;
 const FLOW_HEIGHT = 420;
 const FLOW_TOP = 72;
 const FLOW_BOTTOM = 348;
-const SOURCE_X = 48;
-const TARGET_X = 690;
+const SOURCE_X = 220;
+const TARGET_X = 620;
 const NODE_WIDTH = 22;
 const FLOW_GAP = 24;
 const MIN_ROW_HEIGHT = 16;
@@ -109,7 +109,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
     const sourceY = FLOW_TOP + (availableHeight - sourceHeight) / 2;
     let targetY = sourceY;
     let sourceOffset = Math.max((sourceHeight - targetHeightTotal) / 2, 0);
-    const controlX = SOURCE_X + 310;
+    const controlX = SOURCE_X + ((TARGET_X - SOURCE_X) / 2);
     const linkMarkup = [];
     const targetMarkup = [];
 

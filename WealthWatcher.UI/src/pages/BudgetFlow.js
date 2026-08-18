@@ -8,8 +8,8 @@ const SVG_HEIGHT = 420;
 const SVG_TOP = 72;
 const SVG_BOTTOM = 348;
 const SVG_NODE_WIDTH = 22;
-const SVG_SOURCE_X = 48;
-const SVG_TARGET_X = 690;
+const SVG_SOURCE_X = 220;
+const SVG_TARGET_X = 620;
 const DRILLDOWN_NODE_GAP = 40;
 
 function finitePositive(value) {
@@ -338,7 +338,7 @@ function buildDrilldownSvg(model, selectedCategory, items, formatter, obfuscated
     let sourceOffset = (sourceHeight - destinationHeights.reduce((total, height) => total + height, 0)) / 2;
     if (!Number.isFinite(sourceOffset)) sourceOffset = 0;
 
-    const drilldownSourceX = 180;
+    const drilldownSourceX = 220;
     const sourceX = drilldownSourceX + SVG_NODE_WIDTH;
     const targetX = SVG_TARGET_X;
     const controlX = sourceX + ((targetX - sourceX) / 2);
