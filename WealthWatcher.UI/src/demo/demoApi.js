@@ -335,9 +335,6 @@ function normalizeBudgetV2SettingsDocument(document) {
         if (isIncome) {
             incomeGroupCount += 1;
             if (!rawBuiltIn) return { error: `${groupPath} Income must remain builtIn.` };
-            if (rawName.trim().toLowerCase() !== 'income') {
-                return { error: `${groupPath}.name cannot rename the built-in Income group.` };
-            }
         } else if (rawBuiltIn) {
             return { error: `${groupPath} custom groups must set builtIn to false.` };
         }
@@ -345,7 +342,7 @@ function normalizeBudgetV2SettingsDocument(document) {
         if (!Array.isArray(group.items)) return { error: `${groupPath}.items must be a JSON array.` };
         const normalizedGroup = {
             id,
-            name: isIncome ? 'Income' : rawName.trim(),
+            name: rawName.trim(),
             kind: isIncome ? 'income' : 'custom',
             role: isIncome ? 'income' : (role || kind || 'custom'),
             builtIn: isIncome,

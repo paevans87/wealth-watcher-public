@@ -143,7 +143,9 @@ function normalizeGroup(source, fallback, index, forceIncome = false, usedGroupI
 
     return {
         id: groupId,
-        name: isIncome ? 'Income' : readString(input.name, input.Name) || fallback?.name || `Group ${index + 1}`,
+        name: isIncome
+            ? readString(input.name, input.Name) || 'Income'
+            : readString(input.name, input.Name) || fallback?.name || `Group ${index + 1}`,
         kind: isIncome ? 'income' : 'custom',
         role: normalizedRole,
         builtIn: isIncome,

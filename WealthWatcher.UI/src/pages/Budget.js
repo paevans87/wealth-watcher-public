@@ -540,7 +540,7 @@ function getBudgetFlowData(settings, view, totals) {
         });
         return {
             rows,
-            source: { label: 'Income', value: totals.income, color: getBudgetGroupColor(incomeGroup) },
+            source: { label: incomeGroup?.name || 'Income', value: totals.income, color: getBudgetGroupColor(incomeGroup) },
             sourceAction: null,
             summary: 'Budget groups',
             caption: 'Select a group to see its categories, then select a category to see its line items.'
@@ -827,13 +827,13 @@ function renderBudgetGroup(group, index, totalGroups) {
     const groupColor = getBudgetGroupColor(group, index);
     return `<section class="budget-group-editor${collapsed ? ' is-collapsed' : ''}" data-budget-group-id="${escapeHtml(group.id)}">
         <button type="button" class="budget-group-header" data-budget-toggle-group aria-expanded="${String(!collapsed)}" aria-controls="${groupContentId}">
-            <span class="budget-group-header-main"><span class="budget-group-color" aria-hidden="true" style="background: ${safeCssColor(groupColor)}"></span><span><strong>${escapeHtml(group.name)}</strong><small>${income ? 'Built-in group · name locked' : `${group.items.length} line item${group.items.length === 1 ? '' : 's'}`}</small></span></span>
+            <span class="budget-group-header-main"><span class="budget-group-color" aria-hidden="true" style="background: ${safeCssColor(groupColor)}"></span><span><strong>${escapeHtml(group.name)}</strong><small>${income ? 'Built-in group · cannot be deleted' : `${group.items.length} line item${group.items.length === 1 ? '' : 's'}`}</small></span></span>
             <span class="budget-group-header-total"><span class="obfuscate-val">${escapeHtml(formatter.format(getBudgetGroupTotal(group, getMonthlyBudgetAmount)))}</span><span class="budget-group-chevron" aria-hidden="true">⌄</span></span>
         </button>
         <div id="${groupContentId}" class="budget-group-content"${collapsed ? ' hidden' : ''}>
             <div class="budget-group-toolbar">
                 ${income
-                    ? '<span class="budget-group-locked-note">Income is built in. Add and edit its line items below.</span>'
+                    ? `<span class="budget-group-locked-note">Income is built in and cannot be removed. Add and edit its line items below.</span><div class="budget-group-actions"><button type="button" class="action-btn" data-budget-edit-group data-budget-group-id="${escapeHtml(group.id)}" aria-label="Edit ${escapeHtml(group.name)} group">Edit group</button></div>`
                     : `<span class="budget-group-edit-summary"><span class="budget-group-edit-summary-label">Custom group</span><strong>${escapeHtml(group.name)}</strong></span>
                     <div class="budget-group-actions"><button type="button" class="action-btn" data-budget-edit-group data-budget-group-id="${escapeHtml(group.id)}" aria-label="Edit ${escapeHtml(group.name)} group">Edit group</button><button type="button" class="action-btn" data-budget-group-move="up"${canMoveUp ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} up">Move up</button><button type="button" class="action-btn" data-budget-group-move="down"${canMoveDown ? '' : ' disabled'} aria-label="Move ${escapeHtml(group.name)} down">Move down</button><button type="button" class="action-btn danger-outline" data-budget-remove-group aria-label="Remove ${escapeHtml(group.name)}">Remove group</button></div>`}
             </div>
@@ -894,7 +894,7 @@ function openBudgetGroupEditor(groupId) {
     const settings = ensureBudgetSettings();
     const group = getBudgetGroup(groupId, settings);
     const panel = document.getElementById('budget-group-editor');
-    if (!group || isIncomeBudgetGroup(group) || !panel) return false;
+    if (!group || !panel) return false;
 
     budgetGroupEditorState = {
         groupId: group.id,
@@ -908,7 +908,9 @@ function openBudgetGroupEditor(groupId) {
     const title = document.getElementById('budget-group-editor-title');
     const copy = document.getElementById('budget-group-editor-copy');
     if (title) title.textContent = group.name;
-    if (copy) copy.textContent = `Update ${group.name}'s name and colour. Categories in this group inherit the selected colour.`;
+    if (copy) copy.textContent = isIncomeBudgetGroup(group)
+        ? `Update ${group.name}'s display name and colour. Income remains built in and cannot be removed.`
+        : `Update ${group.name}'s name and colour. Categories in this group inherit the selected colour.`;
     renderBudgetGroupEditorFields();
     openFormFlyout(panel, {
         initialFocus: document.getElementById('budget-group-editor-name')
@@ -938,11 +940,11 @@ function submitBudgetGroupEditor(event) {
 
     const settings = ensureBudgetSettings();
     const group = getBudgetGroup(state.groupId, settings);
-    if (!group || isIncomeBudgetGroup(group)) return;
+    if (!group) return;
     const color = getBudgetGroupColor({ color: state.draft.color });
     const saved = updateBudgetState(current => {
         const currentGroup = getBudgetGroup(state.groupId, current);
-        if (!currentGroup || isIncomeBudgetGroup(currentGroup)) return false;
+        if (!currentGroup) return false;
         currentGroup.name = name;
         currentGroup.color = color;
         return true;

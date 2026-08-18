@@ -89,18 +89,18 @@ test('default budget fixture is v2-shaped, seeded with useful groups, and expose
     assert.equal(readDocument.savings.find(item => item.name === 'Index fund contribution').assetId, 'asset-isa');
 });
 
-test('budget v2 settings round-trip groups, categories, cadence, and asset mappings', async () => {
+test('budget v2 settings round-trip groups, display names, colours, categories, cadence, and asset mappings', async () => {
     const document = {
         version: 2,
         needsUpdate: false,
         groups: [
             {
                 id: 'income',
-                name: 'Income',
+                name: 'Earnings',
                 kind: 'income',
                 role: 'income',
                 builtIn: true,
-                color: '#06b6d4',
+                color: '#a78bfa',
                 items: [{ id: 'income-round-trip', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null, category: 'Employment' }]
             },
             {
@@ -133,11 +133,11 @@ test('budget v2 settings round-trip groups, categories, cadence, and asset mappi
     assert.deepEqual(read.groups, [
         {
             id: 'income',
-            name: 'Income',
+            name: 'Earnings',
             kind: 'income',
             role: 'income',
             builtIn: true,
-            color: '#06b6d4',
+            color: '#a78bfa',
             items: [{ id: 'income-round-trip', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null, category: 'Employment' }]
         },
         {

@@ -27,7 +27,7 @@ test('legacy budget documents normalize to v2 groups and request migration', () 
     assert.equal(isIncomeBudgetGroup(settings.groups[0]), true);
 });
 
-test('v2 normalization keeps income locked and supports custom groups and categories', () => {
+test('v2 normalization keeps income built in while supporting display names and categories', () => {
     const settings = normalizeBudgetSettings({
         version: 2,
         needsUpdate: true,
@@ -39,7 +39,7 @@ test('v2 normalization keeps income locked and supports custom groups and catego
 
     assert.equal(settings.needsUpdate, true);
     assert.equal(settings.groups[0].id, 'income');
-    assert.equal(settings.groups[0].name, 'Income');
+    assert.equal(settings.groups[0].name, 'Renamed income');
     assert.equal(settings.groups[0].builtIn, true);
     assert.equal(settings.groups[1].name, 'Travel');
     assert.equal(settings.groups[1].color, '#123abc');

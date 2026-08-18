@@ -2268,8 +2268,6 @@ public static class EndpointExtensions
             {
                 if (!builtIn)
                     return (null, $"{groupPath} Income must remain builtIn.");
-                if (!group.Name.Trim().Equals("Income", StringComparison.OrdinalIgnoreCase))
-                    return (null, $"{groupPath}.name cannot rename the built-in Income group.");
                 if (incomeGroup is not null)
                     return (null, "wealthWatcherBudgetSettings.groups must contain exactly one Income group.");
 
@@ -2286,7 +2284,7 @@ public static class EndpointExtensions
             var normalizedGroup = new BudgetV2GroupDocument
             {
                 Id = groupId,
-                Name = isIncome ? "Income" : group.Name.Trim(),
+                Name = group.Name.Trim(),
                 Kind = isIncome ? "income" : "custom",
                 Role = isIncome ? "income" : role ?? kind ?? "custom",
                 BuiltIn = isIncome,
@@ -2381,10 +2379,9 @@ public static class EndpointExtensions
             var previousIncome = previousDocument.Groups!
                 .FirstOrDefault(IsIncomeBudgetGroup);
             if (previousIncome is not null &&
-                (!string.Equals(previousIncome.Id, incomeGroup.Id?.Trim(), StringComparison.Ordinal) ||
-                 !string.Equals(previousIncome.Name, "Income", StringComparison.OrdinalIgnoreCase)))
+                !string.Equals(previousIncome.Id, incomeGroup.Id?.Trim(), StringComparison.Ordinal))
             {
-                return (null, "The built-in Income group cannot be renamed or replaced.");
+                return (null, "The built-in Income group cannot be replaced.");
             }
         }
 

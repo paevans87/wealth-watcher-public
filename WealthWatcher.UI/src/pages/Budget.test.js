@@ -373,7 +373,7 @@ test('budget v2 flow carries the selected group colour through every level', () 
         groups: [
             {
                 id: 'income',
-                name: 'Income',
+                name: 'Earnings',
                 kind: 'income',
                 role: 'income',
                 builtIn: true,
@@ -393,7 +393,9 @@ test('budget v2 flow carries the selected group colour through every level', () 
     };
     const totals = getMonthlyBudgetTotals(settings);
 
-    assert.equal(getBudgetFlowData(settings, { level: 'overview' }, totals).rows[0].color, '#123abc');
+    const overviewFlow = getBudgetFlowData(settings, { level: 'overview' }, totals);
+    assert.equal(overviewFlow.rows[0].color, '#123abc');
+    assert.equal(overviewFlow.source.label, 'Earnings');
     assert.equal(getBudgetFlowData(settings, { level: 'group', groupId: 'bills' }, totals).rows[0].color, '#123abc');
     assert.equal(getBudgetFlowData(settings, { level: 'item', groupId: 'bills', category: 'Accommodation' }, totals).rows[0].color, '#123abc');
 });

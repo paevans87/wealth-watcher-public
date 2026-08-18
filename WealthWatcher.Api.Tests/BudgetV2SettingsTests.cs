@@ -144,7 +144,7 @@ public sealed class BudgetV2SettingsTests
     }
 
     [Fact]
-    public async Task V2_budget_requires_one_immutable_built_in_income_group()
+    public async Task V2_budget_requires_one_built_in_income_group_but_allows_display_name_and_colour()
     {
         await using var host = await SettingsHost.CreateAsync();
 
@@ -165,16 +165,17 @@ public sealed class BudgetV2SettingsTests
                 Group("income", "Income", "income", true, Item(incomeId, "Salary", 6_500m, "monthly")))
         });
         Assert.Equal(StatusCodes.Status200OK, valid.StatusCode);
-        var beforeJson = host.Db.AppPreferences.Single().BudgetJson;
-
         var renamedIncome = await host.PostAsync(new Dictionary<string, string?>
         {
             ["wealthWatcherBudgetSettings"] = V2Document(
-                Group("income", "Earnings", "income", true, Item(incomeId, "Salary", 6_500m, "monthly")))
+                Group("income", "Earnings", "income", true, Item(incomeId, "Salary", 6_500m, "monthly"), color: "#a78bfa"))
         });
 
-        Assert.Equal(StatusCodes.Status400BadRequest, renamedIncome.StatusCode);
-        Assert.Equal(beforeJson, host.Db.AppPreferences.Single().BudgetJson);
+        Assert.Equal(StatusCodes.Status200OK, renamedIncome.StatusCode);
+        var renamedBudget = ParseBudget(await host.GetAsync());
+        var income = renamedBudget.GetProperty("groups")[0];
+        Assert.Equal("Earnings", income.GetProperty("name").GetString());
+        Assert.Equal("#a78bfa", income.GetProperty("color").GetString());
     }
 
     [Fact]
