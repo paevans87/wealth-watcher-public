@@ -7332,6 +7332,42 @@ body.obfuscated h1 .obfuscate-val {
     font-size: 0.76rem;
 }
 
+.budget-group-editor-color-suggestion {
+    align-items: center;
+    background: rgba(6, 182, 212, 0.07);
+    border: 1px solid rgba(103, 232, 249, 0.16);
+    border-radius: 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: space-between;
+    margin-top: 0.6rem;
+    padding: 0.55rem 0.65rem;
+}
+
+.budget-group-editor-color-suggestion-copy {
+    align-items: center;
+    display: flex;
+    gap: 0.55rem;
+}
+
+.budget-group-editor-color-swatch {
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 5px;
+    flex: 0 0 auto;
+    height: 1.15rem;
+    width: 1.15rem;
+}
+
+.budget-group-editor-color-suggestion-copy strong,
+.budget-group-editor-color-suggestion-copy small {
+    display: block;
+}
+
+.budget-group-editor-color-suggestion-copy strong { font-size: 0.74rem; }
+.budget-group-editor-color-suggestion-copy small { color: var(--text-muted); font-size: 0.7rem; }
+.budget-group-editor-color-suggestion-action { font-size: 0.72rem; padding: 0.35rem 0.55rem; }
+
 .budget-line-editor-asset-picker .asset-typeahead-search { min-height: 2.5rem; width: 100%; }
 .budget-line-editor-category-typeahead { min-width: 0; width: 100%; }
 .budget-line-editor-category-typeahead .asset-typeahead-search { min-height: 2.5rem; width: 100%; }

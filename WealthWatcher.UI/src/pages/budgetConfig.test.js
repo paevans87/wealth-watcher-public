@@ -2,11 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    getBudgetGroupColorSuggestion,
     getBudgetItemCategory,
     getRealBudgetItemCategory,
+    getNearestBudgetGroupColor,
     normalizeBudgetSettings,
     isIncomeBudgetGroup
 } from './budgetConfig.js';
+
+test('nearest group colour suggestions use the shared palette without overriding close matches', () => {
+    assert.deepEqual(getNearestBudgetGroupColor('#ff0000'), {
+        color: '#ef4444',
+        distance: Math.sqrt((255 - 239) ** 2 + (0 - 68) ** 2 + (0 - 68) ** 2)
+    });
+    assert.equal(getBudgetGroupColorSuggestion('#ef4444'), null);
+    assert.equal(getBudgetGroupColorSuggestion('#ef5050'), null);
+    assert.equal(getBudgetGroupColorSuggestion('#ffffff')?.color, '#d946ef');
+    assert.equal(getBudgetGroupColorSuggestion('not-a-colour'), null);
+});
 
 test('legacy budget documents normalize to v2 groups and request migration', () => {
     const settings = normalizeBudgetSettings({

@@ -28,6 +28,7 @@ import {
     BUDGET_CATEGORIES,
     BUDGET_CATEGORY_CONFIG,
     BUDGET_GROUP_COLORS,
+    getBudgetGroupColorSuggestion,
     getBudgetGroupTotal,
     getBudgetGroups,
     getBudgetItemCategory,
@@ -884,7 +885,26 @@ function renderBudgetGroupEditorFields() {
                 <code>${escapeHtml(state.draft.color)}</code>
             </span>
             <small class="budget-line-editor-help">Categories and their flow links will use this colour.</small>
+            <div id="budget-group-editor-color-suggestion" class="budget-group-editor-color-suggestion" role="status" aria-live="polite" hidden></div>
         </label>`;
+    renderBudgetGroupColorSuggestion();
+}
+
+function renderBudgetGroupColorSuggestion() {
+    const state = budgetGroupEditorState;
+    const suggestionTarget = document.getElementById('budget-group-editor-color-suggestion');
+    if (!suggestionTarget || !state) return;
+
+    const suggestion = getBudgetGroupColorSuggestion(state.draft.color);
+    if (!suggestion) {
+        suggestionTarget.hidden = true;
+        suggestionTarget.innerHTML = '';
+        return;
+    }
+
+    const suggestedColor = safeCssColor(suggestion.color);
+    suggestionTarget.hidden = false;
+    suggestionTarget.innerHTML = `<span class="budget-group-editor-color-suggestion-copy"><span class="budget-group-editor-color-swatch" aria-hidden="true" style="background: ${suggestedColor}"></span><span><strong>Closest palette match</strong><small>${escapeHtml(suggestion.color)}</small></span></span><button type="button" class="action-btn budget-group-editor-color-suggestion-action" data-budget-group-color-use-suggestion="${escapeHtml(suggestion.color)}">Use this colour</button>`;
 }
 
 function updateBudgetGroupEditorField(input) {
@@ -896,6 +916,7 @@ function updateBudgetGroupEditorField(input) {
     if (field === 'color') {
         const value = input.closest?.('.budget-group-editor-color-control')?.querySelector?.('code');
         if (value) value.textContent = state.draft.color;
+        renderBudgetGroupColorSuggestion();
     }
     const validation = document.getElementById('budget-group-editor-validation');
     if (validation && state.showValidation) {
@@ -1602,6 +1623,15 @@ export function setupBudgetSettings() {
         groupEditorForm.addEventListener('submit', submitBudgetGroupEditor);
         groupEditorForm.addEventListener('input', event => updateBudgetGroupEditorField(event.target?.closest?.('[data-budget-group-editor-field]')));
         groupEditorForm.addEventListener('change', event => updateBudgetGroupEditorField(event.target?.closest?.('[data-budget-group-editor-field]')));
+        groupEditorForm.addEventListener('click', event => {
+            const suggestionButton = event.target?.closest?.('[data-budget-group-color-use-suggestion]');
+            if (!suggestionButton) return;
+            event.preventDefault();
+            const input = document.getElementById('budget-group-editor-color');
+            if (!input) return;
+            input.value = suggestionButton.dataset.budgetGroupColorUseSuggestion || input.value;
+            updateBudgetGroupEditorField(input);
+        });
     }
 
     populateBudgetSettings();

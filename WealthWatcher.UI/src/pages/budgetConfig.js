@@ -6,6 +6,8 @@ export const BUDGET_GROUP_COLORS = Object.freeze([
     '#f43f5e', '#22c55e', '#0ea5e9', '#6366f1', '#f97316'
 ]);
 
+export const BUDGET_GROUP_COLOR_SUGGESTION_THRESHOLD = 48;
+
 // These exports keep the legacy global handlers and the existing settings
 // copy compatible while the stored document moves to the group-based model.
 export const BUDGET_CATEGORY_CONFIG = Object.freeze({
@@ -87,6 +89,40 @@ function readColor(...values) {
         return `#${color.slice(1).split('').map(part => part + part).join('')}`;
     }
     return '';
+}
+
+function toRgb(color) {
+    const normalized = readColor(color);
+    if (!normalized) return null;
+    return {
+        red: Number.parseInt(normalized.slice(1, 3), 16),
+        green: Number.parseInt(normalized.slice(3, 5), 16),
+        blue: Number.parseInt(normalized.slice(5, 7), 16)
+    };
+}
+
+function getRgbDistance(first, second) {
+    return Math.sqrt(
+        ((first.red - second.red) ** 2)
+        + ((first.green - second.green) ** 2)
+        + ((first.blue - second.blue) ** 2)
+    );
+}
+
+export function getNearestBudgetGroupColor(value) {
+    const source = toRgb(value);
+    if (!source) return null;
+
+    return BUDGET_GROUP_COLORS
+        .map(color => ({ color, distance: getRgbDistance(source, toRgb(color)) }))
+        .sort((first, second) => first.distance - second.distance)[0];
+}
+
+export function getBudgetGroupColorSuggestion(value) {
+    const normalized = readColor(value);
+    const nearest = getNearestBudgetGroupColor(normalized);
+    if (!nearest || nearest.color.toLowerCase() === normalized.toLowerCase()) return null;
+    return nearest.distance > BUDGET_GROUP_COLOR_SUGGESTION_THRESHOLD ? nearest : null;
 }
 
 function normalizeCadence(value) {
