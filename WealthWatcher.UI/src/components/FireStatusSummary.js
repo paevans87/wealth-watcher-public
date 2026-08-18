@@ -6,6 +6,7 @@ import { isFeatureEnabled } from '../utils/featureFlags.js';
 import { getBudgetGroupTotal, getBudgetGroups, isIncomeBudgetGroup } from '../pages/budgetConfig.js';
 
 export const FIRE_STATUS_CARD_ID = 'fire-status-dashboard-card';
+export const BUDGET_UNALLOCATED_PROMPT_THRESHOLD = 0.05;
 
 const BUDGET_CADENCE_MONTHS = Object.freeze({
     monthly: 1,
@@ -28,14 +29,32 @@ function getMonthlyAmount(item) {
     return amount / (BUDGET_CADENCE_MONTHS[cadence] || 1);
 }
 
-function getMonthlyBudgetUnallocated(settings = store.state.budgetSettings || {}) {
+function getMonthlyBudgetAllocation(settings = store.state.budgetSettings || {}) {
     const groups = getBudgetGroups(settings);
     const totalFor = group => getBudgetGroupTotal(group, getMonthlyAmount);
     const income = groups.find(isIncomeBudgetGroup);
+    const incomeAmount = income ? totalFor(income) : 0;
     const allocated = groups
         .filter(group => !isIncomeBudgetGroup(group))
         .reduce((total, group) => total + totalFor(group), 0);
-    return (income ? totalFor(income) : 0) - allocated;
+    return {
+        income: incomeAmount,
+        allocated,
+        unallocated: incomeAmount - allocated
+    };
+}
+
+function getMonthlyBudgetUnallocated(settings = store.state.budgetSettings || {}) {
+    return getMonthlyBudgetAllocation(settings).unallocated;
+}
+
+export function shouldPromptForUnallocatedBudget({ income, unallocated } = {}) {
+    const monthlyIncome = Number(income);
+    const monthlyUnallocated = Number(unallocated);
+    return Number.isFinite(monthlyIncome)
+        && monthlyIncome > 0
+        && Number.isFinite(monthlyUnallocated)
+        && monthlyUnallocated >= monthlyIncome * BUDGET_UNALLOCATED_PROMPT_THRESHOLD;
 }
 
 function formatMoney(value) {
@@ -106,8 +125,9 @@ export function getFireStatusAction({ fireSummary, projection = {} } = {}) {
         return { label: 'Review FIRE assumptions', href: '#fire' };
     }
 
-    const unallocated = getMonthlyBudgetUnallocated();
-    if (isFeatureEnabled('budget') && fireSummary.gap > 0 && unallocated > 0) {
+    const budgetAllocation = getMonthlyBudgetAllocation();
+    const unallocated = budgetAllocation.unallocated;
+    if (isFeatureEnabled('budget') && fireSummary.gap > 0 && shouldPromptForUnallocatedBudget(budgetAllocation)) {
         return {
             label: `Review ${formatMoney(unallocated)} unallocated in Budget`,
             href: '#budget'

@@ -45,6 +45,8 @@ test('v2 flow renders SVG, mobile and accessible equivalents with group actions'
     assert.match(target.innerHTML, /data-budget-v2-flow-action="group" data-budget-group="bills"/);
     assert.match(target.innerHTML, /class="budget-v2-flow-mobile-source" style="--budget-flow-accent: #06b6d4"/);
     assert.match(target.innerHTML, /<li style="--budget-flow-accent: #ef4444"><button/);
+    assert.match(target.innerHTML, /Bills <tspan class="budget-flow-svg-value obfuscate-val">\(£1800\.00\)<\/tspan>/);
+    assert.match(target.innerHTML, /Bills <strong class="budget-flow-inline-value obfuscate-val">\(£1800\.00\)<\/strong>/);
 
     await target.dispatch('click', {
         target: { closest: () => ({ dataset: { budgetV2FlowAction: 'group', budgetGroup: 'bills' } }) }
@@ -129,12 +131,12 @@ test('v2 flow source bar spans the rendered flow stack', async () => {
 
     const rects = [...target.innerHTML.matchAll(/<rect class="budget-v2-flow-node" x="([\d.]+)" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)]
         .map(match => ({ x: Number(match[1]), y: Number(match[2]), height: Number(match[3]) }));
-    const source = rects.find(rect => rect.x === 48);
-    const targets = rects.filter(rect => rect.x === 690);
+    const source = rects.find(rect => rect.x === 220);
+    const targets = rects.filter(rect => rect.x === 620);
     assert.ok(source);
     assert.equal(targets.length, 3);
     assert.ok(Math.abs(source.y - targets[0].y) < 0.01);
-    assert.ok(targets[1].y - (targets[0].y + targets[0].height) >= 18);
+    assert.ok(targets[1].y - (targets[0].y + targets[0].height) >= 24);
     assert.ok(Math.abs((source.y + source.height) - (targets.at(-1).y + targets.at(-1).height)) < 0.01);
 });
 
@@ -165,5 +167,29 @@ test('v2 flow uses the source colour for the drilldown source bar', () => {
         formatter: value => `£${value.toFixed(2)}`
     });
 
-    assert.match(target.innerHTML, /<rect class="budget-v2-flow-node" x="48"[^>]+fill="#123abc"/);
+    assert.match(target.innerHTML, /<rect class="budget-v2-flow-node" x="220"[^>]+fill="#123abc"/);
+});
+
+test('v2 flow expands its canvas for large item lists', () => {
+    const target = createTarget();
+    const rows = Array.from({ length: 24 }, (_, index) => ({
+        label: `Item ${index + 1}`,
+        value: 100,
+        color: '#123abc'
+    }));
+    renderBudgetV2Flow(target, model('item', rows, { label: 'Bills · General', value: 2400 }), {
+        formatter: value => `£${value.toFixed(2)}`
+    });
+
+    const viewBox = target.innerHTML.match(/viewBox="0 0 920 ([\d.]+)"/);
+    assert.ok(viewBox);
+    const svgHeight = Number(viewBox[1]);
+    assert.ok(svgHeight > 420);
+
+    const targetRects = [...target.innerHTML.matchAll(/<rect class="budget-v2-flow-node" x="620" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)];
+    assert.equal(targetRects.length, rows.length);
+    assert.match(target.innerHTML, /class="budget-flow-svg budget-v2-flow-svg is-dense"/);
+    const lastRect = targetRects.at(-1);
+    assert.ok(Number(lastRect[1]) + Number(lastRect[2]) < svgHeight);
+    assert.doesNotMatch(target.innerHTML, /y="-/);
 });

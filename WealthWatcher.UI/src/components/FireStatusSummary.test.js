@@ -7,7 +7,8 @@ import {
     buildFireStatusViewModel,
     formatProjectionDate,
     getFireStatusAction,
-    renderFireStatusSummary
+    renderFireStatusSummary,
+    shouldPromptForUnallocatedBudget
 } from './FireStatusSummary.js';
 
 const originalFeatureSettings = { ...store.state.featureSettings };
@@ -72,6 +73,23 @@ test('FIRE status next action prioritises setup and forecast recovery', () => {
     assert.deepEqual(getFireStatusAction({ fireSummary: setup, projection: { status: 'projected' } }), {
         label: 'Configure FIRE settings',
         href: '#settings?panel=fire-settings&focus=fire-tracker-settings'
+    });
+});
+
+test('FIRE status only prompts for a meaningful unallocated budget balance', () => {
+    assert.equal(shouldPromptForUnallocatedBudget({ income: 5000, unallocated: 38.54 }), false);
+    assert.equal(shouldPromptForUnallocatedBudget({ income: 5000, unallocated: 250 }), true);
+
+    store.state.featureSettings = { ...originalFeatureSettings, fire: true, tracker: true, forecast: true, budget: true };
+    store.state.budgetSettings = {
+        income: [{ amount: 5000 }],
+        bills: [{ amount: 4961.46 }],
+        savings: [],
+        spend: []
+    };
+    assert.deepEqual(getFireStatusAction({ fireSummary: readySummary(), projection: { status: 'projected' } }), {
+        label: 'Review FIRE plan',
+        href: '#fire'
     });
 });
 

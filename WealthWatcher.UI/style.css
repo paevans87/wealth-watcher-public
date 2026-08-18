@@ -6666,6 +6666,47 @@ body.obfuscated h1 .obfuscate-val {
     min-width: 0;
 }
 
+.budget-over-budget-alert {
+    align-items: flex-start;
+    background: linear-gradient(135deg, rgba(127, 29, 29, 0.42), rgba(69, 10, 10, 0.28));
+    border: 1px solid rgba(248, 113, 113, 0.45);
+    border-radius: 10px;
+    color: #fee2e2;
+    display: flex;
+    gap: 0.7rem;
+    margin: 0 0 1rem;
+    padding: 0.8rem 1rem;
+}
+
+.budget-over-budget-alert[hidden] { display: none; }
+
+.budget-over-budget-alert-icon {
+    align-items: center;
+    background: rgba(248, 113, 113, 0.18);
+    border: 1px solid rgba(248, 113, 113, 0.55);
+    border-radius: 999px;
+    color: #fecaca;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    font-weight: 800;
+    height: 1.35rem;
+    justify-content: center;
+    width: 1.35rem;
+}
+
+.budget-over-budget-alert strong,
+.budget-over-budget-alert p { margin: 0; }
+
+.budget-over-budget-alert strong { font-size: 0.82rem; }
+
+.budget-over-budget-alert p {
+    color: #fecaca;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    margin-top: 0.15rem;
+}
+
 .budget-flow-panel {
     min-width: 0;
     overflow: hidden;
@@ -6740,6 +6781,12 @@ body.obfuscated h1 .obfuscate-val {
 .budget-flow-svg-value {
     fill: var(--text-muted);
     font-size: 14px;
+    font-weight: 600;
+}
+
+.budget-flow-inline-value {
+    color: var(--text-muted);
+    font-size: 0.76rem;
     font-weight: 600;
 }
 
@@ -7502,6 +7549,11 @@ body.obfuscated h1 .obfuscate-val {
 .budget-line-editor-delete { color: #fca5a5; }
 .budget-line-editor-delete:hover,
 .budget-line-editor-delete:focus-visible { background: rgba(239, 68, 68, 0.12); }
+.budget-line-editor-delete.is-confirming {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(248, 113, 113, 0.55);
+    color: #fee2e2;
+}
 
 body.form-flyout-open { overflow: hidden; }
 
@@ -7827,9 +7879,15 @@ body.form-flyout-open { overflow: hidden; }
 
 .budget-v2-flow-svg {
     display: block;
+    max-height: none;
+    max-width: min(100%, 1200px);
     margin-top: 0.4rem;
+    margin-left: auto;
+    margin-right: auto;
     min-height: 15rem;
 }
+
+.budget-v2-flow-svg.is-dense { max-width: min(100%, 960px); }
 
 .budget-v2-flow-node-group {
     cursor: pointer;

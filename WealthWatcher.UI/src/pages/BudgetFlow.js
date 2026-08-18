@@ -8,8 +8,8 @@ const SVG_HEIGHT = 420;
 const SVG_TOP = 72;
 const SVG_BOTTOM = 348;
 const SVG_NODE_WIDTH = 22;
-const SVG_SOURCE_X = 48;
-const SVG_TARGET_X = 690;
+const SVG_SOURCE_X = 220;
+const SVG_TARGET_X = 620;
 const DRILLDOWN_NODE_GAP = 40;
 
 function finitePositive(value) {
@@ -183,6 +183,7 @@ function buildNodeGroup(model, node, {
     const displayedValue = valueText === undefined
         ? formatAmount(node.amount, formatter, obfuscated)
         : valueText;
+    const textY = labelY + Math.max(safeHeight / 2, 9);
     const nodeTitle = node.assetName
         ? `<title>${escapeHtml(`${nodeLabel(node)} linked to ${node.assetName}`)}</title>`
         : '';
@@ -190,8 +191,7 @@ function buildNodeGroup(model, node, {
         ${nodeTitle}
         ${hitArea}
         <rect class="budget-flow-node budget-flow-node-${escapeHtml(node.id)}" data-budget-flow-node="${escapeHtml(node.id)}" x="${x}" y="${y.toFixed(2)}" width="${SVG_NODE_WIDTH}" height="${safeHeight.toFixed(2)}" rx="5" fill="${safeCssColor(node.color)}" aria-hidden="true"></rect>
-        <text class="budget-flow-svg-label" x="${labelX}" y="${(labelY + Math.max(safeHeight / 2, 4) - 4).toFixed(2)}"${anchorAttribute} aria-hidden="true">${escapeHtml(nodeLabel(node))}</text>
-        <text class="budget-flow-svg-value obfuscate-val" x="${labelX}" y="${(labelY + Math.max(safeHeight / 2, 4) + 16).toFixed(2)}"${anchorAttribute} aria-hidden="true">${escapeHtml(displayedValue)}</text>
+        <text class="budget-flow-svg-label" x="${labelX}" y="${textY.toFixed(2)}"${anchorAttribute} aria-hidden="true">${escapeHtml(nodeLabel(node))} <tspan class="budget-flow-svg-value obfuscate-val">(${escapeHtml(displayedValue)})</tspan></text>
     </g>`;
 }
 
@@ -276,8 +276,7 @@ function buildOverviewSvg(model, formatter, obfuscated) {
     const fundingGapMarkup = fundingGapLink && fundingGapNode
         ? `<path class="budget-flow-warning-link" data-budget-flow-link="funding-gap-link" d="M ${(SVG_TARGET_X + SVG_NODE_WIDTH).toFixed(2)} ${(fundingGapY + fundingGapHeight / 2).toFixed(2)} C ${(SVG_TARGET_X + 34).toFixed(2)} ${(fundingGapY + fundingGapHeight / 2).toFixed(2)}, ${(fundingGapX - 22).toFixed(2)} ${(fundingGapY + fundingGapHeight / 2).toFixed(2)}, ${fundingGapX.toFixed(2)} ${(fundingGapY + fundingGapHeight / 2).toFixed(2)}" stroke="#ef4444" stroke-width="${fundingGapHeight.toFixed(2)}" stroke-dasharray="6 4" opacity="0.9" fill="none" aria-hidden="true"></path>
             <rect class="budget-flow-node budget-flow-node-funding-gap" data-budget-flow-node="funding-gap" x="${fundingGapX.toFixed(2)}" y="${fundingGapY.toFixed(2)}" width="${SVG_NODE_WIDTH}" height="${fundingGapHeight.toFixed(2)}" rx="5" fill="#ef4444" aria-hidden="true"></rect>
-            <text class="budget-flow-svg-label budget-flow-svg-warning-label" x="${fundingGapX + SVG_NODE_WIDTH + 18}" y="${(fundingGapY + fundingGapHeight / 2 - 4).toFixed(2)}">Funding gap</text>
-            <text class="budget-flow-svg-value budget-flow-svg-warning-value obfuscate-val" x="${fundingGapX + SVG_NODE_WIDTH + 18}" y="${(fundingGapY + fundingGapHeight / 2 + 16).toFixed(2)}">${escapeHtml(formatAmount(fundingGapNode.amount, formatter, obfuscated))}</text>`
+            <text class="budget-flow-svg-label budget-flow-svg-warning-label" x="${fundingGapX + SVG_NODE_WIDTH + 18}" y="${(fundingGapY + fundingGapHeight / 2 + 9).toFixed(2)}">Funding gap <tspan class="budget-flow-svg-value budget-flow-svg-warning-value obfuscate-val">(${escapeHtml(formatAmount(fundingGapNode.amount, formatter, obfuscated))})</tspan></text>`
         : '';
     const statusText = model.status === 'funding-gap'
         ? `<text class="budget-flow-svg-status budget-flow-svg-status-warning" x="${SVG_WIDTH - 30}" y="${SVG_HEIGHT - 32}" text-anchor="end">Funding gap ${escapeHtml(formatAmount(model.fundingGap, formatter, obfuscated))}</text>`
@@ -339,7 +338,7 @@ function buildDrilldownSvg(model, selectedCategory, items, formatter, obfuscated
     let sourceOffset = (sourceHeight - destinationHeights.reduce((total, height) => total + height, 0)) / 2;
     if (!Number.isFinite(sourceOffset)) sourceOffset = 0;
 
-    const drilldownSourceX = 180;
+    const drilldownSourceX = 220;
     const sourceX = drilldownSourceX + SVG_NODE_WIDTH;
     const targetX = SVG_TARGET_X;
     const controlX = sourceX + ((targetX - sourceX) / 2);
