@@ -287,6 +287,12 @@ export function setupAssetTypeahead(
         setAssetTypeaheadOpen(picker, true);
     };
     const choosePickerAsset = (picker, assetId) => {
+        const normalizedAssetId = String(assetId || '').trim();
+        const selectedAsset = getAssets(getAssetsForPicker, picker)
+            .find(asset => String(asset.Id) === normalizedAssetId);
+        const state = getAssetTypeaheadState(picker);
+        if (state.value) state.value.value = normalizedAssetId;
+        if (state.search) state.search.value = selectedAsset?.DisplayName || '';
         onChoose?.(picker, assetId);
         setAssetTypeaheadOpen(picker, false);
     };
