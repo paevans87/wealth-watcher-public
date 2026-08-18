@@ -219,6 +219,16 @@ export function getBudgetItemCategory(item = {}) {
     return category || UNCATEGORISED_LABEL;
 }
 
+export function getRealBudgetItemCategory(item = {}) {
+    const category = readString(item.category, item.Category);
+    const normalized = category.toLowerCase();
+    return category
+        && normalized !== UNCATEGORISED_LABEL.toLowerCase()
+        && normalized !== 'uncategorized'
+        ? category
+        : '';
+}
+
 export function getBudgetGroupTotal(group = {}, monthlyAmount) {
     const amountFor = typeof monthlyAmount === 'function'
         ? monthlyAmount

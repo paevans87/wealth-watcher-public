@@ -31,6 +31,7 @@ import {
     getBudgetGroupTotal,
     getBudgetGroups,
     getBudgetItemCategory,
+    getRealBudgetItemCategory,
     isIncomeBudgetGroup,
     normalizeBudgetSettings,
     UNCATEGORISED_LABEL
@@ -424,8 +425,9 @@ function refreshBudgetViewAfterSettingsChange(settings = ensureBudgetSettings())
         return;
     }
 
-    if (currentChartView.level === 'item' && selectedGroup && !selectedGroup.items.some(item =>
-        getBudgetItemCategory(item) === currentChartView.category
+    if (currentChartView.level === 'item' && selectedGroup && (
+        !getRealBudgetItemCategory({ category: currentChartView.category })
+        || !selectedGroup.items.some(item => getRealBudgetItemCategory(item) === currentChartView.category)
     )) {
         loadBudgetView({ groupId: selectedGroup.id });
         return;
@@ -553,30 +555,54 @@ function getBudgetFlowData(settings, view, totals) {
 
     if (view.level === 'group') {
         const categories = new Map();
+        const uncategorisedItems = [];
         group.items.forEach(item => {
-            const category = getBudgetItemCategory(item);
+            const category = getRealBudgetItemCategory(item);
+            if (!category) {
+                uncategorisedItems.push(item);
+                return;
+            }
             categories.set(category, (categories.get(category) || 0) + getMonthlyBudgetAmount(item));
         });
+        const groupColor = getBudgetGroupColor(group);
+        const categoryRows = Array.from(categories.entries()).map(([category, value]) => ({
+            label: category,
+            value,
+            color: groupColor,
+            action: { type: 'category', groupId: group.id, category }
+        }));
+        const uncategorisedRows = uncategorisedItems.map(item => ({
+            label: item.name,
+            value: getMonthlyBudgetAmount(item),
+            color: groupColor,
+            action: null
+        }));
+        const hasCategories = categoryRows.length > 0;
+        const hasUncategorisedItems = uncategorisedRows.length > 0;
         return {
-            rows: Array.from(categories.entries()).map(([category, value]) => ({
-                label: category,
-                value,
-                color: getBudgetGroupColor(group),
-                action: { type: 'category', groupId: group.id, category }
-            })),
-            source: { label: group.name, value: totals.groupTotals[group.id] || 0, color: getBudgetGroupColor(group) },
+            rows: [...categoryRows, ...uncategorisedRows],
+            source: { label: group.name, value: totals.groupTotals[group.id] || 0, color: groupColor },
             sourceAction: {
                 type: 'navigation',
                 navigation: 'all',
                 ariaLabel: 'Back to all budget groups'
             },
             groupName: group.name,
-            summary: `${group.name} categories`,
-            caption: 'Select a category to see the line items assigned to it.'
+            summary: `${group.name} ${hasCategories ? 'categories' : 'items'}`,
+            caption: hasCategories && hasUncategorisedItems
+                ? 'Select a category to see its line items. Items without a category are shown directly.'
+                : hasCategories
+                    ? 'Select a category to see the line items assigned to it.'
+                    : 'Line items without a category are shown directly.'
         };
     }
 
-    const items = group.items.filter(item => getBudgetItemCategory(item) === view.category);
+    const category = getRealBudgetItemCategory({ category: view.category });
+    if (!category) {
+        currentChartView = { level: 'group', groupId: group.id, category: null };
+        return getBudgetFlowData(settings, currentChartView, totals);
+    }
+    const items = group.items.filter(item => getRealBudgetItemCategory(item) === category);
     return {
         rows: items.map(item => ({
             label: item.name,
@@ -585,7 +611,7 @@ function getBudgetFlowData(settings, view, totals) {
             action: null
         })),
         source: {
-            label: `${group.name} · ${view.category}`,
+            label: `${group.name} · ${category}`,
             value: items.reduce((total, item) => total + getMonthlyBudgetAmount(item), 0),
             color: getBudgetGroupColor(group)
         },
@@ -595,7 +621,7 @@ function getBudgetFlowData(settings, view, totals) {
             ariaLabel: `Back to ${group.name} categories`
         },
         groupName: group.name,
-        summary: `${group.name} · ${view.category}`,
+        summary: `${group.name} · ${category}`,
         caption: 'Line items assigned to this category.'
     };
 }

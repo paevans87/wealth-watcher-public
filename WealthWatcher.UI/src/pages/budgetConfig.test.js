@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
     getBudgetItemCategory,
+    getRealBudgetItemCategory,
     normalizeBudgetSettings,
     isIncomeBudgetGroup
 } from './budgetConfig.js';
@@ -43,6 +44,9 @@ test('v2 normalization keeps income locked and supports custom groups and catego
     assert.equal(settings.groups[1].name, 'Travel');
     assert.equal(settings.groups[1].color, '#123abc');
     assert.equal(getBudgetItemCategory(settings.groups[1].items[0]), 'Uncategorised');
+    assert.equal(getRealBudgetItemCategory(settings.groups[1].items[0]), '');
+    assert.equal(getRealBudgetItemCategory({ category: 'Uncategorized' }), '');
+    assert.equal(getRealBudgetItemCategory({ category: 'Accommodation' }), 'Accommodation');
 });
 
 test('saving normalization clears migration guidance without changing line items', () => {

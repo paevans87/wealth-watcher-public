@@ -398,6 +398,51 @@ test('budget v2 flow carries the selected group colour through every level', () 
     assert.equal(getBudgetFlowData(settings, { level: 'item', groupId: 'bills', category: 'Accommodation' }, totals).rows[0].color, '#123abc');
 });
 
+test('budget v2 flow shows uncategorised child items without inventing a category', () => {
+    reset();
+    const settings = {
+        version: 2,
+        groups: [
+            {
+                id: 'income',
+                name: 'Income',
+                kind: 'income',
+                role: 'income',
+                builtIn: true,
+                items: [{ id: 'salary', name: 'Salary', amount: 5000, category: 'Employment' }]
+            },
+            {
+                id: 'general',
+                name: 'General',
+                kind: 'custom',
+                builtIn: false,
+                items: [
+                    { id: 'groceries', name: 'Groceries', amount: 400, category: '' },
+                    { id: 'mortgage', name: 'Mortgage', amount: 1200, category: 'Accommodation' },
+                    { id: 'legacy-uncategorised', name: 'Legacy item', amount: 50, category: 'Uncategorised' }
+                ]
+            }
+        ]
+    };
+    const totals = getMonthlyBudgetTotals(settings);
+    const flow = getBudgetFlowData(settings, { level: 'group', groupId: 'general' }, totals);
+
+    assert.deepEqual(flow.rows.map(row => ({ label: row.label, value: row.value, action: row.action })), [
+        { label: 'Accommodation', value: 1200, action: { type: 'category', groupId: 'general', category: 'Accommodation' } },
+        { label: 'Groceries', value: 400, action: null },
+        { label: 'Legacy item', value: 50, action: null }
+    ]);
+    assert.equal(flow.rows.some(row => row.label === 'Uncategorised'), false);
+    assert.equal(flow.summary, 'General categories');
+
+    const staleUncategorisedView = getBudgetFlowData(settings, {
+        level: 'item',
+        groupId: 'general',
+        category: 'Uncategorised'
+    }, totals);
+    assert.equal(staleUncategorisedView.summary, 'General categories');
+});
+
 test('budget flow breakdown formats annual lines and linked assets', async () => {
     reset();
     store.state.assets = [{ Id: 'asset-isa', DisplayName: 'Stocks & Shares ISA' }];
