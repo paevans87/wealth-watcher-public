@@ -1,7 +1,6 @@
 import { store } from '../store/store.js';
 import { API_BASE_URL, fetchFreshStrict, saveDbSettings } from '../api/apiClient.js';
 import { formatter } from '../utils/formatters.js';
-import { isFeatureEnabled, setFeatureEnabled } from '../utils/featureFlags.js';
 import { showToast } from '../components/Toast.js';
 import { requestConfirmation } from '../components/ConfirmationModal.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
@@ -15,7 +14,6 @@ import {
 import {
     renderCatalogInputField,
     renderCurrencyInputField,
-    renderFeatureToggle,
     renderSelectField
 } from '../components/FormFields.js';
 import {
@@ -49,6 +47,7 @@ let budgetBoundForm = null;
 let budgetStorageMode = 'v2';
 let legacyFlowSelection = null;
 let collapsedBudgetGroupIds = new Set();
+let renderedBudgetGroupIds = new Set();
 let budgetLineEditorState = null;
 let budgetGroupEditorState = null;
 
@@ -198,13 +197,6 @@ function getBudgetItem(groupId, itemId, settings = ensureBudgetSettings()) {
 
 function getBudgetGroupColor(group, index = 0) {
     return safeCssColor(group?.color, BUDGET_GROUP_COLORS[index % BUDGET_GROUP_COLORS.length]);
-}
-
-function renderBudgetEnabledToggle() {
-    const target = document.getElementById('budget-setting-enabled-toggle');
-    if (!target || target.dataset.rendered === 'true') return;
-    target.innerHTML = renderFeatureToggle({ id: 'budget-setting-enabled', label: 'Enabled' });
-    target.dataset.rendered = 'true';
 }
 
 function renderBudgetEntryForms() {
@@ -738,12 +730,8 @@ function renderBudgetEmptyState() {
 }
 
 export function populateBudgetSettings() {
-    renderBudgetEnabledToggle();
     renderBudgetEntryForms();
     const budgetSettings = ensureBudgetSettings();
-    const enabledToggle = document.getElementById('budget-setting-enabled');
-    if (enabledToggle) enabledToggle.checked = isFeatureEnabled('budget');
-    updateBudgetDisabledDescription();
     const form = document.getElementById('budget-settings-form');
     if (form) closeAssetTypeaheads(form);
 
@@ -858,9 +846,26 @@ function renderBudgetGroup(group, index, totalGroups) {
     </section>`;
 }
 
+function syncCollapsedBudgetGroups(settings, target) {
+    const groupIds = settings.groups.map(group => group.id);
+    const firstRender = target.dataset.budgetGroupsInitialized !== 'true';
+    if (firstRender) {
+        collapsedBudgetGroupIds = new Set(groupIds);
+    } else {
+        const nextCollapsedIds = new Set([...collapsedBudgetGroupIds].filter(id => groupIds.includes(id)));
+        groupIds.forEach(groupId => {
+            if (!renderedBudgetGroupIds.has(groupId)) nextCollapsedIds.add(groupId);
+        });
+        collapsedBudgetGroupIds = nextCollapsedIds;
+    }
+    renderedBudgetGroupIds = new Set(groupIds);
+    target.dataset.budgetGroupsInitialized = 'true';
+}
+
 function renderBudgetGroups(settings) {
     const target = document.getElementById('budget-groups-editor');
     if (!target) return;
+    syncCollapsedBudgetGroups(settings, target);
     target.innerHTML = `${settings.groups.map((group, index) => renderBudgetGroup(group, index, settings.groups.length)).join('')}
         <div class="budget-add-group-form">
             <label><span>Add custom group</span><input id="budget-new-group-name" type="text" placeholder="e.g. Giving or Travel"></label>
@@ -1248,14 +1253,6 @@ async function deleteBudgetLineEditor() {
     }, { title: 'Budget item removed', message: `${item.name} was removed from ${group.name}.` });
 }
 
-function updateBudgetDisabledDescription() {
-    const isEnabled = isFeatureEnabled('budget');
-    const description = document.getElementById('budget-disabled-description');
-    if (description) description.hidden = isEnabled;
-    const form = document.getElementById('budget-settings-form');
-    if (form) form.hidden = !isEnabled;
-}
-
 function renderBudgetTable(tbodyId, array, color, category) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
@@ -1482,19 +1479,8 @@ function readBudgetAddItemForm(form) {
 }
 
 export function setupBudgetSettings() {
-    renderBudgetEnabledToggle();
     renderBudgetEntryForms();
     const form = document.getElementById('budget-settings-form');
-    const enabledToggle = document.getElementById('budget-setting-enabled');
-
-    if (enabledToggle && enabledToggle.dataset.budgetToggleInit !== 'true') {
-        enabledToggle.dataset.budgetToggleInit = 'true';
-        enabledToggle.addEventListener('change', async event => {
-            const saved = await setFeatureEnabled('budget', event.target.checked);
-            if (!saved) event.target.checked = isFeatureEnabled('budget');
-            updateBudgetDisabledDescription();
-        });
-    }
 
     if (form && budgetBoundForm !== form) {
         budgetSettingsBound = true;

@@ -6758,27 +6758,16 @@ body.obfuscated h1 .obfuscate-val {
     min-width: 0;
 }
 
-.budget-setting-toggle-host {
-    flex: 0 0 auto;
-    padding-top: 0.2rem;
-}
-
 .budget-configuration-copy {
     margin-top: 0.55rem;
 }
 
-.budget-disabled-description,
 .budget-validation-message {
     border-radius: 9px;
     font-size: 0.8rem;
     line-height: 1.45;
     margin: 1rem 0 0;
     padding: 0.65rem 0.8rem;
-}
-
-.budget-disabled-description {
-    background: rgba(148, 163, 184, 0.08);
-    color: var(--text-muted);
 }
 
 .budget-validation-message {
@@ -7473,7 +7462,6 @@ body.form-flyout-open { overflow: hidden; }
     .budget-category-heading { align-items: flex-start; flex-direction: column; }
     .budget-section-hint,
     .budget-configuration-copy { max-width: none; text-align: left; }
-    .budget-setting-toggle-host { align-self: flex-end; }
     .budget-configuration-header .collapsible-header-actions {
         align-items: center;
         align-self: stretch;

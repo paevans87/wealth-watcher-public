@@ -26,6 +26,7 @@ export const FEATURE_DEFINITIONS = Object.freeze({
         navId: 'nav-budget',
         route: '#budget',
         keepNavVisibleWhenDisabled: true,
+        alwaysEnabled: true,
         defaultEnabled: true
     }),
     milestones: Object.freeze({
@@ -40,7 +41,9 @@ export function normalizeFeatureSettings(settings = {}) {
     const normalized = { ...source };
 
     Object.entries(FEATURE_DEFINITIONS).forEach(([featureKey, definition]) => {
-        if (typeof normalized[featureKey] !== 'boolean') {
+        if (definition.alwaysEnabled) {
+            normalized[featureKey] = true;
+        } else if (typeof normalized[featureKey] !== 'boolean') {
             normalized[featureKey] = definition.defaultEnabled;
         }
     });
@@ -51,6 +54,7 @@ export function normalizeFeatureSettings(settings = {}) {
 export function isFeatureEnabled(featureKey, visited = new Set()) {
     const definition = FEATURE_DEFINITIONS[featureKey];
     if (!definition) return false;
+    if (definition.alwaysEnabled) return true;
     if (visited.has(featureKey)) return false;
     visited.add(featureKey);
 
@@ -79,7 +83,7 @@ export function applyFeatureVisibility() {
 }
 
 export async function setFeatureEnabled(featureKey, enabled) {
-    if (!FEATURE_DEFINITIONS[featureKey]) return false;
+    if (!FEATURE_DEFINITIONS[featureKey] || FEATURE_DEFINITIONS[featureKey].alwaysEnabled) return false;
 
     const featureLabel = featureKey.charAt(0).toUpperCase() + featureKey.slice(1);
 
