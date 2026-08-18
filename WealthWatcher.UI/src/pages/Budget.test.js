@@ -85,6 +85,8 @@ function reset() {
     };
     elements.set('budget-view', budgetView);
     elements.set('budget-overview-content', createElement('budget-overview-content'));
+    elements.set('budget-over-budget-alert', createElement('budget-over-budget-alert'));
+    elements.set('budget-over-budget-alert-message', createElement('budget-over-budget-alert-message'));
     elements.set('nav-budget', createElement('nav-budget'));
     requests = [];
     saveSucceeds = true;
@@ -269,6 +271,7 @@ test('budget overview explains missing configuration and keeps setup on the Budg
     assert.equal(elements.get('budget-view').children[1], emptyState);
     assert.equal(emptyState.hidden, false);
     assert.equal(elements.get('budget-overview-content').hidden, true);
+    assert.equal(elements.get('budget-over-budget-alert').hidden, true);
 });
 
 test('budget overview shows configured totals and clickable flow nodes, then hides both when cleared', async () => {
@@ -499,6 +502,8 @@ test('budget flow reports a funding gap without negative geometry', () => {
         spend: [{ name: 'Spend', amount: 200 }]
     };
     loadBudgetView();
+    assert.equal(elements.get('budget-over-budget-alert').hidden, false);
+    assert.match(elements.get('budget-over-budget-alert-message').textContent, /£400\.00 more than your monthly income/);
     const rendered = elements.get('budget-flow-renderer').innerHTML;
     assert.match(rendered, /data-budget-flow-node="funding-gap"/);
     assert.match(rendered, /data-budget-flow-link="funding-gap-link"/);

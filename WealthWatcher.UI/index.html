@@ -254,6 +254,14 @@
                 </div>
             </header>
 
+            <div id="budget-over-budget-alert" class="budget-over-budget-alert" role="alert" aria-live="assertive" hidden>
+                <span class="budget-over-budget-alert-icon" aria-hidden="true">!</span>
+                <div>
+                    <strong>Over budget</strong>
+                    <p id="budget-over-budget-alert-message"></p>
+                </div>
+            </div>
+
             <div id="budget-overview-content" hidden>
                 <section class="card glass-panel full-width-col budget-flow-card" aria-labelledby="budget-flow-title">
                     <h4 class="section-title budget-breakdown-title" id="budget-flow-title">Budget Flow</h4>
@@ -323,7 +331,7 @@
                         <div id="budget-line-editor-preview" class="budget-line-editor-preview" role="status" aria-live="polite"></div>
                         <p id="budget-line-editor-validation" class="budget-line-editor-validation" role="alert" hidden></p>
                         <div class="budget-line-editor-actions">
-                            <button id="budget-line-editor-delete" class="budget-line-editor-delete action-btn" type="button" data-budget-editor-delete hidden>Delete line</button>
+                            <button id="budget-line-editor-delete" class="budget-line-editor-delete action-btn" type="button" data-budget-editor-delete hidden>Delete</button>
                             <div class="budget-line-editor-actions-right">
                                 <button class="action-btn budget-line-editor-cancel" type="button" data-flyout-close>Cancel</button>
                                 <button class="action-btn catalog-add-button" type="submit">Save line</button>

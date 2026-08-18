@@ -287,6 +287,7 @@ export function loadBudgetView(viewMode = null) {
     const budgetSettings = ensureBudgetSettings();
     const hasBudgetData = hasConfiguredBudgetData(budgetSettings);
     if (!hasBudgetData) {
+        renderBudgetOverBudgetAlert({ unallocated: 0 });
         setPageStatus('budget-view', PAGE_STATUS.EMPTY);
         clearBudgetReadyState();
         renderBudgetEmptyState();
@@ -296,6 +297,7 @@ export function loadBudgetView(viewMode = null) {
     setPageStatus('budget-view', PAGE_STATUS.READY);
     showBudgetReadyState();
     const totals = getMonthlyBudgetTotals(budgetSettings);
+    renderBudgetOverBudgetAlert(totals);
 
     // Preserve the existing SVG flow mount for older host fragments and its
     // keyboard/mobile interaction contract. The current page uses the richer
@@ -440,6 +442,7 @@ function clearBudgetReadyState() {
     budgetChartInstance?.destroy?.();
     budgetChartInstance = null;
     currentChartView = { level: 'overview', groupId: null, category: null };
+    renderBudgetOverBudgetAlert({ unallocated: 0 });
 
     const overviewContent = document.getElementById('budget-overview-content');
     if (overviewContent) overviewContent.hidden = true;
@@ -472,6 +475,19 @@ function clearBudgetReadyState() {
         headers: [{ key: 'label', label: 'Budget level' }, { key: 'value', label: 'Monthly amount' }],
         rows: []
     });
+}
+
+function renderBudgetOverBudgetAlert(totals = {}) {
+    const alert = document.getElementById('budget-over-budget-alert');
+    if (!alert) return;
+
+    const unallocated = Number(totals.unallocated);
+    const overBudget = Number.isFinite(unallocated) && unallocated < 0;
+    alert.hidden = !overBudget;
+    if (!overBudget) return;
+
+    const message = document.getElementById('budget-over-budget-alert-message');
+    if (message) message.textContent = `You've allocated ${formatter.format(Math.abs(unallocated))} more than your monthly income. Adjust a group or line item to bring the plan back within budget.`;
 }
 
 function renderBudgetSummary(totals) {
@@ -1136,6 +1152,10 @@ function chooseBudgetLineEditorTypeahead(picker, value) {
 function updateBudgetLineEditorField(input) {
     const state = budgetLineEditorState;
     if (!state || !input?.dataset?.budgetEditorField) return;
+    if (state.deleteArmed) {
+        state.deleteArmed = false;
+        renderBudgetLineEditorDeleteButton();
+    }
     const field = input.dataset.budgetEditorField;
     if (field === 'name') state.draft.name = input.value;
     if (field === 'amount') state.draft.amount = input.value;
@@ -1146,6 +1166,7 @@ function updateBudgetLineEditorField(input) {
         if (title) title.textContent = input.value.trim();
     }
     renderBudgetLineEditorPreview();
+    renderBudgetLineEditorDeleteButton();
 }
 
 function openBudgetLineEditor(groupId, itemId = null) {
@@ -1161,6 +1182,7 @@ function openBudgetLineEditor(groupId, itemId = null) {
         groupId: group.id,
         itemId: item?.id || null,
         isNew: !item,
+        deleteArmed: false,
         showValidation: false,
         draft: {
             name: item?.name || '',
@@ -1174,13 +1196,12 @@ function openBudgetLineEditor(groupId, itemId = null) {
     const kicker = document.getElementById('budget-line-editor-kicker');
     const title = document.getElementById('budget-line-editor-title');
     const copy = document.getElementById('budget-line-editor-copy');
-    const deleteButton = document.getElementById('budget-line-editor-delete');
     if (kicker) kicker.textContent = item ? 'Edit line item' : 'Add line item';
     if (title) title.textContent = item?.name || 'New budget line';
     if (copy) copy.textContent = item
         ? `Update this line in ${group.name}. Changes are saved when you choose Save line.`
         : `Add a line to ${group.name}. You can assign a category now or leave it uncategorised.`;
-    if (deleteButton) deleteButton.hidden = !item;
+    renderBudgetLineEditorDeleteButton();
 
     renderBudgetLineEditorFields();
     renderBudgetLineEditorPreview();
@@ -1231,19 +1252,37 @@ function submitBudgetLineEditor(event) {
     if (saved) closeBudgetLineEditor({ restoreFocus: false });
 }
 
-async function deleteBudgetLineEditor() {
+function renderBudgetLineEditorDeleteButton() {
+    const deleteButton = document.getElementById('budget-line-editor-delete');
+    const state = budgetLineEditorState;
+    if (!deleteButton) return;
+
+    const itemName = state?.draft?.name || 'budget item';
+    deleteButton.hidden = !state || state.isNew;
+    if (deleteButton.hidden) return;
+
+    const confirming = state.deleteArmed === true;
+    deleteButton.textContent = confirming ? 'Confirm delete' : 'Delete';
+    deleteButton.dataset.budgetEditorDeleteState = confirming ? 'confirm' : 'idle';
+    deleteButton.setAttribute?.('aria-label', confirming ? `Confirm delete ${itemName}` : `Delete ${itemName}`);
+    deleteButton.classList?.toggle?.('is-confirming', confirming);
+}
+
+function deleteBudgetLineEditor() {
     const state = budgetLineEditorState;
     if (!state || state.isNew) return;
     const settings = ensureBudgetSettings();
     const group = getBudgetGroup(state.groupId, settings);
     const item = getBudgetItem(state.groupId, state.itemId, settings);
     if (!group || !item) return;
-    const confirmed = await requestConfirmation({
-        title: `Delete ${item.name}?`,
-        message: `This removes the line from ${group.name}.`,
-        confirmLabel: 'Delete line'
-    });
-    if (!confirmed) return;
+
+    if (!state.deleteArmed) {
+        state.deleteArmed = true;
+        renderBudgetLineEditorDeleteButton();
+        return;
+    }
+
+    state.deleteArmed = false;
     closeBudgetLineEditor({ restoreFocus: false });
     updateBudgetState(current => {
         const currentGroup = getBudgetGroup(state.groupId, current);
@@ -1723,5 +1762,6 @@ export {
     ensureBudgetSettings,
     getBudgetCategoryOptions,
     getBudgetFlowData,
-    renderBudgetLineEditorFieldMarkup
+    renderBudgetLineEditorFieldMarkup,
+    renderBudgetLineEditorDeleteButton
 };

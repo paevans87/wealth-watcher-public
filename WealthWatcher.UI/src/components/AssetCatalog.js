@@ -542,10 +542,22 @@ function setupClassificationEditor(refresh) {
     document.getElementById('classification-edit-modal')?.addEventListener('click', event => {
         if (event.target.id === 'classification-edit-modal') closeClassificationEditor();
     });
-    document.getElementById('classification-edit-archive')?.addEventListener('click', async () => {
+    document.getElementById('classification-edit-archive')?.addEventListener('click', async event => {
         const state = editorState;
+        const archive = event.target?.closest?.('#classification-edit-archive');
+        if (!state || !archive) return;
+
+        if (!state.archiveConfirming) {
+            state.archiveConfirming = true;
+            archive.textContent = `Confirm archive ${state.isAssetGroup ? 'Asset Group' : state.isAssetKind ? 'Asset Kind' : 'asset'}`;
+            archive.dataset.archiveState = 'confirm';
+            archive.setAttribute?.('aria-label', `Confirm archive ${state.name}`);
+            return;
+        }
+
+        const stateToArchive = { ...state };
         closeClassificationEditor();
-        if (state) await archiveValue(state, refresh);
+        await archiveValue(stateToArchive, refresh, { confirmed: true });
     });
 }
 
@@ -626,7 +638,7 @@ async function saveValue(form, refresh) {
     });
 }
 
-async function archiveValue(state, refresh) {
+async function archiveValue(state, refresh, { confirmed = false } = {}) {
     if (state.isAssetKind && isUnclassifiedAssetKind(findValue(state.id)?.value)) return;
 
     const mappingCount = state.isAssetGroup
@@ -641,7 +653,7 @@ async function archiveValue(state, refresh) {
         : '';
     const noun = state.isAssetGroup ? 'Group' : state.isAssetKind ? 'Type' : 'asset';
 
-    if (!await requestConfirmation({
+    if (!confirmed && !await requestConfirmation({
         title: `Archive ${noun}?`,
         message: `Archive ${state.name}?${mappingNotice} Existing asset history will be retained.`,
         confirmLabel: `Archive ${noun}`
@@ -1280,6 +1292,8 @@ function openValueEditor(valueId, options = {}) {
         archive.hidden = Boolean(editorState.isSystemKind);
         archive.disabled = Boolean(editorState.isSystemKind);
         archive.textContent = `Archive ${editorState.isAssetGroup ? 'Asset Group' : editorState.isAssetKind ? 'Asset Kind' : 'asset'}`;
+        archive.dataset.archiveState = 'idle';
+        archive.setAttribute?.('aria-label', `Archive ${editorState.name}`);
     }
     showClassificationEditor(editorState.isAsset && options.focusGroup
         ? 'classification-edit-group'

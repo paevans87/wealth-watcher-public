@@ -7,7 +7,8 @@ const FLOW_BOTTOM = 348;
 const SOURCE_X = 48;
 const TARGET_X = 690;
 const NODE_WIDTH = 22;
-const FLOW_GAP = 18;
+const FLOW_GAP = 24;
+const MIN_ROW_HEIGHT = 16;
 
 function finiteAmount(value) {
     const amount = Number(value);
@@ -65,8 +66,7 @@ function buildNode({ x, y, height, labelX, labelY, label, value, color, action, 
                 : `View ${label} breakdown`);
     const safeHeight = Math.max(Number(height) || 0, 0);
     const textAnchor = source ? 'end' : 'start';
-    const textY = labelY + Math.max(safeHeight / 2, 4) - 4;
-    const valueY = labelY + Math.max(safeHeight / 2, 4) + 16;
+    const textY = labelY + Math.max(safeHeight / 2, 9);
     const visualLabelX = isCategory ? labelX + 10 : labelX;
     const roleMarkup = interactive
         ? ` role="button" tabindex="0" aria-label="${escapeHtml(actionLabel)}"${actionMarkup}`
@@ -83,8 +83,7 @@ function buildNode({ x, y, height, labelX, labelY, label, value, color, action, 
         ${interactive ? `<rect class="budget-flow-node-hit-area" x="${hitX.toFixed(2)}" y="${Math.max(0, y - 12).toFixed(2)}" width="${hitWidth.toFixed(2)}" height="${Math.max(safeHeight + 24, 48).toFixed(2)}" fill="#fff" opacity="0" aria-hidden="true"></rect>` : ''}
         <rect class="budget-v2-flow-node" x="${x}" y="${y.toFixed(2)}" width="${NODE_WIDTH}" height="${safeHeight.toFixed(2)}" rx="5" fill="${safeCssColor(color)}" aria-hidden="true"></rect>
         ${categoryMarker}
-        <text class="budget-flow-svg-label" x="${visualLabelX}" y="${textY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(label)}</text>
-        <text class="budget-flow-svg-value obfuscate-val" x="${visualLabelX}" y="${valueY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(formatAmount(value, formatter, obfuscated))}</text>
+        <text class="budget-flow-svg-label" x="${visualLabelX}" y="${textY.toFixed(2)}" text-anchor="${textAnchor}" aria-hidden="true">${escapeHtml(label)} <tspan class="budget-flow-svg-value obfuscate-val">(${escapeHtml(formatAmount(value, formatter, obfuscated))})</tspan></text>
     </g>`;
 }
 
@@ -92,18 +91,22 @@ function buildFlowSvg(model, formatter, obfuscated) {
     const rows = model.rows.filter(row => finiteAmount(row.value) > 0 || row.action);
     const sourceValue = finiteAmount(model.source?.value);
     const rowTotal = rows.reduce((total, row) => total + finiteAmount(row.value), 0);
-    const availableHeight = FLOW_BOTTOM - FLOW_TOP;
     const gap = rows.length > 1 ? FLOW_GAP : 0;
+    const minimumStackHeight = rows.length
+        ? (rows.length * MIN_ROW_HEIGHT) + (gap * Math.max(0, rows.length - 1))
+        : 30;
+    const availableHeight = Math.max(FLOW_BOTTOM - FLOW_TOP, minimumStackHeight);
+    const svgHeight = availableHeight + FLOW_TOP + (FLOW_HEIGHT - FLOW_BOTTOM);
     const gapTotal = gap * Math.max(0, rows.length - 1);
     const scale = Math.min(Math.max(availableHeight - gapTotal, 1) / Math.max(sourceValue, rowTotal, 1), 1);
-    const rawTargetHeights = rows.map(row => Math.max(finiteAmount(row.value) * scale, row.value > 0 ? 0 : 24));
+    const rawTargetHeights = rows.map(row => Math.max(finiteAmount(row.value) * scale, MIN_ROW_HEIGHT));
     const rawStackHeight = rawTargetHeights.reduce((total, height) => total + height, 0) + gapTotal;
     const fitScale = rawStackHeight > availableHeight ? availableHeight / rawStackHeight : 1;
     const targetHeights = rawTargetHeights.map(height => height * fitScale);
     const targetHeightTotal = targetHeights.reduce((total, height) => total + height, 0);
     const flowHeight = targetHeightTotal + gapTotal;
     const sourceHeight = rows.length ? flowHeight : 30;
-    const sourceY = (FLOW_HEIGHT - sourceHeight) / 2;
+    const sourceY = FLOW_TOP + (availableHeight - sourceHeight) / 2;
     let targetY = sourceY;
     let sourceOffset = Math.max((sourceHeight - targetHeightTotal) / 2, 0);
     const controlX = SOURCE_X + 310;
@@ -132,7 +135,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
         targetY += height + gap;
     });
 
-    return `<svg class="budget-flow-svg budget-v2-flow-svg" data-budget-v2-flow-svg viewBox="0 0 ${FLOW_WIDTH} ${FLOW_HEIGHT}" role="img" aria-labelledby="budget-v2-flow-title budget-v2-flow-caption">
+    return `<svg class="budget-flow-svg budget-v2-flow-svg" data-budget-v2-flow-svg viewBox="0 0 ${FLOW_WIDTH} ${svgHeight}" role="img" aria-labelledby="budget-v2-flow-title budget-v2-flow-caption">
         <title id="budget-v2-flow-title">${escapeHtml(model.summary)}</title>
         <desc id="budget-v2-flow-caption">${escapeHtml(model.caption)}</desc>
         ${linkMarkup.join('')}
@@ -160,9 +163,10 @@ function buildAccessibleFlowList(model, formatter, obfuscated) {
         ${model.rows.map(row => {
             const action = row.action;
             const attributes = actionAttributes(action);
+            const label = `<span>${escapeHtml(row.label)} <strong class="budget-flow-inline-value obfuscate-val">(${escapeHtml(formatAmount(row.value, formatter, obfuscated))})</strong></span>`;
             const control = action
-                ? `<button type="button" class="budget-flow-list-button"${attributes}><span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong></button>`
-                : `<div class="budget-flow-list-row"><span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong></div>`;
+                ? `<button type="button" class="budget-flow-list-button"${attributes}>${label}</button>`
+                : `<div class="budget-flow-list-row">${label}</div>`;
             return `<li>${control}</li>`;
         }).join('')}
     </ol>`;
@@ -172,15 +176,15 @@ function buildMobileFlow(model, formatter, obfuscated) {
     const sourceColor = safeCssColor(model.source?.color || '#06b6d4');
     return `<div class="budget-flow-mobile-view" data-budget-flow-mobile aria-label="${escapeHtml(model.summary)} mobile budget flow">
         <div class="budget-v2-flow-mobile-source" style="--budget-flow-accent: ${sourceColor}">
-            <strong>${escapeHtml(model.source?.label || 'Income')}</strong>
-            <span class="obfuscate-val">${escapeHtml(formatAmount(model.source?.value, formatter, obfuscated))}</span>
+            <strong>${escapeHtml(model.source?.label || 'Income')} <span class="budget-flow-inline-value obfuscate-val">(${escapeHtml(formatAmount(model.source?.value, formatter, obfuscated))})</span></strong>
         </div>
         <ul>${model.rows.map(row => {
             const color = safeCssColor(row.color || model.source?.color);
             const categoryMarker = row.action?.type === 'category'
                 ? '<span class="budget-flow-mobile-category-marker" aria-hidden="true">●</span>'
                 : '';
-            return `<li style="--budget-flow-accent: ${color}">${row.action ? `<button type="button" class="budget-flow-list-button"${actionAttributes(row.action)}>${categoryMarker}<span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong></button>` : `<span>${escapeHtml(row.label)}</span><strong class="obfuscate-val">${escapeHtml(formatAmount(row.value, formatter, obfuscated))}</strong>`}</li>`;
+            const label = `${categoryMarker}<span>${escapeHtml(row.label)}</span> <strong class="budget-flow-inline-value obfuscate-val">(${escapeHtml(formatAmount(row.value, formatter, obfuscated))})</strong>`;
+            return `<li style="--budget-flow-accent: ${color}">${row.action ? `<button type="button" class="budget-flow-list-button"${actionAttributes(row.action)}>${label}</button>` : `<span>${label}</span>`}</li>`;
         }).join('')}</ul>
     </div>`;
 }
