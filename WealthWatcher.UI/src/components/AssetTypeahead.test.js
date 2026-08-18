@@ -139,6 +139,8 @@ test('portaled existing asset options keep their selection handler', () => {
         fixture.options.dispatch('click', { target: choice });
 
         assert.deepEqual(selected, ['asset-aj']);
+        assert.equal(fixture.value.value, 'asset-aj');
+        assert.equal(fixture.search.value, 'AJ Bell - SIPP');
         assert.equal(fixture.options.hidden, true);
         assert.equal(fixture.options.parentNode, fixture.root);
     } finally {

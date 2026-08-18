@@ -32,13 +32,57 @@ export const DEMO_API_CONTRACT = Object.freeze([
         path: '/api/settings',
         body: {
             wealthWatcherBudgetSettings: JSON.stringify({
-                income: [{ id: 'contract-income', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null }],
-                bills: [{ id: 'contract-bill', name: 'Annual insurance', amount: 1200, cadence: 'annually', assetId: null }],
-                savings: [
-                    { id: 'contract-linked-saving', name: 'ISA contribution', amount: 500, cadence: 'monthly', assetId: 'asset-isa' },
-                    { id: 'contract-unlinked-saving', name: 'Rainy day fund', amount: 250, cadence: 'quarterly', assetId: null }
-                ],
-                spend: [{ id: 'contract-spend', name: 'Groceries', amount: 450, cadence: 'monthly', assetId: null }]
+                version: 2,
+                needsUpdate: false,
+                groups: [
+                    {
+                        id: 'income',
+                        name: 'Income',
+                        kind: 'income',
+                        role: 'income',
+                        builtIn: true,
+                        items: [{ id: 'contract-income', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null, category: 'Employment' }]
+                    },
+                    {
+                        id: 'bills',
+                        name: 'Bills',
+                        kind: 'custom',
+                        role: 'bills',
+                        builtIn: false,
+                        items: [{ id: 'contract-bill', name: 'Annual insurance', amount: 1200, cadence: 'annually', assetId: null, category: 'Protection' }]
+                    },
+                    {
+                        id: 'savings',
+                        name: 'Savings',
+                        kind: 'custom',
+                        role: 'savings',
+                        builtIn: false,
+                        items: [
+                            { id: 'contract-linked-saving', name: 'ISA contribution', amount: 500, cadence: 'monthly', assetId: 'asset-isa', category: 'Investing' },
+                            { id: 'contract-unlinked-saving', name: 'Rainy day fund', amount: 250, cadence: 'quarterly', assetId: null, category: 'Safety net' }
+                        ]
+                    },
+                    {
+                        id: 'spend',
+                        name: 'Spend',
+                        kind: 'custom',
+                        role: 'spend',
+                        builtIn: false,
+                        items: [{ id: 'contract-spend', name: 'Groceries', amount: 450, cadence: 'monthly', assetId: null, category: 'Food & household' }]
+                    }
+                ]
+            })
+        }
+    },
+    {
+        method: 'POST',
+        path: '/api/settings',
+        body: {
+            wealthWatcherBudgetSettings: JSON.stringify({
+                income: [{ id: 'legacy-contract-income', name: 'Legacy salary', amount: 6000 }],
+                bills: [{ id: 'legacy-contract-bill', name: 'Legacy insurance', amount: 1200 }],
+                savings: [],
+                spend: []
             })
         }
     },

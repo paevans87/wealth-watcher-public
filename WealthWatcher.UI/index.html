@@ -154,8 +154,6 @@
 
     <section id="fire-status-dashboard-card" class="card glass-panel full-width-col fire-status-dashboard-card" hidden aria-live="polite"></section>
 
-    <section id="milestones-dashboard-card" class="card glass-panel full-width-col milestones-dashboard-card" hidden aria-live="polite"></section>
-
     <div id="dashboard-skeleton" class="dashboard-skeleton" data-page-skeleton hidden aria-hidden="true">
         <section class="asset-group-section lane-section">
             <span class="skeleton skeleton-section-title"></span>
@@ -248,7 +246,7 @@
         </div>
 
         <!-- Budget View -->
-        <div id="budget-view" class="view" data-budget-page data-budget-state="loading" aria-busy="true">
+        <div id="budget-view" class="view" data-budget-page>
             <header class="budget-page-header">
                 <div class="header-left">
                     <h4>Monthly Allocation</h4>
@@ -256,83 +254,71 @@
                 </div>
             </header>
 
-            <div id="budget-loading-state" class="budget-page-state budget-loading-state" data-budget-state-panel="loading" role="status" hidden>
-                <span class="budget-loading-dot" aria-hidden="true"></span>
-                <span>Loading your monthly plan…</span>
-            </div>
-
-            <div id="budget-disabled-state" class="budget-page-state budget-disabled-state" data-budget-state-panel="disabled" role="status" hidden>
-                <strong>Budget is turned off</strong>
-                <span>Your saved budget lines are kept safely. Turn Budget on below to see the planned flow and edit them.</span>
-            </div>
-
-            <div id="budget-empty-state" class="budget-page-state budget-empty-state" data-budget-state-panel="empty" role="status" hidden>
-                <span class="budget-empty-kicker">Monthly allocation</span>
-                <h2>Give every pound a clear job.</h2>
-                <p>Add income, bills, savings and spending below to see a calm monthly flow from income to outcomes.</p>
-                <p class="budget-empty-note">Your first line will appear in the overview as soon as it is saved.</p>
-            </div>
-
-            <div id="budget-overview-content" data-budget-content hidden>
-                <section id="budget-flow-panel" class="card glass-panel full-width-col budget-flow-panel" data-budget-flow-panel aria-labelledby="budget-flow-title">
-                    <div class="budget-section-heading">
-                        <div>
-                            <span class="budget-section-kicker">Planned monthly flow</span>
-                            <h4 class="section-title" id="budget-flow-title">Where the plan goes</h4>
-                        </div>
-                        <span class="budget-section-hint">Amounts are converted to monthly equivalents.</span>
-                    </div>
-                    <div id="budget-flow-renderer" data-budget-flow-renderer aria-live="polite"></div>
+            <div id="budget-overview-content" hidden>
+                <section class="card glass-panel full-width-col budget-flow-card" aria-labelledby="budget-flow-title">
+                    <h4 class="section-title budget-breakdown-title" id="budget-flow-title">Budget Flow</h4>
+                    <p class="budget-flow-description">Select a group, then a category, to see the line items behind each amount.</p>
+                    <div id="budget-flow-renderer" class="budget-flow-renderer budget-v2-flow-renderer" aria-live="polite"></div>
                 </section>
             </div>
 
             <section id="budget-settings-pane" class="card glass-panel full-width-col budget-configuration-panel collapsible-pane" data-budget-configuration data-collapsible data-pane-id="monthly-budget" aria-labelledby="budget-configuration-title">
                 <div class="budget-configuration-header collapsible-header">
                     <div class="budget-section-heading">
-                        <div>
-                            <span class="budget-section-kicker">Budget setup</span>
-                            <h4 class="section-title" id="budget-configuration-title">Manage your monthly plan</h4>
-                        </div>
-                        <p class="budget-configuration-copy">Review the plan at a glance, then edit one line at a time. Annual and quarterly amounts are shown as monthly equivalents in the flow.</p>
+                        <span class="budget-section-kicker">Budget setup</span>
+                        <h4 class="section-title" id="budget-configuration-title">Manage your monthly plan</h4>
                     </div>
                     <div class="collapsible-header-actions">
-                        <div id="budget-setting-enabled-toggle" class="budget-setting-toggle-host"></div>
                         <span class="collapsible-indicator" aria-label="Toggle Budget setup">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </span>
                     </div>
                 </div>
                 <div class="collapsible-content">
-                    <p id="budget-disabled-description" class="feature-disabled-description budget-disabled-description" hidden>
-                        Budget is off. Your saved lines remain available when you turn it on again.
-                    </p>
-                    <p id="budget-validation-message" class="budget-validation-message" data-budget-validation-message role="alert" hidden></p>
-                    <div id="budget-plan-editor" class="budget-plan-editor" data-budget-plan-editor>
-                        <div class="budget-plan-toolbar">
-                            <div>
-                                <span class="budget-section-kicker">Plan lines</span>
-                                <h5>Income to outcomes</h5>
-                                <p id="budget-plan-line-count">Review your lines by category, then edit one at a time.</p>
-                            </div>
-                            <button id="budget-edit-plan-button" class="action-btn budget-edit-plan-button" type="button" data-budget-plan-edit aria-pressed="false">Edit plan</button>
-                        </div>
-                        <div id="budget-plan-groups" class="budget-plan-groups" data-budget-plan-groups aria-live="polite"></div>
-                    </div>
+                    <p id="budget-migration-note" class="budget-migration-note" role="note" hidden></p>
+                    <form id="budget-settings-form" aria-label="Budget settings">
+                        <div id="budget-groups-editor" class="budget-groups-editor" aria-live="polite"></div>
+                    </form>
                 </div>
             </section>
+
+            <div id="budget-group-editor" class="form-flyout budget-group-editor-flyout" data-form-flyout data-budget-group-editor hidden aria-hidden="true">
+                <div class="form-flyout-backdrop budget-group-editor-backdrop" data-flyout-close></div>
+                <section class="form-flyout-dialog budget-group-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="budget-group-editor-title" tabindex="-1">
+                    <div class="form-flyout-header budget-line-editor-header">
+                        <div>
+                            <span class="budget-section-kicker">Edit group</span>
+                            <h4 id="budget-group-editor-title">Budget group</h4>
+                        </div>
+                        <button class="form-flyout-close budget-line-editor-close" type="button" data-flyout-close aria-label="Close budget group editor">&times;</button>
+                    </div>
+                    <p id="budget-group-editor-copy" class="form-flyout-copy budget-line-editor-copy"></p>
+                    <form id="budget-group-editor-form" class="budget-group-editor-form" data-budget-group-editor-form aria-label="Budget group editor" novalidate>
+                        <div id="budget-group-editor-fields" class="budget-line-editor-fields"></div>
+                        <p id="budget-group-editor-validation" class="budget-line-editor-validation" role="alert" hidden></p>
+                        <div class="budget-line-editor-actions budget-group-editor-actions">
+                            <div></div>
+                            <div class="budget-line-editor-actions-right">
+                                <button class="action-btn budget-line-editor-cancel" type="button" data-flyout-close>Cancel</button>
+                                <button class="action-btn catalog-add-button" type="submit">Save group</button>
+                            </div>
+                        </div>
+                    </form>
+                </section>
+            </div>
 
             <div id="budget-line-editor" class="form-flyout budget-line-editor" data-form-flyout data-budget-line-editor hidden aria-hidden="true">
                 <div class="form-flyout-backdrop budget-line-editor-backdrop" data-flyout-close></div>
                 <section class="form-flyout-dialog budget-line-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="budget-line-editor-title" tabindex="-1">
                     <div class="form-flyout-header budget-line-editor-header">
                         <div>
-                            <span id="budget-line-editor-kicker" class="budget-section-kicker">Edit line</span>
-                            <h4 id="budget-line-editor-title">Budget line</h4>
+                            <span id="budget-line-editor-kicker" class="budget-section-kicker">Add line item</span>
+                            <h4 id="budget-line-editor-title">New budget line</h4>
                         </div>
                         <button class="form-flyout-close budget-line-editor-close" type="button" data-flyout-close aria-label="Close budget line editor">&times;</button>
                     </div>
                     <p id="budget-line-editor-copy" class="form-flyout-copy budget-line-editor-copy"></p>
-                    <form id="budget-line-editor-form" class="budget-line-editor-form" data-budget-line-editor-form aria-label="Budget line editor">
+                    <form id="budget-line-editor-form" class="budget-line-editor-form" data-budget-line-editor-form aria-label="Budget line editor" novalidate>
                         <div id="budget-line-editor-fields" class="budget-line-editor-fields"></div>
                         <div id="budget-line-editor-preview" class="budget-line-editor-preview" role="status" aria-live="polite"></div>
                         <p id="budget-line-editor-validation" class="budget-line-editor-validation" role="alert" hidden></p>

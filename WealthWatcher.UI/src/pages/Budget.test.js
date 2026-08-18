@@ -53,17 +53,18 @@ globalThis.fetch = async (url, options) => {
 
 const { store } = await import('../store/store.js');
 const {
+    getBudgetCategoryOptions,
     getMonthlyBudgetTotals,
+    getBudgetFlowData,
     loadBudgetView,
     populateBudgetSettings,
+    renderBudgetLineEditorFieldMarkup,
     setupBudgetSettings
 } = await import('./Budget.js');
 const { createBudgetFlowModel } = await import('./BudgetFlow.js');
 
 function reset() {
     elements.clear();
-    elements.set('budget-setting-enabled', createElement('budget-setting-enabled'));
-    elements.set('budget-disabled-description', createElement('budget-disabled-description'));
     elements.set('budget-settings-form', createElement('budget-settings-form'));
     elements.set('budget-flow-renderer', createElement('budget-flow-renderer'));
     elements.set('budget-validation-message', createElement('budget-validation-message'));
@@ -93,67 +94,26 @@ function reset() {
     store.state.assets = [];
 }
 
-test('budget settings populate the feature toggle from the runtime cache', () => {
+test('budget setup is always available and groups start collapsed', () => {
     reset();
     store.state.featureSettings.budget = false;
+    const editor = createElement('budget-groups-editor');
+    elements.set('budget-groups-editor', editor);
+    store.state.budgetSettings = {
+        version: 2,
+        groups: [
+            { id: 'income', name: 'Income', kind: 'income', builtIn: true, items: [] },
+            { id: 'bills', name: 'Bills', kind: 'custom', builtIn: false, items: [] }
+        ]
+    };
 
-    populateBudgetSettings();
+    setupBudgetSettings();
 
-    assert.equal(elements.get('budget-setting-enabled').checked, false);
-    assert.equal(elements.get('budget-disabled-description').hidden, false);
-    assert.equal(elements.get('budget-settings-form').hidden, true);
-
-    store.state.featureSettings.budget = true;
-    populateBudgetSettings();
-    assert.equal(elements.get('budget-setting-enabled').checked, true);
-    assert.equal(elements.get('budget-disabled-description').hidden, true);
+    assert.equal(elements.get('budget-setting-enabled'), undefined);
+    assert.equal(elements.get('budget-disabled-description'), undefined);
     assert.equal(elements.get('budget-settings-form').hidden, false);
-});
-
-test('budget toggle updates nav visibility and persists feature settings', async () => {
-    reset();
-    setupBudgetSettings();
-
-    const checkbox = elements.get('budget-setting-enabled');
-    checkbox.checked = false;
-    await checkbox.dispatch('change');
-
-    assert.equal(store.state.featureSettings.budget, false);
-    assert.equal(elements.get('nav-budget').hidden, false, 'Budget navigation remains reachable while disabled');
-    assert.equal(elements.get('budget-disabled-description').hidden, false);
-    assert.equal(elements.get('budget-settings-form').hidden, true);
-    assert.equal(requests.length, 1);
-    assert.deepEqual(JSON.parse(requests[0].options.body), {
-        wealthWatcherFeatureSettings: '{"fire":true,"tracker":true,"forecast":true,"budget":false,"milestones":false}'
-    });
-});
-
-test('budget toggle restores its checked state when persistence fails', async () => {
-    reset();
-    saveSucceeds = false;
-    setupBudgetSettings();
-
-    const checkbox = elements.get('budget-setting-enabled');
-    checkbox.checked = false;
-    await checkbox.dispatch('change');
-
-    assert.equal(store.state.featureSettings.budget, true);
-    assert.equal(checkbox.checked, true);
-    assert.equal(elements.get('nav-budget').hidden, false);
-    assert.equal(elements.get('budget-disabled-description').hidden, true);
-    assert.equal(elements.get('budget-settings-form').hidden, false);
-});
-
-test('budget setup is idempotent when boot invokes it more than once', async () => {
-    reset();
-    setupBudgetSettings();
-    setupBudgetSettings();
-
-    const checkbox = elements.get('budget-setting-enabled');
-    checkbox.checked = false;
-    await checkbox.dispatch('change');
-
-    assert.equal(requests.length, 1, 'the second setup pass must not add another toggle listener');
+    assert.equal((editor.innerHTML.match(/aria-expanded="false"/g) || []).length, 2);
+    assert.equal((editor.innerHTML.match(/class="budget-group-content" hidden/g) || []).length, 2);
 });
 
 test('budget settings render existing rows when the settings panel is initialised', () => {
@@ -248,6 +208,51 @@ test('forecast asset uses the searchable asset typeahead in savings rows', () =>
     assert.match(markup, /data-asset-typeahead/);
     assert.match(markup, /aria-autocomplete="list"/);
     assert.doesNotMatch(markup, /<select[^>]+data-budget-saving-asset=/);
+});
+
+test('budget line editor uses the shared select and typeahead components', () => {
+    reset();
+    const settings = {
+        version: 2,
+        groups: [
+            {
+                id: 'income',
+                name: 'Income',
+                kind: 'income',
+                role: 'income',
+                builtIn: true,
+                items: [{ id: 'salary', name: 'Salary', amount: 5000, category: 'Employment' }]
+            },
+            {
+                id: 'bills',
+                name: 'Bills',
+                kind: 'custom',
+                role: 'bills',
+                builtIn: false,
+                items: [
+                    { id: 'mortgage', name: 'Mortgage', amount: 1600, cadence: 'quarterly', category: 'Accommodation' },
+                    { id: 'water', name: 'Water', amount: 30, category: 'Utilities' },
+                    { id: 'legacy', name: 'Legacy', amount: 10, category: 'Uncategorised' }
+                ]
+            }
+        ]
+    };
+    const categoryOptions = getBudgetCategoryOptions(settings);
+    assert.deepEqual(categoryOptions.map(option => option.DisplayName), ['Employment', 'Accommodation', 'Utilities']);
+
+    const markup = renderBudgetLineEditorFieldMarkup({
+        groupId: 'bills',
+        itemId: 'mortgage',
+        draft: { name: 'Mortgage', amount: '1600', category: 'Accommodation', cadence: 'quarterly', assetId: null }
+    }, settings.groups[1]);
+
+    assert.match(markup, /class="asset-typeahead budget-line-editor-category-typeahead"/);
+    assert.match(markup, /placeholder="Search or enter a category…"/);
+    assert.match(markup, /data-budget-editor-field="category"/);
+    assert.match(markup, /data-asset-typeahead-empty-label="No category"/);
+    assert.match(markup, /class="integration-select budget-line-editor-select"/);
+    assert.match(markup, /<option value="quarterly" selected>Quarterly<\/option>/);
+    assert.doesNotMatch(markup, /id="budget-editor-bills-mortgage-category"/);
 });
 
 test('budget overview explains missing configuration and keeps setup on the Budget page', () => {
@@ -363,6 +368,85 @@ test('budget monthly overview normalises income, bills, and savings cadence', ()
 
     assert.match(elements.get('budget-flow-renderer').innerHTML, /£7,000\.00/);
     assert.match(elements.get('budget-flow-renderer').innerHTML, /£4,300\.00/);
+});
+
+test('budget v2 flow carries the selected group colour through every level', () => {
+    reset();
+    const settings = {
+        version: 2,
+        groups: [
+            {
+                id: 'income',
+                name: 'Earnings',
+                kind: 'income',
+                role: 'income',
+                builtIn: true,
+                color: '#06b6d4',
+                items: [{ id: 'salary', name: 'Salary', amount: 5000, category: 'Employment' }]
+            },
+            {
+                id: 'bills',
+                name: 'Bills',
+                kind: 'custom',
+                role: 'bills',
+                builtIn: false,
+                color: '#123abc',
+                items: [{ id: 'mortgage', name: 'Mortgage', amount: 1600, category: 'Accommodation' }]
+            }
+        ]
+    };
+    const totals = getMonthlyBudgetTotals(settings);
+
+    const overviewFlow = getBudgetFlowData(settings, { level: 'overview' }, totals);
+    assert.equal(overviewFlow.rows[0].color, '#123abc');
+    assert.equal(overviewFlow.source.label, 'Earnings');
+    assert.equal(getBudgetFlowData(settings, { level: 'group', groupId: 'bills' }, totals).rows[0].color, '#123abc');
+    assert.equal(getBudgetFlowData(settings, { level: 'item', groupId: 'bills', category: 'Accommodation' }, totals).rows[0].color, '#123abc');
+});
+
+test('budget v2 flow shows uncategorised child items without inventing a category', () => {
+    reset();
+    const settings = {
+        version: 2,
+        groups: [
+            {
+                id: 'income',
+                name: 'Income',
+                kind: 'income',
+                role: 'income',
+                builtIn: true,
+                items: [{ id: 'salary', name: 'Salary', amount: 5000, category: 'Employment' }]
+            },
+            {
+                id: 'general',
+                name: 'General',
+                kind: 'custom',
+                builtIn: false,
+                items: [
+                    { id: 'groceries', name: 'Groceries', amount: 400, category: '' },
+                    { id: 'mortgage', name: 'Mortgage', amount: 1200, category: 'Accommodation' },
+                    { id: 'legacy-uncategorised', name: 'Legacy item', amount: 50, category: 'Uncategorised' }
+                ]
+            }
+        ]
+    };
+    const totals = getMonthlyBudgetTotals(settings);
+    const flow = getBudgetFlowData(settings, { level: 'group', groupId: 'general' }, totals);
+
+    assert.deepEqual(flow.rows.map(row => ({ label: row.label, value: row.value, action: row.action })), [
+        { label: 'Accommodation', value: 1200, action: { type: 'category', groupId: 'general', category: 'Accommodation' } },
+        { label: 'Groceries', value: 400, action: null },
+        { label: 'Legacy item', value: 50, action: null }
+    ]);
+    assert.equal(flow.rows.some(row => row.label === 'Uncategorised'), false);
+    assert.equal(flow.summary, 'General categories');
+
+    const staleUncategorisedView = getBudgetFlowData(settings, {
+        level: 'item',
+        groupId: 'general',
+        category: 'Uncategorised'
+    }, totals);
+    assert.equal(staleUncategorisedView.summary, 'General categories');
 });
 
 test('budget flow breakdown formats annual lines and linked assets', async () => {

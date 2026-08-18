@@ -10,6 +10,7 @@ import { createPageRequestController } from '../components/PageRequest.js';
 import { renderAccessibleChartData } from '../components/AccessibleChartData.js';
 import { currencyFormatter } from '../utils/formatters.js';
 import { calculateFireTarget, getIncludedFireAssetIds } from '../components/FireModel.js';
+import { getBudgetGroups, isIncomeBudgetGroup } from './budgetConfig.js';
 
 let forecastChart;
 let forecastSaveTimer;
@@ -557,7 +558,15 @@ function summary(prefix, result, dob) {
 }
 
 export function getBudgetForecastContributions() {
-    const savings = (isFeatureEnabled('budget') ? (store.state.budgetSettings?.savings || []) : [])
+    const groups = isFeatureEnabled('budget')
+        ? getBudgetGroups(store.state.budgetSettings || {})
+        : [];
+    const savings = groups
+        .filter(group => !isIncomeBudgetGroup(group)
+            && (String(group.id).toLowerCase() === 'savings'
+                || String(group.name).toLowerCase().includes('saving')
+                || String(group.role).toLowerCase() === 'savings'))
+        .flatMap(group => group.items || [])
         .filter(item => Number(item.amount) > 0);
     return savings.map(item => ({
         name: item.name || '', amount: Number(item.amount), assetId: item.assetId || null,

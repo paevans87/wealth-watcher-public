@@ -24,7 +24,6 @@ globalThis.fetch = async (url, options) => {
 
 const { store } = await import('../store/store.js');
 const {
-    FEATURE_SETTINGS_KEY,
     applyFeatureVisibility,
     getFeatureKeyForRoute,
     isFeatureEnabled,
@@ -50,6 +49,7 @@ test('missing feature flags use their configured defaults', () => {
         budget: true,
         milestones: false
     });
+    assert.equal(normalizeFeatureSettings({ budget: false }).budget, true);
     store.state.featureSettings = {};
     assert.equal(isFeatureEnabled('budget'), true);
     assert.equal(isFeatureEnabled('fire'), true);
@@ -83,7 +83,7 @@ test('feature visibility reflects the enabled state', () => {
     store.state.featureSettings.budget = false;
     store.state.featureSettings.forecast = false;
     applyFeatureVisibility();
-    // Budget remains discoverable so its in-page enable action is reachable.
+    // Budget remains available because it is no longer an optional feature.
     assert.equal(element('nav-budget').hidden, false);
     assert.equal(element('nav-forecast').hidden, true);
 
@@ -94,48 +94,11 @@ test('feature visibility reflects the enabled state', () => {
     assert.equal(element('nav-forecast').hidden, true);
 });
 
-test('feature changes update the cache, nav, and database setting', async () => {
+test('always-on Budget ignores attempts to disable it', async () => {
     reset();
-
-    assert.equal(await setFeatureEnabled('budget', false), true);
-    assert.deepEqual(store.state.featureSettings, {
-        fire: true,
-        tracker: true,
-        forecast: true,
-        budget: false,
-        milestones: false
-    });
-    assert.equal(element('nav-budget').hidden, false);
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].url, 'http://localhost:5000/api/settings');
-    assert.deepEqual(JSON.parse(requests[0].options.body), {
-        [FEATURE_SETTINGS_KEY]: '{"fire":true,"tracker":true,"forecast":true,"budget":false,"milestones":false}'
-    });
-});
-
-test('failed feature persistence restores the previous cache and nav state', async () => {
-    reset();
-    saveSucceeds = false;
 
     assert.equal(await setFeatureEnabled('budget', false), false);
-    assert.deepEqual(store.state.featureSettings, {
-        fire: true,
-        tracker: true,
-        forecast: true,
-        budget: true,
-        milestones: false
-    });
+    assert.equal(store.state.featureSettings.budget, true);
     assert.equal(element('nav-budget').hidden, false);
-});
-
-test('budget navigation remains available while its persisted flag is off', async () => {
-    reset();
-
-    assert.equal(await setFeatureEnabled('budget', false), true);
-    assert.equal(store.state.featureSettings.budget, false);
-    assert.equal(element('nav-budget').hidden, false);
-
-    store.state.featureSettings.budget = true;
-    applyFeatureVisibility();
-    assert.equal(element('nav-budget').hidden, false);
+    assert.equal(requests.length, 0);
 });

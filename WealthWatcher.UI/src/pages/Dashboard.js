@@ -8,7 +8,6 @@ import { setPageLoading } from '../components/PageLoading.js';
 import { PAGE_STATUS, setPageStatus } from '../components/PageState.js';
 import { bindPeriodPicker } from '../components/PeriodPicker.js';
 import { escapeHtml, safeCssColor } from '../utils/html.js';
-import { clearMilestoneDashboardCard, renderMilestoneDashboardCard } from '../components/Milestones.js';
 import {
     buildFireStatusViewModel,
     clearFireStatusSummary,
@@ -281,7 +280,6 @@ export function loadDashboard({ force = false } = {}) {
     dashboardPageError = null;
     fireStatusRequestId += 1;
     clearFireStatusSummary();
-    clearMilestoneDashboardCard();
     setPageLoading('dashboard-view', true);
     renderDashboardPageState();
     dashboardLoadPromise = (async () => {
@@ -482,7 +480,6 @@ async function loadDashboardInternal() {
 
     updateGlobalHeader(globalTotal, globalPast, contributors);
     renderDashboardFireStatus(globalTotal, currentFireStatusRequestId);
-    renderMilestoneDashboardCard(globalTotal);
     renderXrayChart();
     
     if (window.location.hash === '#fire') {
@@ -522,7 +519,6 @@ function clearDashboardLiveContent() {
     if (laneSections) laneSections.innerHTML = '';
     fireStatusRequestId += 1;
     clearFireStatusSummary();
-    clearMilestoneDashboardCard();
 }
 
 function getDashboardFireSummary() {
@@ -672,7 +668,6 @@ function renderDashboardPageState() {
 
     const header = view.querySelector?.(':scope > header') || view.querySelector?.('header');
     const laneSections = document.getElementById('lane-sections');
-    const milestonesCard = document.getElementById('milestones-dashboard-card');
     const fireStatusCard = document.getElementById('fire-status-dashboard-card');
     let emptyState = document.getElementById('dashboard-empty-state');
     let errorState = document.getElementById('dashboard-error-state');
@@ -683,7 +678,6 @@ function renderDashboardPageState() {
     if (dashboardPageState === PAGE_STATUS.LOADING) {
         if (header) header.hidden = false;
         if (laneSections) laneSections.hidden = true;
-        if (milestonesCard) milestonesCard.hidden = true;
         if (fireStatusCard) fireStatusCard.hidden = true;
     } else if (dashboardPageState === PAGE_STATUS.READY) {
         if (header) header.hidden = false;
@@ -692,7 +686,6 @@ function renderDashboardPageState() {
         clearDashboardLiveContent();
         if (header) header.hidden = true;
         if (laneSections) laneSections.hidden = true;
-        if (milestonesCard) milestonesCard.hidden = true;
         if (fireStatusCard) fireStatusCard.hidden = true;
     }
 

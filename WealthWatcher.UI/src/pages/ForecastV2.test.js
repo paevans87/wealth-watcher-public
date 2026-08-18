@@ -317,15 +317,12 @@ test('forecast asset calculations can be hidden without losing the saved rate so
     });
 });
 
-test('disabled budgeting does not add saved savings to the forecast request', () => {
+test('legacy disabled budgeting flags no longer suppress saved savings', () => {
     store.state.featureSettings = { fire: true, tracker: true, forecast: true, budget: false, milestones: false };
     store.state.budgetSettings = {
         savings: [{ name: 'ISA', amount: 200, assetId: 'asset-isa', cadence: 'quarterly' }]
     };
 
-    assert.deepEqual(getBudgetForecastContributions(), []);
-
-    store.state.featureSettings.budget = true;
     assert.deepEqual(getBudgetForecastContributions(), [{
         name: 'ISA', amount: 200, assetId: 'asset-isa', cadence: 'quarterly'
     }]);

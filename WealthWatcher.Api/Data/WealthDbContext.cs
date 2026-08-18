@@ -273,6 +273,8 @@ public class WealthDbContext : DbContext
             entity.Property(e => e.MilestoneJson)
                 .IsRequired()
                 .HasDefaultValue(MilestoneSettingsPolicy.DefaultJson);
+            entity.Property(e => e.BudgetJson)
+                .IsRequired(false);
         });
 
         modelBuilder.Entity<BudgetLine>(entity =>

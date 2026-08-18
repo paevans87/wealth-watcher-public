@@ -60,8 +60,8 @@ export function getDeprecatedRouteRedirect(hash = '') {
 
 /**
  * Determines whether a disabled feature route should fall back to Dashboard.
- * Budget is intentionally rendered while disabled so its page-owned enable
- * control remains reachable.
+ * Budget is always available; other feature routes retain the existing
+ * Dashboard fallback when their feature is disabled.
  * @param {string} route
  * @param {string|null} featureKey
  * @param {boolean} enabled
@@ -128,9 +128,8 @@ export function handleRouting() {
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
     const featureKey = getFeatureKeyForRoute(route);
-    // Budget owns its enable/disable experience on the Budget page. Keep the
-    // route alive so users can reach the in-page enable action; other disabled
-    // feature routes retain the existing Dashboard fallback.
+    // Budget is always available; other disabled feature routes retain the
+    // existing Dashboard fallback.
     if (shouldRedirectDisabledFeatureRoute(route, featureKey, isFeatureEnabled(featureKey))) {
         const dashboardView = document.getElementById('dashboard-view');
         const navDashboard = document.getElementById('nav-dashboard');

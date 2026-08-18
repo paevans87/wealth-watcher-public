@@ -264,7 +264,7 @@ test('CollapsiblePane Unit Tests', async (t) => {
 
         assert.match(indexHtml, /<section id="budget-settings-pane" class="card glass-panel full-width-col budget-configuration-panel collapsible-pane" data-budget-configuration data-collapsible data-pane-id="monthly-budget"/);
         assert.match(indexHtml, /id="budget-settings-pane"[\s\S]*?<div class="budget-configuration-header collapsible-header">[\s\S]*?Toggle Budget setup/);
-        assert.match(indexHtml, /id="budget-settings-pane"[\s\S]*?<div class="collapsible-content">[\s\S]*?id="budget-plan-editor"/);
+        assert.match(indexHtml, /id="budget-settings-pane"[\s\S]*?<div class="collapsible-content">[\s\S]*?id="budget-groups-editor"/);
         assert.match(indexHtml, /id="budget-settings-pane"[\s\S]*?data-pane-id="monthly-budget"/);
         assert.doesNotMatch(indexHtml, /budget-editor-note/);
     });
