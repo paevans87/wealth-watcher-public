@@ -12,6 +12,7 @@ globalThis.document = {};
 const {
     clearSettingsPanelQuery,
     getDeprecatedRouteRedirect,
+    getLegacyApplicationRedirect,
     getSettingsPanelTarget,
     revealSettingsPanel,
     shouldRedirectDisabledFeatureRoute
@@ -48,6 +49,13 @@ test('disabled Budget stays on its route while other disabled feature routes fal
     assert.equal(shouldRedirectDisabledFeatureRoute('#forecast', 'forecast', false), true);
     assert.equal(shouldRedirectDisabledFeatureRoute('#forecast', 'forecast', true), false);
     assert.equal(shouldRedirectDisabledFeatureRoute('#dashboard', null, false), false);
+});
+
+test('legacy Application settings hashes redirect to the dedicated route', () => {
+    assert.equal(getLegacyApplicationRedirect('#settings?panel=application-version'), '#application');
+    assert.equal(getLegacyApplicationRedirect('#settings?panel=application-version&focus=release-notes'), '#application');
+    assert.equal(getLegacyApplicationRedirect('#settings?panel=monthly-budget'), null);
+    assert.equal(getLegacyApplicationRedirect('#application'), null);
 });
 
 test('settings route expands a closed pane and scrolls to its requested subsection', () => {
@@ -90,7 +98,7 @@ test('settings panel query is consumed after the one-time reveal', () => {
     };
 
     try {
-        assert.equal(clearSettingsPanelQuery('#settings?panel=application-version'), true);
+        assert.equal(clearSettingsPanelQuery('#settings?panel=monthly-budget'), true);
         assert.deepEqual(calls, [[{ route: 'settings' }, '', '#settings']]);
         assert.equal(clearSettingsPanelQuery('#settings'), false);
         assert.equal(clearSettingsPanelQuery('#dashboard?panel=application-version'), false);
