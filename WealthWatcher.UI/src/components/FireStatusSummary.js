@@ -3,6 +3,7 @@ import { formatter } from '../utils/formatters.js';
 import { escapeHtml } from '../utils/html.js';
 import { calculateMilestoneProgress } from './Milestones.js';
 import { isFeatureEnabled } from '../utils/featureFlags.js';
+import { getBudgetGroupTotal, getBudgetGroups, isIncomeBudgetGroup } from '../pages/budgetConfig.js';
 
 export const FIRE_STATUS_CARD_ID = 'fire-status-dashboard-card';
 
@@ -28,10 +29,13 @@ function getMonthlyAmount(item) {
 }
 
 function getMonthlyBudgetUnallocated(settings = store.state.budgetSettings || {}) {
-    const totalFor = category => (Array.isArray(settings?.[category])
-        ? settings[category].reduce((total, item) => total + getMonthlyAmount(item), 0)
-        : 0);
-    return totalFor('income') - totalFor('bills') - totalFor('savings') - totalFor('spend');
+    const groups = getBudgetGroups(settings);
+    const totalFor = group => getBudgetGroupTotal(group, getMonthlyAmount);
+    const income = groups.find(isIncomeBudgetGroup);
+    const allocated = groups
+        .filter(group => !isIncomeBudgetGroup(group))
+        .reduce((total, group) => total + totalFor(group), 0);
+    return (income ? totalFor(income) : 0) - allocated;
 }
 
 function formatMoney(value) {
@@ -144,18 +148,35 @@ function renderSetupCard(card, model) {
                 <p class="fire-status-card-scope">${escapeHtml(message)} Holistic Net Worth remains separate and includes all tracked categories.</p>
             </div>
             <a class="action-btn fire-status-card-link" href="${action.href}" aria-controls="fire-settings-pane">${escapeHtml(action.label)}</a>
-        </div>`;
+        </div>
+        ${renderMilestoneContext(model.milestone)}`;
 }
 
 function renderMilestoneContext(milestone) {
-    if (!milestone || !['progress', 'complete'].includes(milestone.state)) return '';
-    if (milestone.state === 'complete') {
-        return `<div class="fire-status-milestone"><span>Holistic milestones</span><strong>Complete</strong><a href="#settings?panel=milestones&focus=milestone-new-target">Manage milestones</a></div>`;
+    if (!milestone) {
+        return `<div class="fire-status-milestone fire-status-milestone-disabled">
+            <div><span>Holistic milestones</span><strong>Not enabled</strong></div>
+            <a href="#settings?panel=milestones&focus=milestone-new-target">Manage milestones</a>
+        </div>`;
     }
+    if (milestone.state === 'unconfigured') {
+        return `<div class="fire-status-milestone fire-status-milestone-unconfigured">
+            <div><span>Holistic milestones</span><strong>No targets configured</strong></div>
+            <a href="#settings?panel=milestones&focus=milestone-new-target">Set a milestone</a>
+        </div>`;
+    }
+    if (milestone.state === 'unavailable') return '';
+    if (milestone.state === 'complete') {
+        return `<div class="fire-status-milestone">
+            <div><span>Holistic milestones</span><strong>Complete</strong></div>
+            <div class="fire-status-milestone-progress" role="progressbar" aria-label="Holistic milestone progress, complete" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span style="width: 100%"></span></div>
+            <a href="#settings?panel=milestones&focus=milestone-new-target">Manage milestones</a>
+        </div>`;
+    }
+    const progress = Math.max(0, Math.min(100, Number(milestone.progress) || 0));
     return `<div class="fire-status-milestone">
-        <span>Next holistic milestone</span>
-        <strong class="obfuscate-val">${escapeHtml(formatMoney(milestone.nextTarget))}</strong>
-        <span class="obfuscate-val">${escapeHtml(formatMoney(milestone.remaining))} to go</span>
+        <div><span>Next holistic milestone</span><strong class="obfuscate-val">${escapeHtml(formatMoney(milestone.nextTarget))}</strong><span class="obfuscate-val">${escapeHtml(formatMoney(milestone.remaining))} to go</span></div>
+        <div class="fire-status-milestone-progress" role="progressbar" aria-label="Holistic milestone progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width: ${progress}%"></span></div>
         <a href="#settings?panel=milestones&focus=milestone-new-target">Manage milestones</a>
     </div>`;
 }

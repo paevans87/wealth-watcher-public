@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
@@ -988,7 +990,7 @@ public static class EndpointExtensions
             ILogger<AppPreference> logger) =>
         {
             var preference = await db.AppPreferences.FindAsync(1) ?? new AppPreference();
-            var budget = await BuildBudgetSettingsAsync(db);
+            var budget = await BuildBudgetSettingsAsync(db, preference);
             return Results.Ok(new Dictionary<string, string>
             {
                 ["wealthWatcherGeneralSettings"] = ReadPersistedSettingsJson(
@@ -1030,7 +1032,7 @@ public static class EndpointExtensions
             // clients an explicit failure they can use to retain/restore the
             // last known persisted state.
             var normalizedSettings = new Dictionary<string, string>(StringComparer.Ordinal);
-            BudgetSettingsDocument? budgetDocument = null;
+            BudgetSettingsRequest? budgetRequest = null;
             var hasBudgetSettings = false;
             foreach (var pair in settings)
             {
@@ -1057,7 +1059,7 @@ public static class EndpointExtensions
                             return Results.BadRequest(new { Error = budgetValidationError });
                         if (!TryDeserializeBudgetSettings(
                                 normalizedBudget,
-                                out budgetDocument,
+                                out budgetRequest,
                                 out var budgetError))
                             return Results.BadRequest(new { Error = budgetError });
                         hasBudgetSettings = true;
@@ -1075,16 +1077,40 @@ public static class EndpointExtensions
             }
 
             BudgetSettingsPlan? budgetPlan = null;
+            BudgetV2SettingsPlan? budgetV2Plan = null;
+            var preference = await db.AppPreferences.FindAsync(1);
             if (hasBudgetSettings)
             {
-                var preparation = await PrepareBudgetSettingsAsync(db, budgetDocument!);
-                if (preparation.Plan is null)
-                    return Results.BadRequest(new { Error = preparation.Error });
+                if (budgetRequest!.V2 is not null)
+                {
+                    var preparation = await PrepareBudgetV2SettingsAsync(
+                        db,
+                        preference,
+                        budgetRequest.V2,
+                        cancellationToken);
+                    if (preparation.Plan is null)
+                        return Results.BadRequest(new { Error = preparation.Error });
 
-                budgetPlan = preparation.Plan;
+                    budgetV2Plan = preparation.Plan;
+                }
+                else
+                {
+                    if (TryReadPersistedBudgetV2(preference?.BudgetJson, out _))
+                    {
+                        return Results.Conflict(new
+                        {
+                            Error = "The saved budget uses the v2 group format. Refresh budget settings before submitting the legacy array format."
+                        });
+                    }
+
+                    var preparation = await PrepareBudgetSettingsAsync(db, budgetRequest.Legacy!);
+                    if (preparation.Plan is null)
+                        return Results.BadRequest(new { Error = preparation.Error });
+
+                    budgetPlan = preparation.Plan;
+                }
             }
 
-            var preference = await db.AppPreferences.FindAsync(1);
             if (preference is null)
             {
                 preference = new AppPreference();
@@ -1114,7 +1140,16 @@ public static class EndpointExtensions
                 preference.MilestoneJson = normalizedMilestoneJson;
 
             if (budgetPlan is not null)
+            {
                 ApplyBudgetSettings(db, budgetPlan);
+                preference.BudgetJson = null;
+            }
+
+            if (budgetV2Plan is not null)
+            {
+                ApplyBudgetSettings(db, budgetV2Plan.CompatibilityPlan);
+                preference.BudgetJson = JsonSerializer.Serialize(budgetV2Plan.Document, JsonOptions);
+            }
 
             await using var transaction = db.Database.IsRelational()
                 ? await db.Database.BeginTransactionAsync(cancellationToken)
@@ -1830,7 +1865,7 @@ public static class EndpointExtensions
         {
             "wealthWatcherBudgetSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "income", "bills", "savings", "spend"
+                "income", "bills", "savings", "spend", "groups"
             },
             "wealthWatcherForecastSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -1846,7 +1881,7 @@ public static class EndpointExtensions
         {
             "wealthWatcherBudgetSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "income", "bills", "savings", "spend"
+                "income", "bills", "savings", "spend", "groups"
             },
             "wealthWatcherForecastSettings" => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -1889,19 +1924,82 @@ public static class EndpointExtensions
 
     private static bool TryDeserializeBudgetSettings(
         string json,
-        out BudgetSettingsDocument? document,
+        out BudgetSettingsRequest? request,
         out string error)
     {
+        request = null;
+        using JsonDocument parsed = JsonDocument.Parse(json);
+        var root = parsed.RootElement;
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            error = "wealthWatcherBudgetSettings must contain a valid budget object.";
+            return false;
+        }
+
+        var hasVersion = false;
+        var versionElement = default(JsonElement);
+        var hasGroups = false;
+        foreach (var property in root.EnumerateObject())
+        {
+            if (property.Name.Equals("version", StringComparison.OrdinalIgnoreCase))
+            {
+                hasVersion = true;
+                versionElement = property.Value;
+            }
+
+            if (property.Name.Equals("groups", StringComparison.OrdinalIgnoreCase))
+                hasGroups = true;
+        }
+        var version = 1;
+        if (hasVersion &&
+            (versionElement.ValueKind != JsonValueKind.Number ||
+             !versionElement.TryGetInt32(out version) ||
+             version is not 1 and not 2))
+        {
+            error = "wealthWatcherBudgetSettings.version must be 1 or 2.";
+            return false;
+        }
+
+        if (hasGroups || version == 2)
+        {
+            if (!hasVersion || version != 2)
+            {
+                error = "wealthWatcherBudgetSettings.version must be 2 when groups are supplied.";
+                return false;
+            }
+
+            BudgetV2Document? v2Document;
+            try
+            {
+                v2Document = JsonSerializer.Deserialize<BudgetV2Document>(json, JsonOptions);
+            }
+            catch (JsonException)
+            {
+                v2Document = null;
+            }
+
+            if (v2Document is null)
+            {
+                error = "wealthWatcherBudgetSettings must contain a valid v2 budget object.";
+                return false;
+            }
+
+            request = new BudgetSettingsRequest(null, v2Document);
+            error = string.Empty;
+            return true;
+        }
+
         try
         {
-            document = JsonSerializer.Deserialize<BudgetSettingsDocument>(json, JsonOptions);
+            var document = JsonSerializer.Deserialize<BudgetSettingsDocument>(json, JsonOptions);
+            request = new BudgetSettingsRequest(document, null);
         }
         catch (JsonException)
         {
-            document = null;
+            request = null;
         }
 
-        if (document is null)
+        if (request?.Legacy is null)
         {
             error = "wealthWatcherBudgetSettings must contain a valid budget object.";
             return false;
@@ -1911,31 +2009,80 @@ public static class EndpointExtensions
         return true;
     }
 
-    private static async Task<string> BuildBudgetSettingsAsync(WealthDbContext db)
+    private static async Task<string> BuildBudgetSettingsAsync(
+        WealthDbContext db,
+        AppPreference preference)
     {
         var lines = await db.BudgetLines
             .AsNoTracking()
             .Include(line => line.AssetMappings)
             .OrderBy(line => line.Name)
             .ToListAsync();
-        var document = new
+
+        var legacy = new BudgetSettingsResponse
         {
-            income = lines.Where(line => line.Category == BudgetLineCategory.Income).Select(ToBudgetItem),
-            bills = lines.Where(line => line.Category == BudgetLineCategory.Bills).Select(ToBudgetItem),
-            savings = lines.Where(line => line.Category == BudgetLineCategory.Savings).Select(ToBudgetItem),
-            spend = lines.Where(line => line.Category == BudgetLineCategory.Spend).Select(ToBudgetItem)
+            Version = 1,
+            NeedsUpdate = lines.Count > 0,
+            Income = lines
+                .Where(line => line.Category == BudgetLineCategory.Income)
+                .Select(ToBudgetItem)
+                .ToList(),
+            Bills = lines
+                .Where(line => line.Category == BudgetLineCategory.Bills)
+                .Select(ToBudgetItem)
+                .ToList(),
+            Savings = lines
+                .Where(line => line.Category == BudgetLineCategory.Savings)
+                .Select(ToBudgetItem)
+                .ToList(),
+            Spend = lines
+                .Where(line => line.Category == BudgetLineCategory.Spend)
+                .Select(ToBudgetItem)
+                .ToList()
         };
-        return JsonSerializer.Serialize(document, JsonOptions);
+
+        if (TryReadPersistedBudgetV2(preference.BudgetJson, out var v2Document))
+        {
+            legacy.Version = 2;
+            legacy.NeedsUpdate = v2Document.NeedsUpdate ?? false;
+            legacy.Groups = v2Document.Groups;
+        }
+
+        return JsonSerializer.Serialize(legacy, JsonOptions);
     }
 
-    private static object ToBudgetItem(BudgetLine line) => new
+    private static BudgetItemDocument ToBudgetItem(BudgetLine line) => new()
     {
-        id = line.Id,
-        name = line.Name,
-        amount = line.Amount,
-        cadence = line.Cadence.ToString().ToLowerInvariant(),
-        assetId = line.AssetMappings.FirstOrDefault()?.AssetId
+        Id = line.Id,
+        Name = line.Name,
+        Amount = line.Amount,
+        Cadence = line.Cadence.ToString().ToLowerInvariant(),
+        AssetId = line.AssetMappings.FirstOrDefault()?.AssetId,
+        Category = line.Category.ToString().ToLowerInvariant()
     };
+
+    private static bool TryReadPersistedBudgetV2(
+        string? json,
+        out BudgetV2Document document)
+    {
+        document = null!;
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<BudgetV2Document>(json, JsonOptions);
+            if (parsed?.Version != 2 || parsed.Groups is null)
+                return false;
+
+            document = parsed;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static async Task<(BudgetSettingsPlan? Plan, string? Error)> PrepareBudgetSettingsAsync(
         WealthDbContext db,
@@ -2059,6 +2206,232 @@ public static class EndpointExtensions
         return (new BudgetSettingsPlan(existingLines, existingById, submittedLines), null);
     }
 
+    private static async Task<(BudgetV2SettingsPlan? Plan, string? Error)> PrepareBudgetV2SettingsAsync(
+        WealthDbContext db,
+        AppPreference? preference,
+        BudgetV2Document document,
+        CancellationToken cancellationToken)
+    {
+        if (document.Version != 2)
+            return (null, "wealthWatcherBudgetSettings.version must be 2.");
+
+        if (document.Groups is null || document.Groups.Count == 0)
+            return (null, "wealthWatcherBudgetSettings.groups must contain at least one group.");
+
+        var existingLines = await db.BudgetLines
+            .Include(line => line.AssetMappings)
+            .ToListAsync(cancellationToken);
+        var existingById = existingLines.ToDictionary(line => line.Id);
+        var validAssetIds = (await db.Assets
+                .Select(asset => asset.Id)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        var submittedIds = new HashSet<Guid>();
+        var submittedItemIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalizedGroups = new List<BudgetV2GroupDocument>(document.Groups.Count);
+        var submittedLines = new List<BudgetLineRequest>();
+        BudgetV2GroupDocument? incomeGroup = null;
+        var groupIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var groupIndex = 0; groupIndex < document.Groups.Count; groupIndex++)
+        {
+            var group = document.Groups[groupIndex];
+            var groupPath = $"wealthWatcherBudgetSettings.groups[{groupIndex}]";
+            if (group is null)
+                return (null, $"{groupPath} must be a JSON object.");
+
+            if (string.IsNullOrWhiteSpace(group.Id))
+                return (null, $"{groupPath}.id must not be blank.");
+
+            var groupId = group.Id.Trim();
+            if (!groupIds.Add(groupId))
+                return (null, $"{groupPath}.id contains a duplicate group id '{groupId}'.");
+
+            if (string.IsNullOrWhiteSpace(group.Name))
+                return (null, $"{groupPath}.name must not be blank.");
+
+            if (group.BuiltIn is not bool builtIn)
+                return (null, $"{groupPath}.builtIn must be true or false.");
+
+            var kind = NormalizeBudgetGroupValue(group.Kind);
+            var role = NormalizeBudgetGroupValue(group.Role);
+            if (kind is null && role is null)
+                return (null, $"{groupPath} must specify kind or role.");
+
+            if (kind == "income" && role is not null && role != "income")
+                return (null, $"{groupPath}.kind and role must agree for the Income group.");
+            if (role == "income" && kind is not null && kind != "income")
+                return (null, $"{groupPath}.kind and role must agree for the Income group.");
+
+            var isIncome = kind == "income" || role == "income";
+            if (isIncome)
+            {
+                if (!builtIn)
+                    return (null, $"{groupPath} Income must remain builtIn.");
+                if (!group.Name.Trim().Equals("Income", StringComparison.OrdinalIgnoreCase))
+                    return (null, $"{groupPath}.name cannot rename the built-in Income group.");
+                if (incomeGroup is not null)
+                    return (null, "wealthWatcherBudgetSettings.groups must contain exactly one Income group.");
+
+                incomeGroup = group;
+            }
+            else if (builtIn)
+            {
+                return (null, $"{groupPath} custom groups must set builtIn to false.");
+            }
+
+            if (group.Items is null)
+                return (null, $"{groupPath}.items must be a JSON array.");
+
+            var normalizedGroup = new BudgetV2GroupDocument
+            {
+                Id = groupId,
+                Name = isIncome ? "Income" : group.Name.Trim(),
+                Kind = isIncome ? "income" : "custom",
+                Role = isIncome ? "income" : role ?? kind ?? "custom",
+                BuiltIn = isIncome,
+                Items = new List<BudgetV2ItemDocument>(group.Items.Count)
+            };
+            var compatibilityCategory = isIncome
+                ? BudgetLineCategory.Income
+                : ParseCompatibilityBudgetCategory(role ?? kind);
+
+            for (var itemIndex = 0; itemIndex < group.Items.Count; itemIndex++)
+            {
+                var item = group.Items[itemIndex];
+                var itemPath = $"{groupPath}.items[{itemIndex}]";
+                if (item is null)
+                    return (null, $"{itemPath} must be a JSON object.");
+
+                if (string.IsNullOrWhiteSpace(item.Id))
+                    return (null, $"{itemPath}.id must not be blank.");
+                var itemId = item.Id.Trim();
+                if (!submittedItemIds.Add(itemId))
+                    return (null, $"{itemPath}.id contains a duplicate item id '{itemId}'.");
+
+                if (string.IsNullOrWhiteSpace(item.Name))
+                    return (null, $"{itemPath}.name must not be blank.");
+                if (item.Amount < 0)
+                    return (null, $"{itemPath}.amount must be zero or greater.");
+                if (item.Amount > 99_999_999_999_999_999.99m ||
+                    decimal.Round(item.Amount, 2) != item.Amount)
+                {
+                    return (null,
+                        $"{itemPath}.amount must fit the budget amount precision of decimal(18,2).");
+                }
+
+                if (string.IsNullOrWhiteSpace(item.Cadence) ||
+                    !TryParseCadence(item.Cadence, out var cadence))
+                {
+                    return (null,
+                        $"{itemPath}.cadence must be monthly, quarterly, or annually.");
+                }
+
+                var stableLineId = GetStableBudgetLineId(itemId);
+                if (!submittedIds.Add(stableLineId))
+                {
+                    return (null, $"{itemPath}.id resolves to a duplicate budget line id.");
+                }
+
+                var existingLine = existingById.GetValueOrDefault(stableLineId);
+                var effectiveAssetId = item.AssetIdSpecified
+                    ? item.AssetId
+                    : existingLine?.AssetMappings.FirstOrDefault()?.AssetId;
+                if (effectiveAssetId is Guid assetId &&
+                    (assetId == Guid.Empty || !validAssetIds.Contains(assetId)))
+                {
+                    return (null,
+                        $"{itemPath}.assetId references an unknown asset '{assetId:D}'.");
+                }
+
+                var normalizedItem = new BudgetV2ItemDocument
+                {
+                    Id = itemId,
+                    Name = item.Name.Trim(),
+                    Amount = item.Amount,
+                    Cadence = cadence.ToString().ToLowerInvariant(),
+                    Category = string.IsNullOrWhiteSpace(item.Category)
+                        ? null
+                        : item.Category.Trim()
+                };
+                normalizedItem.AssetId = effectiveAssetId;
+                normalizedGroup.Items.Add(normalizedItem);
+
+                submittedLines.Add(new BudgetLineRequest
+                {
+                    Id = stableLineId,
+                    Category = compatibilityCategory,
+                    Name = normalizedItem.Name,
+                    Amount = normalizedItem.Amount,
+                    Cadence = cadence,
+                    AssetId = effectiveAssetId,
+                    AssetIdSpecified = true
+                });
+            }
+
+            normalizedGroups.Add(normalizedGroup);
+        }
+
+        if (incomeGroup is null)
+            return (null, "wealthWatcherBudgetSettings.groups must contain the built-in Income group.");
+
+        if (TryReadPersistedBudgetV2(preference?.BudgetJson, out var previousDocument))
+        {
+            var previousIncome = previousDocument.Groups!
+                .FirstOrDefault(IsIncomeBudgetGroup);
+            if (previousIncome is not null &&
+                (!string.Equals(previousIncome.Id, incomeGroup.Id?.Trim(), StringComparison.Ordinal) ||
+                 !string.Equals(previousIncome.Name, "Income", StringComparison.OrdinalIgnoreCase)))
+            {
+                return (null, "The built-in Income group cannot be renamed or replaced.");
+            }
+        }
+
+        document.Version = 2;
+        document.NeedsUpdate = false;
+        document.Groups = normalizedGroups;
+        return (
+            new BudgetV2SettingsPlan(
+                document,
+                new BudgetSettingsPlan(existingLines, existingById, submittedLines)),
+            null);
+    }
+
+    private static bool IsIncomeBudgetGroup(BudgetV2GroupDocument group)
+    {
+        var kind = NormalizeBudgetGroupValue(group.Kind);
+        var role = NormalizeBudgetGroupValue(group.Role);
+        return kind == "income" || role == "income";
+    }
+
+    private static string? NormalizeBudgetGroupValue(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static BudgetLineCategory ParseCompatibilityBudgetCategory(string? role)
+        => NormalizeBudgetGroupValue(role) switch
+        {
+            "bills" or "needs" => BudgetLineCategory.Bills,
+            "savings" or "saving" => BudgetLineCategory.Savings,
+            "spend" or "spending" or "wants" => BudgetLineCategory.Spend,
+            _ => BudgetLineCategory.Spend
+        };
+
+    private static Guid GetStableBudgetLineId(string itemId)
+    {
+        if (Guid.TryParse(itemId, out var parsed) && parsed != Guid.Empty)
+            return parsed;
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"wealth-watcher:budget-v2:item:{itemId}"));
+        var bytes = hash[..16];
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x40);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes);
+    }
+
     private static void ApplyBudgetSettings(
         WealthDbContext db,
         BudgetSettingsPlan plan)
@@ -2080,7 +2453,16 @@ public static class EndpointExtensions
             BudgetLine line;
             if (request.Id is Guid id)
             {
-                line = plan.ExistingById[id];
+                if (plan.ExistingById.TryGetValue(id, out var existing))
+                {
+                    line = existing;
+                }
+                else
+                {
+                    line = new BudgetLine { Id = id };
+                    db.BudgetLines.Add(line);
+                    reservedIds.Add(id);
+                }
             }
             else
             {
@@ -2169,6 +2551,14 @@ public static class EndpointExtensions
         public IReadOnlyList<BudgetLineRequest> SubmittedLines { get; } = submittedLines;
     }
 
+    private sealed record BudgetV2SettingsPlan(
+        BudgetV2Document Document,
+        BudgetSettingsPlan CompatibilityPlan);
+
+    private sealed record BudgetSettingsRequest(
+        BudgetSettingsDocument? Legacy,
+        BudgetV2Document? V2);
+
     private sealed class BudgetLineRequest
     {
         public Guid? Id { get; init; }
@@ -2178,6 +2568,20 @@ public static class EndpointExtensions
         public BudgetCadence Cadence { get; init; }
         public Guid? AssetId { get; init; }
         public bool AssetIdSpecified { get; init; }
+    }
+
+    private sealed class BudgetSettingsResponse
+    {
+        public int Version { get; set; }
+        public bool NeedsUpdate { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<BudgetV2GroupDocument>? Groups { get; set; }
+
+        public List<BudgetItemDocument> Income { get; init; } = new();
+        public List<BudgetItemDocument> Bills { get; init; } = new();
+        public List<BudgetItemDocument> Savings { get; init; } = new();
+        public List<BudgetItemDocument> Spend { get; init; } = new();
     }
 }
 

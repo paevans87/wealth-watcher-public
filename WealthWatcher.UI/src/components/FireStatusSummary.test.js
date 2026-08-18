@@ -91,6 +91,22 @@ test('FIRE status renders a setup state without inventing progress', () => {
     assert.doesNotMatch(card.innerHTML, /role="progressbar"/);
 });
 
+test('FIRE status includes holistic milestone progress in the shared card', () => {
+    store.state.featureSettings = { ...originalFeatureSettings, fire: true, tracker: true, forecast: true, budget: true, milestones: true };
+    store.state.milestoneSettings = { targets: [500000, 1000000] };
+    const card = { hidden: true, innerHTML: '', dataset: {} };
+
+    renderFireStatusSummary(buildFireStatusViewModel({
+        holisticNetWorth: 600000,
+        fireSummary: readySummary(),
+        projection: { status: 'projected', date: '2043-02' }
+    }), card);
+
+    assert.match(card.innerHTML, /Next holistic milestone/);
+    assert.match(card.innerHTML, /Holistic milestone progress/);
+    assert.match(card.innerHTML, /aria-valuenow="20"/);
+});
+
 test('projection dates are formatted as month and year', () => {
     assert.equal(formatProjectionDate('2043-02'), 'February 2043');
     assert.equal(formatProjectionDate('not-a-date'), null);

@@ -13,6 +13,13 @@ public class AppPreference
     public string FireJson { get; set; } = "{}";
     public string IntegrationJson { get; set; } = "{}";
     public string MilestoneJson { get; set; } = MilestoneSettingsPolicy.DefaultJson;
+
+    /// <summary>
+    /// The optional versioned budget document. It is intentionally nullable so
+    /// databases that only contain legacy BudgetLines remain valid and can be
+    /// read without a data migration.
+    /// </summary>
+    public string? BudgetJson { get; set; }
 }
 
 [Obsolete("Use AppPreference.")]

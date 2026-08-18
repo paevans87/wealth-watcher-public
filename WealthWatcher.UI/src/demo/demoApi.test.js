@@ -65,6 +65,155 @@ test('milestone settings persist through the demo contract and reset cleanly', a
     assert.deepEqual(JSON.parse(resetSettings.wealthWatcherMilestoneSettings), { targets: [] });
 });
 
+test('default budget fixture is v2-shaped, seeded with useful groups, and exposes migration guidance', async () => {
+    const seededState = getDemoState();
+    const storedDocument = JSON.parse(seededState.settings.wealthWatcherBudgetSettings);
+    assert.equal(storedDocument.version, 2);
+    assert.equal(storedDocument.needsUpdate, true);
+    assert.deepEqual(storedDocument.groups.map(group => ({
+        id: group.id,
+        name: group.name,
+        builtIn: group.builtIn
+    })), [
+        { id: 'income', name: 'Income', builtIn: true },
+        { id: 'bills', name: 'Bills', builtIn: false },
+        { id: 'savings', name: 'Savings', builtIn: false },
+        { id: 'spend', name: 'Spend', builtIn: false }
+    ]);
+    assert.equal(storedDocument.groups.find(group => group.name === 'Bills').items.find(item => item.name === 'Mortgage').category, 'Accommodation');
+
+    const readDocument = await readBudgetSettings();
+    assert.equal(readDocument.version, 2);
+    assert.equal(readDocument.needsUpdate, true);
+    assert.ok(readDocument.groups.every(group => Array.isArray(group.items)));
+    assert.equal(readDocument.savings.find(item => item.name === 'Index fund contribution').assetId, 'asset-isa');
+});
+
+test('budget v2 settings round-trip groups, categories, cadence, and asset mappings', async () => {
+    const document = {
+        version: 2,
+        needsUpdate: false,
+        groups: [
+            {
+                id: 'income',
+                name: 'Income',
+                kind: 'income',
+                role: 'income',
+                builtIn: true,
+                items: [{ id: 'income-round-trip', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null, category: 'Employment' }]
+            },
+            {
+                id: 'custom-bills',
+                name: 'Household bills',
+                role: 'bills',
+                builtIn: false,
+                items: [{ id: 'mortgage-round-trip', name: 'Mortgage', amount: 1450, cadence: 'monthly', assetId: null, category: 'Accommodation' }]
+            },
+            {
+                id: 'custom-savings',
+                name: 'Future plans',
+                kind: 'custom',
+                builtIn: false,
+                items: [{ id: 'saving-round-trip', name: 'ISA contribution', amount: 500, cadence: 'quarterly', assetId: 'asset-isa', category: 'Investing' }]
+            }
+        ]
+    };
+    const write = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify(document) })
+    });
+    assert.equal(write.status, 200);
+
+    const read = await readBudgetSettings();
+    assert.equal(read.version, 2);
+    assert.equal(read.needsUpdate, false);
+    assert.deepEqual(read.groups, [
+        {
+            id: 'income',
+            name: 'Income',
+            kind: 'income',
+            role: 'income',
+            builtIn: true,
+            items: [{ id: 'income-round-trip', name: 'Salary', amount: 6000, cadence: 'monthly', assetId: null, category: 'Employment' }]
+        },
+        {
+            id: 'custom-bills',
+            name: 'Household bills',
+            kind: 'custom',
+            role: 'bills',
+            builtIn: false,
+            items: [{ id: 'mortgage-round-trip', name: 'Mortgage', amount: 1450, cadence: 'monthly', assetId: null, category: 'Accommodation' }]
+        },
+        {
+            id: 'custom-savings',
+            name: 'Future plans',
+            kind: 'custom',
+            role: 'custom',
+            builtIn: false,
+            items: [{ id: 'saving-round-trip', name: 'ISA contribution', amount: 500, cadence: 'quarterly', assetId: 'asset-isa', category: 'Investing' }]
+        }
+    ]);
+    assert.equal(read.savings[0].name, 'ISA contribution');
+    assert.equal(read.savings[0].assetId, 'asset-isa');
+});
+
+test('malformed budget v2 settings are rejected atomically', async () => {
+    const before = await readBudgetSettings();
+    const invalid = await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({
+            wealthWatcherBudgetSettings: JSON.stringify({
+                version: 2,
+                needsUpdate: false,
+                groups: [
+                    {
+                        id: 'income',
+                        name: 'Income',
+                        kind: 'income',
+                        role: 'income',
+                        builtIn: true,
+                        items: [{ id: 'duplicate', name: 'Salary', amount: 100, cadence: 'weekly', assetId: null, category: null }]
+                    },
+                    {
+                        id: 'income',
+                        name: 'Renamed income',
+                        kind: 'income',
+                        role: 'income',
+                        builtIn: true,
+                        items: []
+                    }
+                ]
+            })
+        })
+    });
+    assert.equal(invalid.status, 400);
+    assert.deepEqual(await readBudgetSettings(), before);
+});
+
+test('legacy budget reads expose needsUpdate and the chosen reset seed is restored', async () => {
+    resetDemoState('legacy');
+    const legacy = await readBudgetSettings();
+    assert.equal(legacy.version, 1);
+    assert.equal(legacy.needsUpdate, true);
+    assert.ok(legacy.income.some(item => item.name === 'Legacy salary'));
+
+    await handleDemoRequest('/api/settings', {
+        method: 'POST',
+        body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify({
+            version: 2,
+            needsUpdate: false,
+            groups: [{ id: 'income', name: 'Income', kind: 'income', role: 'income', builtIn: true, items: [] }]
+        }) })
+    });
+    resetDemoState('legacy');
+    assert.equal((await readBudgetSettings()).needsUpdate, true);
+    resetDemoState();
+    const defaultSeed = await readBudgetSettings();
+    assert.equal(defaultSeed.version, 2);
+    assert.equal(defaultSeed.needsUpdate, true);
+    assert.equal(defaultSeed.groups.find(group => group.name === 'Bills').items[0].name, 'Mortgage');
+});
+
 test('seed budget settings expose the production-shaped monthly plan', async () => {
     const budget = await readBudgetSettings();
     for (const category of BUDGET_CATEGORIES) {
@@ -204,7 +353,14 @@ test('budget fixture supports empty, cadence, funding-gap, and disabled states w
         body: JSON.stringify({ wealthWatcherBudgetSettings: JSON.stringify({ income: [], bills: [], savings: [], spend: [] }) })
     });
     assert.equal(emptyWrite.status, 200);
-    assert.deepEqual(await readBudgetSettings(), { income: [], bills: [], savings: [], spend: [] });
+    assert.deepEqual(await readBudgetSettings(), {
+        version: 1,
+        needsUpdate: false,
+        income: [],
+        bills: [],
+        savings: [],
+        spend: []
+    });
 
     const cadenceBudget = {
         income: [

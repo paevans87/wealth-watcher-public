@@ -36,6 +36,7 @@ const SETTING_OBJECT_ARRAY_KEYS = {
     wealthWatcherFireSettings: ['windfalls'],
     wealthWatcherBudgetSettings: ['income', 'bills', 'savings', 'spend']
 };
+const BUDGET_V2_VERSION = 2;
 const BUDGET_CATEGORIES = ['income', 'bills', 'savings', 'spend'];
 const BUDGET_CATEGORY_LABELS = {
     income: 'Income',
@@ -43,6 +44,11 @@ const BUDGET_CATEGORY_LABELS = {
     savings: 'Savings',
     spend: 'Spend'
 };
+const BUDGET_V2_CADENCES = new Set([
+    'month', 'monthly', '1m',
+    'quarter', 'quarterly', '3m',
+    'annual', 'annually', 'year', 'yearly', '12m'
+]);
 const DEFAULT_MARKET_HOURS = {
     Days: [
         { Day: 'Monday', Enabled: true, OpenTime: '08:00', CloseTime: '16:30' },
@@ -79,6 +85,76 @@ const numberValue = value => Number.isFinite(Number(value)) ? Number(value) : 0;
 const normalize = value => String(value ?? '').trim().toLowerCase();
 const json = value => JSON.stringify(value);
 const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const createDefaultBudgetSettings = () => ({
+    version: BUDGET_V2_VERSION,
+    // The demo deliberately represents a historic plan that has been loaded
+    // into the v2 shape but still needs the user to review its settings.
+    needsUpdate: true,
+    groups: [
+        {
+            id: 'income',
+            name: 'Income',
+            kind: 'income',
+            role: 'income',
+            builtIn: true,
+            items: [
+                { id: 'income-demo-salary', name: 'Salary', amount: 6500, cadence: 'monthly', assetId: null, category: 'Employment' },
+                { id: 'income-demo-freelance', name: 'Freelance design', amount: 650, cadence: 'monthly', assetId: null, category: 'Self-employment' }
+            ]
+        },
+        {
+            id: 'bills',
+            name: 'Bills',
+            kind: 'custom',
+            role: 'custom',
+            builtIn: false,
+            items: [
+                { id: 'bill-demo-mortgage', name: 'Mortgage', amount: 1450, cadence: 'monthly', assetId: null, category: 'Accommodation' },
+                { id: 'bill-demo-council-tax', name: 'Council tax', amount: 190, cadence: 'monthly', assetId: null, category: 'Home' },
+                { id: 'bill-demo-utilities', name: 'Utilities', amount: 230, cadence: 'monthly', assetId: null, category: 'Home' }
+            ]
+        },
+        {
+            id: 'savings',
+            name: 'Savings',
+            kind: 'custom',
+            role: 'custom',
+            builtIn: false,
+            items: [
+                { id: 'saving-demo-emergency', name: 'Emergency fund', amount: 450, cadence: 'monthly', assetId: 'asset-cash', category: 'Safety net' },
+                { id: 'saving-demo-index', name: 'Index fund contribution', amount: 1500, cadence: 'monthly', assetId: 'asset-isa', category: 'Investing' }
+            ]
+        },
+        {
+            id: 'spend',
+            name: 'Spend',
+            kind: 'custom',
+            role: 'custom',
+            builtIn: false,
+            items: [
+                { id: 'spend-demo-groceries', name: 'Groceries', amount: 520, cadence: 'monthly', assetId: null, category: 'Food & household' },
+                { id: 'spend-demo-travel', name: 'Travel', amount: 350, cadence: 'monthly', assetId: null, category: 'Leisure' },
+                { id: 'spend-demo-everything-else', name: 'Everything else', amount: 610, cadence: 'monthly', assetId: null, category: null }
+            ]
+        }
+    ]
+});
+
+const createLegacyBudgetSettings = () => ({
+    income: [
+        { name: 'Legacy salary', amount: 6500 }
+    ],
+    bills: [
+        { name: 'Legacy mortgage', amount: 1450 }
+    ],
+    savings: [
+        { name: 'Legacy emergency fund', amount: 450, cadence: 'monthly', assetId: 'asset-cash' }
+    ],
+    spend: [
+        { name: 'Legacy groceries', amount: 520 }
+    ]
+});
 
 function parseDateKey(value) {
     const raw = String(value ?? '').trim();
@@ -181,15 +257,187 @@ function normalizeBudgetAssetId(value, assets, { strict = false, path = 'assetId
     return null;
 }
 
+function hasBudgetDocumentMarker(document, marker) {
+    return Object.prototype.hasOwnProperty.call(document, marker)
+        || Object.prototype.hasOwnProperty.call(document, marker[0].toUpperCase() + marker.slice(1));
+}
+
+function normalizeBudgetV2AssetId(value, path) {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value !== 'string' || !value.trim()) {
+        throw new DemoValidationError(`${path} must be a non-empty asset id or null.`);
+    }
+    return value.trim();
+}
+
+function normalizeBudgetV2Category(value, path) {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value !== 'string' || !value.trim()) {
+        throw new DemoValidationError(`${path} must be a non-empty category or null.`);
+    }
+    return value.trim();
+}
+
+function normalizeBudgetV2SettingsDocument(document) {
+    if (document.version !== BUDGET_V2_VERSION) {
+        return { error: 'wealthWatcherBudgetSettings.version must be 2 when groups are supplied.' };
+    }
+    if (hasBudgetDocumentMarker(document, 'needsUpdate')
+        && typeof readProperty(document, 'needsUpdate', 'NeedsUpdate') !== 'boolean') {
+        return { error: 'wealthWatcherBudgetSettings.needsUpdate must be true or false.' };
+    }
+    if (!Array.isArray(document.groups) || document.groups.length === 0) {
+        return { error: 'wealthWatcherBudgetSettings.groups must contain at least one group.' };
+    }
+
+    const groupIds = new Set();
+    const itemIds = new Set();
+    let incomeGroupCount = 0;
+    const groups = [];
+
+    for (const [groupIndex, group] of document.groups.entries()) {
+        const groupPath = `wealthWatcherBudgetSettings.groups[${groupIndex}]`;
+        if (!isRecord(group)) return { error: `${groupPath} must be a JSON object.` };
+
+        const rawId = readProperty(group, 'id', 'Id');
+        const rawName = readProperty(group, 'name', 'Name');
+        if (typeof rawId !== 'string' || !rawId.trim()) return { error: `${groupPath}.id must not be blank.` };
+        if (typeof rawName !== 'string' || !rawName.trim()) return { error: `${groupPath}.name must not be blank.` };
+
+        const id = rawId.trim();
+        const idKey = id.toLowerCase();
+        if (groupIds.has(idKey)) return { error: `${groupPath}.id contains a duplicate group id '${id}'.` };
+        groupIds.add(idKey);
+
+        const rawBuiltIn = readProperty(group, 'builtIn', 'BuiltIn');
+        if (typeof rawBuiltIn !== 'boolean') return { error: `${groupPath}.builtIn must be true or false.` };
+
+        const rawKind = readProperty(group, 'kind', 'Kind');
+        const rawRole = readProperty(group, 'role', 'Role');
+        const kind = normalize(rawKind) || null;
+        const role = normalize(rawRole) || null;
+        if (!kind && !role) return { error: `${groupPath} must specify kind or role.` };
+        if (kind === 'income' && role && role !== 'income') {
+            return { error: `${groupPath}.kind and role must agree for the Income group.` };
+        }
+
+        const isIncome = kind === 'income' || role === 'income';
+        if (isIncome) {
+            incomeGroupCount += 1;
+            if (!rawBuiltIn) return { error: `${groupPath} Income must remain builtIn.` };
+            if (rawName.trim().toLowerCase() !== 'income') {
+                return { error: `${groupPath}.name cannot rename the built-in Income group.` };
+            }
+        } else if (rawBuiltIn) {
+            return { error: `${groupPath} custom groups must set builtIn to false.` };
+        }
+
+        if (!Array.isArray(group.items)) return { error: `${groupPath}.items must be a JSON array.` };
+        const normalizedGroup = {
+            id,
+            name: isIncome ? 'Income' : rawName.trim(),
+            kind: isIncome ? 'income' : 'custom',
+            role: isIncome ? 'income' : (role || kind || 'custom'),
+            builtIn: isIncome,
+            items: []
+        };
+
+        for (const [itemIndex, item] of group.items.entries()) {
+            const itemPath = `${groupPath}.items[${itemIndex}]`;
+            if (!isRecord(item)) return { error: `${itemPath} must be a JSON object.` };
+
+            const rawItemId = readProperty(item, 'id', 'Id');
+            const rawItemName = readProperty(item, 'name', 'Name');
+            if (typeof rawItemId !== 'string' || !rawItemId.trim()) return { error: `${itemPath}.id must not be blank.` };
+            if (typeof rawItemName !== 'string' || !rawItemName.trim()) return { error: `${itemPath}.name must not be blank.` };
+
+            const itemId = rawItemId.trim();
+            const itemIdKey = itemId.toLowerCase();
+            if (itemIds.has(itemIdKey)) return { error: `${itemPath}.id contains a duplicate item id '${itemId}'.` };
+            itemIds.add(itemIdKey);
+
+            const rawAmount = readProperty(item, 'amount', 'Amount');
+            if (rawAmount === undefined || rawAmount === null || rawAmount === '') {
+                return { error: `${itemPath}.amount must be a finite number.` };
+            }
+
+            let amount;
+            let cadence;
+            let assetId;
+            let category;
+            try {
+                amount = normalizeBudgetAmount(rawAmount, {
+                    strict: true,
+                    path: `${itemPath}.amount`
+                });
+                const rawCadence = readProperty(item, 'cadence', 'Cadence');
+                if (typeof rawCadence !== 'string' || !BUDGET_V2_CADENCES.has(normalize(rawCadence))) {
+                    throw new DemoValidationError(`${itemPath}.cadence must be monthly, quarterly, or annually.`);
+                }
+                cadence = normalizeBudgetCadence(rawCadence, {
+                    strict: true,
+                    path: `${itemPath}.cadence`
+                });
+                assetId = normalizeBudgetV2AssetId(
+                    readProperty(item, 'assetId', 'AssetId'),
+                    `${itemPath}.assetId`
+                );
+                category = normalizeBudgetV2Category(
+                    readProperty(item, 'category', 'Category'),
+                    `${itemPath}.category`
+                );
+            } catch (error) {
+                return { error: error.message };
+            }
+
+            normalizedGroup.items.push({
+                id: itemId,
+                name: rawItemName.trim(),
+                amount,
+                cadence,
+                assetId,
+                category
+            });
+        }
+        groups.push(normalizedGroup);
+    }
+
+    if (incomeGroupCount !== 1) {
+        return { error: 'wealthWatcherBudgetSettings.groups must contain exactly one built-in Income group.' };
+    }
+
+    return {
+        value: {
+            version: BUDGET_V2_VERSION,
+            needsUpdate: readProperty(document, 'needsUpdate', 'NeedsUpdate') === true,
+            groups
+        }
+    };
+}
+
 function normalizeBudgetSettingsDocument(document, assets, { strict = false } = {}) {
     if (!isRecord(document)) return { error: 'wealthWatcherBudgetSettings must contain a JSON object.' };
 
+    const documentVersion = readProperty(document, 'version', 'Version');
+    const isLegacyVersionedDocument = documentVersion === 1 && !hasBudgetDocumentMarker(document, 'groups');
+    if (!isLegacyVersionedDocument
+        && (hasBudgetDocumentMarker(document, 'version') || hasBudgetDocumentMarker(document, 'groups'))) {
+        return normalizeBudgetV2SettingsDocument(document);
+    }
+
+    const explicitNeedsUpdate = readProperty(document, 'needsUpdate', 'NeedsUpdate');
+    if (explicitNeedsUpdate !== undefined && typeof explicitNeedsUpdate !== 'boolean') {
+        return { error: 'wealthWatcherBudgetSettings.needsUpdate must be true or false.' };
+    }
+
     const normalized = {};
+    let hasHistoricData = false;
     for (const category of BUDGET_CATEGORIES) {
         const rawItems = readProperty(document, category, BUDGET_CATEGORY_LABELS[category]);
         if (rawItems !== undefined && rawItems !== null && !Array.isArray(rawItems)) {
             return { error: `wealthWatcherBudgetSettings.${category} must be a JSON array.` };
         }
+        if ((rawItems || []).length > 0) hasHistoricData = true;
 
         const items = [];
         for (const [index, item] of (rawItems || []).entries()) {
@@ -224,7 +472,7 @@ function normalizeBudgetSettingsDocument(document, assets, { strict = false } = 
             const id = String(rawId ?? '').trim() || `budget-${category}-${index + 1}`;
             const rawAssetId = readProperty(item, 'assetId', 'AssetId');
             try {
-                items.push({
+                const normalizedItem = {
                     id,
                     name,
                     amount,
@@ -237,7 +485,12 @@ function normalizeBudgetSettingsDocument(document, assets, { strict = false } = 
                         assets,
                         { strict, path: `wealthWatcherBudgetSettings.${category}[${index}].assetId` }
                     )
-                });
+                };
+                const rawCategory = readProperty(item, 'category', 'Category');
+                if (rawCategory !== undefined && rawCategory !== null && String(rawCategory).trim()) {
+                    normalizedItem.category = String(rawCategory).trim();
+                }
+                items.push(normalizedItem);
             } catch (error) {
                 return { error: error.message };
             }
@@ -249,7 +502,43 @@ function normalizeBudgetSettingsDocument(document, assets, { strict = false } = 
         ));
     }
 
-    return { value: normalized };
+    return {
+        value: {
+            version: 1,
+            needsUpdate: explicitNeedsUpdate === true || hasHistoricData,
+            ...normalized
+        }
+    };
+}
+
+function legacyCategoryForBudgetGroup(group) {
+    if (group?.builtIn === true || normalize(group?.kind) === 'income' || normalize(group?.role) === 'income') {
+        return 'income';
+    }
+    const tokens = [group?.role, group?.kind, group?.id, group?.name].map(normalize);
+    if (tokens.some(token => ['bills', 'bill', 'needs'].includes(token) || token.includes('bill') || token.includes('need'))) return 'bills';
+    if (tokens.some(token => ['savings', 'saving'].includes(token) || token.includes('saving'))) return 'savings';
+    if (tokens.some(token => ['spend', 'spending', 'wants'].includes(token) || token.includes('spend') || token.includes('want'))) return 'spend';
+    return 'spend';
+}
+
+function budgetV2CompatibilityArrays(document) {
+    const arrays = Object.fromEntries(BUDGET_CATEGORIES.map(category => [category, []]));
+    for (const group of document.groups || []) {
+        const category = legacyCategoryForBudgetGroup(group);
+        for (const item of group.items || []) {
+            // Keep compatibility rows deliberately free of v2-only Sankey
+            // metadata; category assignments remain in the v2 group document.
+            arrays[category].push({
+                id: item.id,
+                name: item.name,
+                amount: item.amount,
+                cadence: item.cadence,
+                assetId: item.assetId ?? null
+            });
+        }
+    }
+    return arrays;
 }
 
 function normalizePersistedSetting(key, value, assets = [], { strictBudget = false } = {}) {
@@ -288,7 +577,14 @@ function safeSettingsSnapshot() {
     const settings = clone(demoState.settings) || {};
     PERSISTED_SETTING_KEYS.forEach(key => {
         const normalized = normalizePersistedSetting(key, settings[key], demoState.assets);
-        settings[key] = normalized.value || '{}';
+        if (key === 'wealthWatcherBudgetSettings' && normalized.parsed?.version === BUDGET_V2_VERSION) {
+            settings[key] = json({
+                ...normalized.parsed,
+                ...budgetV2CompatibilityArrays(normalized.parsed)
+            });
+        } else {
+            settings[key] = normalized.value || '{}';
+        }
     });
     if (Object.prototype.hasOwnProperty.call(settings, 'wealthWatcherMilestoneSettings')) {
         try {
@@ -300,7 +596,7 @@ function safeSettingsSnapshot() {
     return settings;
 }
 
-function seedState() {
+function seedState({ budgetSettings = createDefaultBudgetSettings() } = {}) {
     const today = todayKey();
     const groups = [
         {
@@ -473,26 +769,7 @@ function seedState() {
             wealthWatcherMilestoneSettings: json({ targets: [] }),
             wealthWatcherForecastSettings: json({ dateOfBirth: '1990-06-15', annualReturn: 4, monthlyContribution: 1500, forecastStrategy: 'fire-default' }),
             wealthWatcherFireSettings: json({ targetIncome: 4000, swr: 4, includeStatePension: false, statePensionAmount: 12547, includeWindfalls: false, expectedWindfalls: 0, includedAssets: ['investments', 'pensions', 'property'] }),
-            wealthWatcherBudgetSettings: json({
-                income: [
-                    { id: 'income-demo-salary', name: 'Salary', amount: 6500, cadence: 'monthly', assetId: null },
-                    { id: 'income-demo-freelance', name: 'Freelance design', amount: 650, cadence: 'monthly', assetId: null }
-                ],
-                bills: [
-                    { id: 'bill-demo-mortgage', name: 'Mortgage', amount: 1450, cadence: 'monthly', assetId: null },
-                    { id: 'bill-demo-council-tax', name: 'Council tax', amount: 190, cadence: 'monthly', assetId: null },
-                    { id: 'bill-demo-utilities', name: 'Utilities', amount: 230, cadence: 'monthly', assetId: null }
-                ],
-                savings: [
-                    { id: 'saving-demo-emergency', name: 'Emergency fund', amount: 450, cadence: 'monthly', assetId: 'asset-cash' },
-                    { id: 'saving-demo-index', name: 'Index fund contribution', amount: 1500, cadence: 'monthly', assetId: 'asset-isa' }
-                ],
-                spend: [
-                    { id: 'spend-demo-groceries', name: 'Groceries', amount: 520, cadence: 'monthly', assetId: null },
-                    { id: 'spend-demo-travel', name: 'Travel', amount: 350, cadence: 'monthly', assetId: null },
-                    { id: 'spend-demo-everything-else', name: 'Everything else', amount: 610, cadence: 'monthly', assetId: null }
-                ]
-            })
+            wealthWatcherBudgetSettings: json(clone(budgetSettings))
         },
         groups,
         categories: clone(CATEGORY_SEEDS),
@@ -554,8 +831,23 @@ function persistState() {
 
 let demoState = loadStoredState();
 
-export function resetDemoState() {
-    demoState = seedState();
+function resolveBudgetSeed(seed) {
+    if (seed === 'legacy') return createLegacyBudgetSettings();
+    if (seed === 'v2' || seed === 'default' || seed === undefined || seed === null) {
+        return createDefaultBudgetSettings();
+    }
+    if (isRecord(seed?.budgetSettings)) return clone(seed.budgetSettings);
+    if (isRecord(seed)) return clone(seed);
+    return createDefaultBudgetSettings();
+}
+
+/**
+ * Reset to the default v2 fixture, or to the explicit legacy fixture used by
+ * migration/read-parity tests. A document object may also be supplied when a
+ * caller needs a deterministic custom seed.
+ */
+export function resetDemoState(seed = 'default') {
+    demoState = seedState({ budgetSettings: resolveBudgetSeed(seed) });
     const storage = demoStorage();
     try { storage?.removeItem(DEMO_STORAGE_KEY); } catch { /* storage is optional */ }
     return getDemoState();

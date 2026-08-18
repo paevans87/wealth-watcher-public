@@ -30,7 +30,7 @@ test('the demo adapter explicitly covers the current API-backed UI contract', as
     }
 });
 
-test('budget contract stays on /api/settings and returns usable four-category rows', async () => {
+test('budget contract stays on /api/settings and returns v2 groups plus compatibility rows', async () => {
     const featureWrite = DEMO_API_CONTRACT.find(operation => (
         operation.method === 'POST'
         && operation.path === '/api/settings'
@@ -56,7 +56,11 @@ test('budget contract stays on /api/settings and returns usable four-category ro
 
     const settings = await (await handleDemoRequest('/api/settings')).json();
     const budget = JSON.parse(settings.wealthWatcherBudgetSettings);
-    assert.deepEqual(Object.keys(budget).sort(), ['bills', 'income', 'savings', 'spend']);
+    assert.equal(budget.version, 2);
+    assert.equal(budget.needsUpdate, false);
+    assert.equal(budget.groups.find(group => group.name === 'Income').builtIn, true);
+    assert.ok(budget.groups.filter(group => group.name !== 'Income').every(group => group.builtIn === false));
+    assert.equal(budget.groups.find(group => group.name === 'Savings').items[0].category, 'Investing');
     assert.ok(budget.income.every(item => item.cadence));
     assert.equal(budget.savings.find(item => item.name === 'ISA contribution').assetId, 'asset-isa');
     assert.equal(budget.savings.find(item => item.name === 'Rainy day fund').assetId, null);
@@ -91,14 +95,46 @@ test('core demo response shapes remain usable by their pages', async () => {
 
     const settings = await (await handleDemoRequest('/api/settings')).json();
     const budget = JSON.parse(settings.wealthWatcherBudgetSettings);
-    assert.deepEqual(Object.keys(budget).sort(), ['bills', 'income', 'savings', 'spend']);
-    assert.ok(Object.values(budget).flat().every(item => (
+    assert.equal(budget.version, 2);
+    assert.ok(budget.groups.every(group => group.items.every(item => (
+        typeof item.id === 'string'
+        && typeof item.name === 'string'
+        && Number.isFinite(item.amount)
+        && ['monthly', 'quarterly', 'annually'].includes(item.cadence)
+        && (item.assetId === null || typeof item.assetId === 'string')
+        && (item.category === null || typeof item.category === 'string')
+    ))));
+    assert.ok(['income', 'bills', 'savings', 'spend'].flatMap(category => budget[category] || []).every(item => (
         typeof item.id === 'string'
         && typeof item.name === 'string'
         && Number.isFinite(item.amount)
         && ['monthly', 'quarterly', 'annually'].includes(item.cadence)
         && (item.assetId === null || typeof item.assetId === 'string')
     )));
+});
+
+test('demo requests remain local and do not require live provider/API traffic', async () => {
+    const previousFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+        fetchCalls += 1;
+        throw new Error('The browser demo must not call live fetch.');
+    };
+    try {
+        const settings = await handleDemoRequest('/api/settings');
+        const dashboard = await handleDemoRequest('/api/dashboard?period=1M');
+        const forecast = await handleDemoRequest('/api/wealth/forecast', {
+            method: 'POST',
+            body: JSON.stringify({ target: 1200000, annualReturn: 4, monthlyContribution: 0, includedAssets: ['investments'] })
+        });
+        assert.equal(settings.status, 200);
+        assert.equal(dashboard.status, 200);
+        assert.equal(forecast.status, 200);
+        assert.equal(fetchCalls, 0);
+    } finally {
+        if (previousFetch === undefined) delete globalThis.fetch;
+        else globalThis.fetch = previousFetch;
+    }
 });
 
 test('application source has one browser-network boundary', async () => {
