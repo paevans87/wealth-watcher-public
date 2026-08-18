@@ -138,6 +138,23 @@ test('v2 flow source bar spans the rendered flow stack', async () => {
     assert.ok(Math.abs((source.y + source.height) - (targets.at(-1).y + targets.at(-1).height)) < 0.01);
 });
 
+test('v2 flow branches links from the centred source stream', () => {
+    const target = createTarget();
+    renderBudgetV2Flow(target, model('overview', [
+        { label: 'Bills', value: 2500, color: '#ef4444', action: { type: 'group', groupId: 'bills' } },
+        { label: 'Savings', value: 1500, color: '#f97316', action: { type: 'group', groupId: 'savings' } },
+        { label: 'Spend', value: 1000, color: '#ec4899', action: { type: 'group', groupId: 'spend' } }
+    ]), {
+        formatter: value => `£${value.toFixed(2)}`
+    });
+
+    const paths = [...target.innerHTML.matchAll(/<path class="budget-v2-flow-link" d="M [\d.]+ ([\d.]+) C [\d.]+ [\d.]+, [\d.]+ [\d.]+, [\d.]+ ([\d.]+)"/g)]
+        .map(match => ({ sourceY: Number(match[1]), targetY: Number(match[2]) }));
+    assert.equal(paths.length, 3);
+    assert.ok(paths[0].sourceY > paths[0].targetY);
+    assert.ok(paths.at(-1).sourceY < paths.at(-1).targetY);
+});
+
 test('v2 flow uses the source colour for the drilldown source bar', () => {
     const target = createTarget();
     renderBudgetV2Flow(target, model(

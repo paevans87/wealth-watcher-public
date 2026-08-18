@@ -100,11 +100,12 @@ function buildFlowSvg(model, formatter, obfuscated) {
     const rawStackHeight = rawTargetHeights.reduce((total, height) => total + height, 0) + gapTotal;
     const fitScale = rawStackHeight > availableHeight ? availableHeight / rawStackHeight : 1;
     const targetHeights = rawTargetHeights.map(height => height * fitScale);
-    const flowHeight = targetHeights.reduce((total, height) => total + height, 0) + gapTotal;
+    const targetHeightTotal = targetHeights.reduce((total, height) => total + height, 0);
+    const flowHeight = targetHeightTotal + gapTotal;
     const sourceHeight = rows.length ? flowHeight : 30;
     const sourceY = (FLOW_HEIGHT - sourceHeight) / 2;
     let targetY = sourceY;
-    let sourceOffset = 0;
+    let sourceOffset = Math.max((sourceHeight - targetHeightTotal) / 2, 0);
     const controlX = SOURCE_X + 310;
     const linkMarkup = [];
     const targetMarkup = [];
@@ -127,7 +128,7 @@ function buildFlowSvg(model, formatter, obfuscated) {
             formatter,
             obfuscated
         }));
-        sourceOffset += height + gap;
+        sourceOffset += height;
         targetY += height + gap;
     });
 
