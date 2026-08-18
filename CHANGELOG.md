@@ -35,7 +35,5 @@ The latest stable release is `v0.5.0`. Changes that have not yet been released a
 ## Unreleased
 
 - Add a Dashboard FIRE status summary that separates selected FIRE assets from Holistic Net Worth, reuses forecast assumptions for a projected date, and provides neutral next-action links.
-- Overhaul Budget V2 with backwards-compatible historic-budget guidance, built-in Income plus user-created custom groups, category assignments for line items, and group-to-category-to-line-item Sankey drill-down on desktop and mobile; editing remains continuous without an unlock or done-editing lock.
-- Consolidate dashboard milestone progress into the Fire Status widget with a progress bar and remove the duplicate Milestones widget.
 - Prepare the repository for open-source release with public CI, dependency checks, contributor guidance, and safer local deployment defaults.
 - Maintain the public release policy, version-aligned UI metadata, release notes, release checks, and application SBOMs; tagged Docker images are published to GHCR while deployment data remains local.
