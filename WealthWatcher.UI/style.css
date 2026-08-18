@@ -7912,8 +7912,16 @@ body.form-flyout-open { overflow: hidden; }
     outline: none;
 }
 
-.budget-v2-table-container { margin-top: 0.75rem; overflow-x: auto; }
-.budget-v2-table { min-width: 48rem; }
+.budget-v2-table-container { margin-top: 0.75rem; overflow-x: hidden; }
+.budget-v2-table { max-width: 100%; min-width: 0; table-layout: fixed; width: 100%; }
+.budget-v2-table th,
+.budget-v2-table td { min-width: 0; overflow-wrap: anywhere; }
+.budget-v2-table th:nth-child(1) { width: 28%; }
+.budget-v2-table th:nth-child(2) { width: 15%; }
+.budget-v2-table th:nth-child(3) { width: 19%; }
+.budget-v2-table th:nth-child(4) { width: 14%; }
+.budget-v2-table th:nth-child(5) { width: 14%; }
+.budget-v2-table th:nth-child(6) { width: 10%; }
 .budget-v2-table th { font-size: 0.64rem; }
 .budget-v2-table td { padding: 0.45rem; }
 .budget-v2-item-row { transition: background 160ms ease; }

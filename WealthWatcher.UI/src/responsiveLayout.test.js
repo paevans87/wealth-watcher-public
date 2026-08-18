@@ -81,6 +81,8 @@ test('Budget configuration uses always-reachable group editing and a responsive 
     assert.doesNotMatch(indexMarkup, /budget-edit-plan-button|Done editing|Unlock editing/);
     assert.match(stylesheet, /\.budget-groups-editor\s*\{[\s\S]*display:\s*grid/);
     assert.match(stylesheet, /\.budget-group-header\s*\{[\s\S]*cursor:\s*pointer/);
+    assert.match(stylesheet, /\.budget-v2-table-container\s*\{[^}]*overflow-x:\s*hidden/);
+    assert.match(stylesheet, /\.budget-v2-table\s*\{[^}]*table-layout:\s*fixed/);
     assert.match(stylesheet, /\.budget-item-edit-button\s*\{/);
     assert.match(stylesheet, /\.budget-add-item-action\s*\{/);
     assert.match(stylesheet, /\.budget-v2-flow-svg\s*\{/);
