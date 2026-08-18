@@ -2,7 +2,14 @@
 
 All notable changes to this project will be documented here.
 
-The latest stable release is `v0.7.0`. Changes that have not yet been released are grouped under `Unreleased`.
+The latest stable release is `v0.8.0`. Changes that have not yet been released are grouped under `Unreleased`.
+
+## 0.8.0 - 2026-08-18
+
+- Refine Budget flow presentation with compact inline labels, wider Sankey gaps, adaptive dense-list sizing, responsive width limits, and label-safe node placement.
+- Add an over-budget alert and only prompt for meaningful unallocated funds when at least 5% of monthly income remains unallocated.
+- Replace stacked delete/archive confirmation popups with inline two-step actions and keep the flow readable across desktop, mobile, accessible, legacy, and browser-demo views.
+- Fix clipping for Income, Unallocated, and other long labels, including four-digit amounts and 20+ item group drill-downs.
 
 ## 0.7.0 - 2026-08-18
 
@@ -50,5 +57,5 @@ The latest stable release is `v0.7.0`. Changes that have not yet been released a
 
 ## Unreleased
 
-- Prepare the repository for open-source release with public CI, dependency checks, contributor guidance, and safer local deployment defaults.
+- Continue improving public application reliability, accessibility, and release automation.
 - Maintain the public release policy, version-aligned UI metadata, release notes, release checks, and application SBOMs; tagged Docker images are published to GHCR while deployment data remains local.
