@@ -2,7 +2,15 @@
 
 All notable changes to this project will be documented here.
 
-The latest stable release is `v0.8.0`. Changes that have not yet been released are grouped under `Unreleased`.
+The latest stable release is `v0.9.0`. Changes that have not yet been released are grouped under `Unreleased`.
+
+## 0.9.0 - 2026-09-02
+
+- Add an optional, separately deployed provider webhook relay with signed SnapTrade ingress, SQLite retry state, outbound WebSocket delivery, and a provider-handler boundary for future webhook providers.
+- Add connection-scoped update modes so each integration uses either scheduled polling or webhook delivery, with provider capability checks and automatic fallback to polling when the relay is disabled through the application.
+- Add Integrations controls for relay status, enable/disable, relay-to-API diagnostics, provider-specific setup guidance, and copyable public webhook URLs.
+- Publish the API, web, and optional webhook-relay images through the same validated, signed, SBOM-producing release pipeline.
+- Add the integration sync-mode and relay-setting database migration, expanded API/relay/UI regression coverage, and browser-demo parity for relay behavior.
 
 ## 0.8.0 - 2026-08-18
 
@@ -57,6 +65,5 @@ The latest stable release is `v0.8.0`. Changes that have not yet been released a
 
 ## Unreleased
 
-- Add optional SnapTrade webhook delivery through a separately published, provider-agnostic relay image with outbound WSS, SQLite retry state, and connection-scoped synchronization.
 - Continue improving public application reliability, accessibility, and release automation.
 - Maintain the public release policy, version-aligned UI metadata, release notes, release checks, and application SBOMs; tagged Docker images are published to GHCR while deployment data remains local.
