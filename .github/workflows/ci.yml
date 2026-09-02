@@ -47,6 +47,23 @@ jobs:
       - name: Test API
         run: dotnet test WealthWatcher.Api.Tests/WealthWatcher.Api.Tests.csproj --configuration Release --no-build --no-restore
 
+  relay:
+    name: Webhook relay tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore relay dependencies
+        run: dotnet restore WealthWatcher.WebhookRelay.Tests/WealthWatcher.WebhookRelay.Tests.csproj
+      - name: Build relay
+        run: dotnet build WealthWatcher.WebhookRelay.Tests/WealthWatcher.WebhookRelay.Tests.csproj --configuration Release --no-restore
+      - name: Test relay
+        run: dotnet test WealthWatcher.WebhookRelay.Tests/WealthWatcher.WebhookRelay.Tests.csproj --configuration Release --no-build --no-restore
+
   ui:
     name: UI tests and build
     runs-on: ubuntu-latest
@@ -70,10 +87,13 @@ jobs:
 
   containers:
     name: Container validation
-    needs: [api, ui]
+    needs: [api, relay, ui]
     runs-on: ubuntu-latest
     env:
       POSTGRES_PASSWORD: ci-only-placeholder
+      RELAY_INSTALLATION_ID: ci-installation
+      RELAY_TOKEN: ci-relay-token
+      SNAPTRADE_CONSUMER_KEY: ci-consumer-key
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,8 +101,12 @@ jobs:
         run: docker compose config
       - name: Check API Dockerfile
         run: docker build --check WealthWatcher.Api
+      - name: Check webhook relay Dockerfile
+        run: docker build --check WealthWatcher.WebhookRelay
       - name: Check UI Dockerfile
         run: docker build --check -f WealthWatcher.UI/Dockerfile .
+      - name: Validate standalone relay Compose configuration
+        run: docker compose -f docker-compose.relay.yml config --quiet
 
   sbom:
     name: Dependency inventory
@@ -103,11 +127,13 @@ jobs:
       - name: Restore dependencies
         run: |
           dotnet restore WealthWatcher.Api/WealthWatcher.Api.csproj
+          dotnet restore WealthWatcher.WebhookRelay/WealthWatcher.WebhookRelay.csproj
           npm ci --prefix WealthWatcher.UI
       - name: Generate dependency inventories
         run: |
           mkdir -p artifacts
           dotnet list WealthWatcher.Api/WealthWatcher.Api.csproj package --include-transitive --format json > artifacts/api-dependencies.json
+          dotnet list WealthWatcher.WebhookRelay/WealthWatcher.WebhookRelay.csproj package --include-transitive --format json > artifacts/relay-dependencies.json
           npm sbom --prefix WealthWatcher.UI --sbom-format cyclonedx --sbom-type application > artifacts/ui-sbom.json
       - name: Upload dependency inventories
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -139,6 +165,10 @@ jobs:
             context: .
             file: ./WealthWatcher.UI/Dockerfile
             image: ghcr.io/paevans87/wealth-watcher-public-web
+          - name: Webhook relay
+            context: ./WealthWatcher.WebhookRelay
+            file: ./WealthWatcher.WebhookRelay/Dockerfile
+            image: ghcr.io/paevans87/wealth-watcher-public-webhook-relay
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

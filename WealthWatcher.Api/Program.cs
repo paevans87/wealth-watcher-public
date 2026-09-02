@@ -5,6 +5,7 @@ using WealthWatcher.Api;
 using WealthWatcher.Api.Data;
 using WealthWatcher.Api.Extensions;
 using WealthWatcher.Api.Integrations;
+using WealthWatcher.Api.Integrations.Webhooks;
 using WealthWatcher.Api.Services;
 
 [assembly: InternalsVisibleTo("WealthWatcher.Api.Tests")]
@@ -54,6 +55,23 @@ builder.Services.AddScoped<IntegrationSettingsService>();
 builder.Services.AddScoped<IntegrationService>();
 builder.Services.AddScoped<WealthReadModelService>();
 
+builder.Services.AddSingleton<WebhookRelayStatus>();
+builder.Services.AddSingleton<WebhookRelayControl>();
+builder.Services.AddSingleton<WebhookRelayTestTracker>();
+builder.Services.AddSingleton<IWebhookConnectionResolver, DefaultWebhookConnectionResolver>();
+builder.Services.AddSingleton<IWebhookConnectionResolver, SnaptradeWebhookConnectionResolver>();
+builder.Services.AddSingleton<IWebhookDispatcher, WebhookDispatcher>();
+builder.Services.AddScoped<WebhookRelaySettingsService>();
+builder.Services.AddScoped<WebhookRelayTestService>();
+builder.Services.AddOptions<WebhookRelayOptions>()
+    .BindConfiguration(WebhookRelayOptions.SectionName)
+    .Validate(options => options.IsValid(out _),
+        "Webhook relay configuration is incomplete or uses an invalid WebSocket URL.")
+    .ValidateOnStart();
+
+if (builder.Configuration.GetValue<bool>($"{WebhookRelayOptions.SectionName}:Enabled"))
+    builder.Services.AddHostedService<WebhookRelayWorker>();
+
 builder.Services.AddHostedService<IntegrationSyncWorker>();
 
 builder.Services.AddCors(options =>
@@ -73,6 +91,13 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.InitializeDatabase();
+
+using (var relayScope = app.Services.CreateScope())
+{
+    var relayControl = relayScope.ServiceProvider.GetRequiredService<WebhookRelayControl>();
+    var db = relayScope.ServiceProvider.GetRequiredService<WealthDbContext>();
+    relayControl.LoadPersistedState(db);
+}
 
 app.Use(async (context, next) =>
 {

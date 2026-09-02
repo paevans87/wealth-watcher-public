@@ -75,6 +75,23 @@ The initial dashboard is empty by design:
 
 The supported provider integrations are currently Trading 212 and SnapTrade. Provider connections are optional; manual assets work without them.
 
+### Optional webhook relay
+
+The relay is an optional, separate container for provider webhook delivery. It is useful when a SnapTrade holdings update should trigger a refresh before the normal polling interval, but it is not needed for a standard installation.
+
+1. Create a private API/relay pairing id and a long random relay token. Use the same pair in the relay's `RELAY_INSTALLATION_ID`/`RELAY_TOKEN` settings and the API's `WEBHOOK_RELAY_INSTALLATION_ID`/`WEBHOOK_RELAY_TOKEN` settings. This pairing id is internal; it is not part of the provider webhook URL.
+2. Configure the relay's `SNAPTRADE_CONSUMER_KEY` with the same SnapTrade consumer key used by the API integration. This lets the public boundary verify SnapTrade's `Signature` header before queueing the event.
+3. Put `docker-compose.relay.yml` behind an HTTPS/WSS-capable reverse proxy, then set `RELAY_BIND_ADDRESS` and `RELAY_PORT` as appropriate for that proxy.
+4. Start it independently:
+
+   ```sh
+   docker compose -f docker-compose.relay.yml up -d
+   ```
+
+5. Set `WEBHOOK_RELAY_ENABLED=true`, `WEBHOOK_RELAY_URL=wss://<relay-host>/ws`, and optionally `WEBHOOK_RELAY_HTTP_URL=https://<relay-host>` and `WEBHOOK_RELAY_PUBLIC_BASE_URL=https://<relay-host>` in the private stack, restart the API, and register `https://<relay-host>/webhooks/snaptrade` with SnapTrade. Each self-hosted deployment has its own relay host, so the host—not an installation path segment—identifies where the provider should deliver events. The HTTP URL is used only by the Integrations screen's relay-to-API diagnostic and is derived from the WebSocket URL when omitted. The public base URL must be the relay's externally reachable HTTPS address (for example an ngrok URL), not the Wealth Watcher API address; it lets the provider's webhook reach the relay and lets the Integrations screen display the exact registration URL. It is not used for relay authentication.
+
+Keep the relay SQLite data directory and all tokens private. The API and database should remain bound to the private host; only the relay needs a provider-facing route. The Integrations screen controls the relay's user-facing enabled state, and each connection must use either webhook delivery or scheduled polling. Polling remains available when the relay is disabled, disconnected, or unavailable.
+
 ## Local development path
 
 Use this path when you are changing the code. It uses an in-memory database and does not require PostgreSQL.

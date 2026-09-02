@@ -57,5 +57,6 @@ The latest stable release is `v0.8.0`. Changes that have not yet been released a
 
 ## Unreleased
 
+- Add optional SnapTrade webhook delivery through a separately published, provider-agnostic relay image with outbound WSS, SQLite retry state, and connection-scoped synchronization.
 - Continue improving public application reliability, accessibility, and release automation.
 - Maintain the public release policy, version-aligned UI metadata, release notes, release checks, and application SBOMs; tagged Docker images are published to GHCR while deployment data remains local.

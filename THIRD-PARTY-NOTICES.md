@@ -4,9 +4,10 @@ This file is an implementation inventory for release review. It is not a legal c
 
 ## .NET application dependencies
 
-The API uses the following direct package dependencies. Their package metadata and repositories are the authoritative sources for the applicable notices and license text:
+The API and optional relay use the following direct package dependencies. Their package metadata and repositories are the authoritative sources for the applicable notices and license text:
 
 - [Microsoft.AspNetCore.OpenApi](https://github.com/dotnet/aspnetcore) — OpenAPI support.
+- [Microsoft.Data.Sqlite](https://github.com/dotnet/efcore) — durable queue storage for the optional webhook relay.
 - [Microsoft.EntityFrameworkCore](https://github.com/dotnet/efcore) and [Npgsql](https://github.com/npgsql/efcore.pg) — data access and PostgreSQL provider.
 - [Serilog.AspNetCore](https://github.com/serilog/serilog-aspnetcore) — logging.
 - [SnapTrade.Net](https://github.com/passiv/snaptrade-dotnet) — SnapTrade integration client.

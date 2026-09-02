@@ -37,6 +37,10 @@ public sealed class IntegrationDescriptor
     public string DisplayName { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public IntegrationKind Kind { get; init; } = IntegrationKind.Investment;
+    /// <summary>
+    /// Gets whether this provider can trigger an immediate synchronization through the optional webhook relay.
+    /// </summary>
+    public bool SupportsWebhooks { get; init; }
     public int DefaultPollingIntervalMinutes { get; init; } = 180;
     public int MinimumPollingIntervalMinutes { get; init; } = 1;
     public IReadOnlyList<IntegrationFieldDescriptor> CredentialFields { get; init; } = [];

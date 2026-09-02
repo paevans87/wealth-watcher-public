@@ -1547,6 +1547,44 @@ header {
 .integration-intro { margin-bottom: 1.25rem; color: var(--text-muted); line-height: 1.5; }
 .integration-intro p { margin: 0 0 0.35rem; color: var(--text-main); }
 .integration-intro small, .integration-section-heading span, .integration-connection-copy small, .integration-account small { color: var(--text-muted); }
+.integration-webhook-relay { margin-bottom: 1.25rem; }
+.integration-relay-card { display: grid; gap: 1rem; padding: 1rem; border: 1px solid rgba(6,182,212,0.28); border-radius: 10px; background: linear-gradient(135deg, rgba(6,182,212,0.08), rgba(0,0,0,0.16)); }
+.integration-relay-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.integration-relay-copy { display: grid; gap: 0.25rem; min-width: 0; }
+.integration-relay-copy strong { color: var(--cyan); font-size: 1rem; }
+.integration-relay-copy p, .integration-provider-setup p { margin: 0; color: var(--text-muted); font-size: 0.82rem; line-height: 1.5; }
+.integration-relay-status { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; flex-wrap: wrap; }
+.integration-relay-state { flex: 0 0 auto; padding: 0.25rem 0.55rem; border: 1px solid rgba(148,163,184,0.28); border-radius: 999px; color: var(--text-muted); font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+.integration-relay-state.is-connected { border-color: rgba(52,211,153,0.38); background: rgba(52,211,153,0.1); color: #86efac; }
+.integration-relay-state.is-disconnected, .integration-relay-state.is-error { border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.08); color: #fca5a5; }
+.integration-relay-state.is-loading { border-color: rgba(6,182,212,0.3); background: rgba(6,182,212,0.08); color: #67e8f9; }
+.integration-relay-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.65rem; }
+.integration-relay-metrics > div { display: grid; gap: 0.25rem; min-width: 0; padding: 0.65rem 0.75rem; border: 1px solid rgba(148,163,184,0.16); border-radius: 8px; background: rgba(0,0,0,0.12); }
+.integration-relay-metrics span, .integration-provider-setup > strong { color: var(--text-muted); font-size: 0.75rem; font-weight: 600; }
+.integration-relay-metrics strong { color: var(--text-main); font-size: 0.84rem; }
+.integration-relay-metrics code, .integration-provider-setup code { color: #bae6fd; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.72rem; overflow-wrap: anywhere; }
+.integration-relay-url { grid-column: 1 / -1; }
+.integration-relay-note { margin: 0; color: var(--text-muted); font-size: 0.75rem; line-height: 1.5; }
+.integration-provider-setup { display: grid; gap: 0.35rem; margin-top: 0.6rem; padding: 0.65rem 0.75rem; border: 1px solid rgba(6,182,212,0.2); border-radius: 8px; background: rgba(2,6,23,0.45); }
+.integration-provider-setup > strong { color: var(--text-main); }
+.integration-provider-setup.is-warning { border-color: rgba(251,191,36,0.35); background: rgba(120,53,15,0.12); }
+.integration-provider-setup.is-warning > strong { color: #fde68a; }
+.integration-provider-setup.is-unavailable { border-color: rgba(148,163,184,0.2); }
+.integration-provider-setup code { font-size: 0.7rem; }
+.integration-provider-webhook-url { display: block; width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: #bae6fd; cursor: pointer; font: inherit; text-align: left; }
+.integration-provider-webhook-url:hover code, .integration-provider-webhook-url:focus-visible code { color: #e0f2fe; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.16em; }
+.integration-provider-webhook-url:focus-visible { border-radius: 4px; outline: 2px solid rgba(103,232,249,0.7); outline-offset: 3px; }
+.integration-relay-message { margin: 0; font-size: 0.82rem; line-height: 1.5; }
+.integration-relay-message.error { color: #fca5a5; }
+.integration-relay-message.success { color: #86efac; }
+.integration-relay-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.integration-relay-actions > span { color: var(--text-muted); font-size: 0.75rem; }
+.integration-relay-buttons { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+.integration-relay-enabled-toggle { margin: 0; }
+.integration-relay-buttons .action-btn:disabled { cursor: not-allowed; opacity: 0.45; transform: none; }
+.integration-capability-badge { display: inline-block; margin-left: 0.45rem; padding: 0.16rem 0.42rem; border: 1px solid rgba(103,232,249,0.25); border-radius: 999px; background: rgba(6,182,212,0.1); color: #67e8f9 !important; font-size: 0.62rem !important; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: 0.08rem; white-space: nowrap; }
+.integration-connection-copy .integration-webhook-indicator { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 1rem; width: 1rem; height: 1rem; margin-right: 0.4rem; border: 1px solid rgba(125,211,252,0.45); border-radius: 50%; background: linear-gradient(145deg, rgba(14,116,144,0.34), rgba(2,6,23,0.72)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 0 1px rgba(2,6,23,0.18); color: #bae6fd; font-size: 0.62rem; font-weight: 800; letter-spacing: 0; line-height: 1; text-align: center; text-transform: lowercase; vertical-align: 0.08rem; }
+.integration-connection-provider { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0.15rem; }
 .integration-market-hours { margin-top: 0.5rem; margin-bottom: 1.25rem; }
 .integration-market-hours-panel { padding: 0; border: 1px solid rgba(6,182,212,0.28); border-radius: 10px; background: rgba(6,182,212,0.045); overflow: hidden; }
 .integration-market-hours-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; cursor: pointer; list-style: none; }
@@ -1577,6 +1615,23 @@ header {
 .integration-connection-copy strong, .integration-partner strong, .integration-account strong { color: var(--text-main); }
 .integration-connection-copy span, .integration-partner p { color: var(--text-muted); font-size: 0.85rem; margin: 0; }
 .integration-connection-controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.integration-sync-mode-control { display: flex; align-items: center; gap: 0.45rem; color: var(--text-muted); font-size: 0.8rem; }
+.integration-sync-mode-control .integration-select {
+    appearance: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+    min-height: 2.35rem;
+    padding: 0.55rem 2rem 0.55rem 0.65rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 7px;
+    background: rgba(2, 6, 23, 0.65);
+    color: var(--text-main);
+    cursor: pointer;
+    font: inherit;
+    color-scheme: dark;
+}
+.integration-sync-mode-control .integration-select:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.12); outline: none; }
+.integration-sync-mode-control .integration-select option { background: #162131; color: var(--text-main); }
 .integration-polling-control { display: flex; align-items: center; gap: 0.35rem; color: var(--text-muted); font-size: 0.8rem; }
 .integration-number-input {
     appearance: textfield; background: rgba(2, 6, 23, 0.65); border: 1px solid rgba(148, 163, 184, 0.28);
@@ -1584,6 +1639,7 @@ header {
     min-height: 2.35rem; padding: 0.55rem 0.7rem; text-align: center; transition: border-color 0.2s, box-shadow 0.2s; width: 5rem;
 }
 .integration-number-input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.12); outline: none; }
+.integration-number-input:disabled { cursor: not-allowed; opacity: 0.45; }
 .integration-number-input::-webkit-inner-spin-button, .integration-number-input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .integration-enabled-toggle { margin: 0; }
 .integration-connection-actions { display: flex; gap: 0.5rem; }
@@ -1666,6 +1722,10 @@ header {
 @media (max-width: 800px) {
     .integration-connection, .integration-partner { align-items: flex-start; flex-direction: column; }
     .integration-connection-controls { width: 100%; justify-content: flex-start; }
+    .integration-relay-header { flex-direction: column; }
+    .integration-relay-status { align-self: flex-start; justify-content: flex-start; }
+    .integration-relay-metrics { grid-template-columns: 1fr; }
+    .integration-relay-url { grid-column: auto; }
     .integration-market-hours-row { grid-template-columns: 1fr 1fr; }
     .integration-market-day-toggle { grid-column: 1 / -1; }
     .integration-account { grid-template-columns: 1fr; }

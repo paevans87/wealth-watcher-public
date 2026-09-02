@@ -2,6 +2,19 @@
 
 This guide covers the local/trusted Docker Compose deployment. Do not expose the stack to the public Internet until authentication, authorization, HTTPS, and tenant-isolation requirements are complete.
 
+## Optional webhook relay
+
+The webhook relay is an independently published image and deployment. Back up its `RELAY_DATA_PATH` directory together with the private API's PostgreSQL database when webhook delivery history matters; it contains the SQLite queue and retry state. Do not include the relay installation token or `SNAPTRADE_CONSUMER_KEY` in backups shared for support.
+
+For a relay image update, pin `RELAY_IMAGE` to the desired release or immutable SHA tag and run:
+
+```powershell
+docker compose -f docker-compose.relay.yml pull
+docker compose -f docker-compose.relay.yml up -d --no-build
+```
+
+Verify `https://<relay-host>/health`, the provider route `https://<relay-host>/webhooks/snaptrade`, the API endpoint `/api/integrations/webhook-relay/status`, and the application logs. The Integrations screen exposes the persisted relay enabled/disabled setting and a relay-to-API diagnostic. A disconnected or disabled relay must not be treated as a database or API health failure; scheduled polling remains the reconciliation path for connections configured in polling mode.
+
 ## Backups
 
 1. Stop writes or schedule the backup during a quiet period.
