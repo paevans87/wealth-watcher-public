@@ -473,12 +473,15 @@ test('seed data provides dense history across the past year and a bit', () => {
         months[month] = (months[month] || 0) + 1;
         return months;
     }, {});
-    const monthObservationCounts = Object.values(observationsByMonth);
+    const currentMonth = dates.at(-1).slice(0, 7);
+    const completedMonthObservationCounts = Object.entries(observationsByMonth)
+        .filter(([month]) => month !== currentMonth)
+        .map(([, count]) => count);
 
     assert.ok(state.entries.length >= 800);
     assert.ok(dates.length >= 200);
     assert.ok(historyAgeDays >= 450);
-    assert.ok(monthObservationCounts.every(count => count >= 10 && count <= 20));
+    assert.ok(completedMonthObservationCounts.every(count => count >= 10 && count <= 20));
     for (const assetId of ['asset-isa', 'asset-pension', 'asset-home', 'asset-cash']) {
         assert.ok(state.entries.filter(entry => entry.AssetId === assetId).length >= 200);
     }
