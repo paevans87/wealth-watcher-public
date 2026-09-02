@@ -59,6 +59,9 @@ namespace WealthWatcher.Api.Migrations
                         .HasColumnType("text")
                         .HasDefaultValue("{\"targets\":[]}");
 
+                    b.Property<bool?>("WebhookRelayEnabled")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.ToTable("AppPreferences", (string)null);
@@ -459,6 +462,9 @@ namespace WealthWatcher.Api.Migrations
 
                     b.Property<bool>("OnlyPollDuringMarketTimes")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("SyncMode")
+                        .HasColumnType("integer");
 
                     b.Property<string>("OptionsJson")
                         .IsRequired()

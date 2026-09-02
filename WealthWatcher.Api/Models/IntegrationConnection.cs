@@ -19,6 +19,12 @@ public enum IntegrationConnectionStatus
     Error = 7
 }
 
+public enum IntegrationSyncMode
+{
+    Polling = 1,
+    Webhook = 2
+}
+
 /// <summary>
 /// Installed adapter/provider identity. The adapter code is a boundary value;
 /// local relationships use Id.
@@ -48,6 +54,7 @@ public sealed class IntegrationConnection
     public string DisplayName { get; set; } = string.Empty;
     public bool Enabled { get; set; }
     public IntegrationConnectionStatus Status { get; set; } = IntegrationConnectionStatus.NeedsCredentials;
+    public IntegrationSyncMode SyncMode { get; set; } = IntegrationSyncMode.Polling;
     public int PollingIntervalMinutes { get; set; } = 180;
     public bool OnlyPollDuringMarketTimes { get; set; }
     public string OptionsJson { get; set; } = "{}";

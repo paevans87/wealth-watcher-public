@@ -1,6 +1,8 @@
 using WealthWatcher.Api.Integrations;
+using WealthWatcher.Api.Integrations.Webhooks;
 
 using WealthWatcher.Api.Models;
+using Microsoft.Extensions.Options;
 
 namespace WealthWatcher.Api.Extensions;
 
@@ -20,6 +22,36 @@ public static class IntegrationEndpointExtensions
             IntegrationSettingsService service,
             CancellationToken cancellationToken) =>
             Results.Ok(await service.GetMarketHoursAsync(cancellationToken)));
+
+        app.MapGet("/api/integrations/webhook-relay/status", (
+            WebhookRelayStatus status,
+            WebhookRelayControl control,
+            IOptions<WebhookRelayOptions> options) =>
+            Results.Ok(status.Snapshot(options.Value, control)));
+
+        app.MapPut("/api/integrations/webhook-relay/settings", async (
+            WebhookRelaySettingsRequest request,
+            WebhookRelaySettingsService service,
+            WebhookRelayStatus status,
+            WebhookRelayControl control,
+            IOptions<WebhookRelayOptions> options,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await service.SaveEnabledAsync(request.Enabled, cancellationToken);
+                return Results.Ok(status.Snapshot(options.Value, control));
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { Error = exception.Message });
+            }
+        });
+
+        app.MapPost("/api/integrations/webhook-relay/test", async (
+            WebhookRelayTestService service,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await service.RunAsync(cancellationToken)));
 
         app.MapPut("/api/integrations/settings", async (
             MarketHoursSettings request,
@@ -259,4 +291,9 @@ public sealed class IntegrationAccountAllocationRequest
     public string? EntryKind { get; init; }
     public string? Role { get; init; }
     public bool Clear { get; init; }
+}
+
+public sealed class WebhookRelaySettingsRequest
+{
+    public bool Enabled { get; init; }
 }

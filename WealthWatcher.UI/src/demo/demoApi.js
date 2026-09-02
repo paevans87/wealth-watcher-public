@@ -786,10 +786,23 @@ function seedState({ budgetSettings = createDefaultBudgetSettings() } = {}) {
         audits: [{ Id: 'audit-1', StartTime: new Date().toISOString(), ProviderName: 'Demo data', Status: 'Completed', StatusClass: 'success', RecordsAdded: entries.length, LogMessage: 'Demo portfolio loaded.' }],
         integrations: [],
         integrationCatalog: [
-            { Key: 'snaptrade', DisplayName: 'SnapTrade', Description: 'Connect investment accounts', MinimumPollingIntervalMinutes: 60 },
+            { Key: 'snaptrade', DisplayName: 'SnapTrade', Description: 'Connect investment accounts', SupportsWebhooks: true, MinimumPollingIntervalMinutes: 60 },
             { Key: 'demo-bank', DisplayName: 'Demo Bank', Description: 'Connect a demonstration cash account', MinimumPollingIntervalMinutes: 30 }
         ],
         marketHours: clone(DEFAULT_MARKET_HOURS),
+        webhookRelay: {
+            Configured: false,
+            Enabled: false,
+            CanToggle: false,
+            CanTest: false,
+            Connected: false,
+            RelayPublicBaseUrl: null,
+            LastConnectedAt: null,
+            LastMessageAt: null,
+            LastTestAt: null,
+            LastTestId: null,
+            LastError: null
+        },
         nextIds: { asset: 5, entry: entries.length + 1, value: 1, property: 2, connection: 1, account: 1, audit: 2 }
     };
 }
@@ -813,7 +826,8 @@ function loadStoredState() {
         const merged = {
             ...seeded,
             ...(isRecord(stored) ? stored : {}),
-            settings: { ...seeded.settings, ...(isRecord(stored?.settings) ? stored.settings : {}) }
+            settings: { ...seeded.settings, ...(isRecord(stored?.settings) ? stored.settings : {}) },
+            webhookRelay: { ...seeded.webhookRelay, ...(isRecord(stored?.webhookRelay) ? stored.webhookRelay : {}) }
         };
         const budget = normalizePersistedSetting(
             'wealthWatcherBudgetSettings',
@@ -1272,6 +1286,7 @@ function handleGet(path, searchParams) {
     if (path === '/calendar') return response(buildCalendar(searchParams.get('year'), searchParams.get('month')));
     if (path === '/integrations/catalog') return response(clone(demoState.integrationCatalog));
     if (path === '/integrations') return response(clone(demoState.integrations));
+    if (path === '/integrations/webhook-relay/status') return response(clone(demoState.webhookRelay));
     if (path === '/integrations/settings') return response(clone(demoState.marketHours));
     const integrationMatch = path.match(/^\/integrations\/([^/]+)$/);
     if (integrationMatch) {
@@ -1465,12 +1480,34 @@ function handleWrite(path, method, body, searchParams) {
         demoState.marketHours = updateObject(demoState.marketHours, body);
         return response(clone(demoState.marketHours));
     }
+    if (path === '/integrations/webhook-relay/settings' && method === 'PUT') {
+        if (body.Enabled && !demoState.webhookRelay.Configured)
+            return errorResponse('The demo webhook relay is not configured.', 400);
+        demoState.webhookRelay.Enabled = body.Enabled === true;
+        demoState.webhookRelay.CanTest = demoState.webhookRelay.Enabled;
+        return response(clone(demoState.webhookRelay));
+    }
+    if (path === '/integrations/webhook-relay/test' && method === 'POST') {
+        if (!demoState.webhookRelay.Enabled)
+            return response({ Succeeded: false, Message: 'The demo webhook relay is disabled.' });
+        const testId = `demo-relay-test-${Date.now()}`;
+        demoState.webhookRelay.LastTestId = testId;
+        demoState.webhookRelay.LastTestAt = new Date().toISOString();
+        return response({
+            Succeeded: true,
+            Message: 'The demo relay delivered a test event to the API.',
+            TestId: testId,
+            RelayAccepted: true,
+            RelayStatusCode: 202,
+            ApiReceivedAt: demoState.webhookRelay.LastTestAt
+        });
+    }
     const providerMatch = path.match(/^\/integrations\/([^/]+)$/);
     if (providerMatch && method === 'POST') {
         const providerKey = decodeURIComponent(providerMatch[1]);
         const descriptor = demoState.integrationCatalog.find(item => item.Key === providerKey);
         if (!descriptor) return errorResponse(`Integration provider '${providerKey}' was not found.`);
-        const integration = { Id: nextId('connection'), ProviderKey: providerKey, DisplayName: descriptor.DisplayName, Status: 'NeedsCredentials', PollingIntervalMinutes: descriptor.MinimumPollingIntervalMinutes || 60, Enabled: false, OnlyPollDuringMarketTimes: true, Accounts: [] };
+        const integration = { Id: nextId('connection'), ProviderKey: providerKey, DisplayName: descriptor.DisplayName, Status: 'NeedsCredentials', SyncMode: 'Polling', PollingIntervalMinutes: descriptor.MinimumPollingIntervalMinutes || 60, Enabled: false, OnlyPollDuringMarketTimes: true, Accounts: [] };
         demoState.integrations.push(integration);
         return response(clone(integration), 201);
     }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 globalThis.window = globalThis;
@@ -13,6 +14,7 @@ const integrationConnections = [
         ProviderKey: 'snaptrade',
         DisplayName: 'SnapTrade ISA',
         Status: 'NeedsCredentials',
+        SyncMode: 'Polling',
         PollingIntervalMinutes: 180,
         Enabled: false,
         OnlyPollDuringMarketTimes: true,
@@ -26,9 +28,28 @@ const integrationConnections = [
         PollingIntervalMinutes: 180,
         Enabled: false,
         Accounts: []
+    },
+    {
+        Id: 'connection-3',
+        ProviderKey: 'trading212',
+        DisplayName: 'Trading 212 ISA',
+        Status: 'Active',
+        SyncMode: 'Polling',
+        PollingIntervalMinutes: 180,
+        Enabled: true,
+        OnlyPollDuringMarketTimes: true,
+        Accounts: []
     }
 ];
 const integrationAssets = [];
+let webhookRelayResponse = {
+    Enabled: true,
+    Connected: true,
+    RelayUrl: 'wss://relay.example.com/ws',
+    RelayPublicBaseUrl: 'https://relay.example.com',
+    LastConnectedAt: '2026-09-02T10:00:00Z',
+    LastMessageAt: '2026-09-02T10:05:00Z'
+};
 
 function createElement(tagName = 'div') {
     const listeners = new Map();
@@ -98,6 +119,7 @@ function createElement(tagName = 'div') {
 
 for (const id of [
     'integration-settings-pane',
+    'integration-webhook-relay',
     'integration-market-hours',
     'integration-catalog',
     'integration-connections',
@@ -127,6 +149,19 @@ globalThis.fetch = async (url, options = {}) => {
     if (url.endsWith('/integrations/connection-1/test')) {
         return response({ Succeeded: true, Message: 'Test passed.' });
     }
+    if (url.endsWith('/integrations/webhook-relay/settings')) {
+        const body = JSON.parse(options.body || '{}');
+        webhookRelayResponse = { ...webhookRelayResponse, Enabled: body.Enabled === true, Configured: true, CanToggle: true, CanTest: body.Enabled === true };
+        if (body.Enabled !== true) {
+            integrationConnections.forEach(connection => {
+                if (connection.SyncMode === 'Webhook') connection.SyncMode = 'Polling';
+            });
+        }
+        return response(webhookRelayResponse);
+    }
+    if (url.endsWith('/integrations/webhook-relay/test')) {
+        return response({ Succeeded: true, Message: 'Relay test passed.' });
+    }
 
     if (url.endsWith('/integrations/catalog')) {
         return response([
@@ -141,10 +176,15 @@ globalThis.fetch = async (url, options = {}) => {
                 Key: 'snaptrade',
                 DisplayName: 'SnapTrade',
                 Description: 'Brokerage accounts',
+                SupportsWebhooks: true,
                 CredentialFields: [],
                 OptionFields: []
             }
         ]);
+    }
+
+    if (url.endsWith('/integrations/webhook-relay/status')) {
+        return response(webhookRelayResponse);
     }
 
     if (url.endsWith('/integrations/settings')) {
@@ -200,18 +240,212 @@ test('integration catalog allows additional named instances of a connected partn
 
     assert.match(catalog, /data-integration-enable="snaptrade">Add another<\/button>/);
     assert.doesNotMatch(catalog, /data-integration-enable="snaptrade"[^>]*disabled/);
-    assert.match(catalog, /data-integration-enable="trading212"\s*>Enable<\/button>/);
+    assert.match(catalog, /data-integration-enable="trading212"\s*>Add another<\/button>/);
     assert.match(connections, /class="integration-number-input"/);
     assert.match(connections, /Only poll during market times/);
     assert.match(connections, /data-integration-market-hours="connection-1"/);
     assert.match(connections, /data-integration-remove="connection-1"/);
     assert.match(connections, /SnapTrade ISA/);
     assert.match(connections, /SnapTrade Invest/);
+    assert.match(connections, /class="integration-webhook-indicator"[^>]*aria-label="Webhook Capable"[^>]*title="Webhook Capable"[^>]*>w<\/span>SnapTrade ISA/);
+    assert.doesNotMatch(connections, /class="integration-capability-badge"/);
+    assert.match(catalog, /class="integration-capability-badge">Webhook-capable<\/span>/);
+    assert.doesNotMatch(connections, />Updates via</);
+    assert.doesNotMatch(connections, /SnapTrade provider setup/);
+    const pollingOnlyConnection = connections.match(/<article class="integration-connection" data-connection-id="connection-3">[\s\S]*?<\/article>/)?.[0] || '';
+    assert.ok(pollingOnlyConnection);
+    assert.doesNotMatch(pollingOnlyConnection, /data-integration-sync-mode/);
+    assert.doesNotMatch(pollingOnlyConnection, /integration-webhook-indicator/);
+    assert.match(pollingOnlyConnection, /data-integration-polling="connection-3"/);
+    const relay = elements.get('integration-webhook-relay').innerHTML;
+    assert.match(relay, /Webhook relay/);
+    assert.match(relay, /Connected/);
+    assert.match(relay, /<span>Enabled<\/span>/);
+    assert.match(relay, /data-integration-relay-enabled/);
+    assert.doesNotMatch(relay, /Provider setup/);
+    assert.match(relay, /Relay WebSocket/);
     assert.match(elements.get('integration-market-hours').innerHTML, /Market hours/);
     assert.match(elements.get('integration-market-hours').innerHTML, /<details[^>]+integration-market-hours-panel/);
     assert.match(elements.get('integration-market-hours').innerHTML, /Server local time/);
     assert.match(elements.get('integration-market-hours').innerHTML, /Changes save automatically\./);
     assert.doesNotMatch(elements.get('integration-market-hours').innerHTML, /Save market hours/);
+});
+
+test('disabled relay status explains that polling remains available', async () => {
+    const previousRelayResponse = webhookRelayResponse;
+    webhookRelayResponse = { Enabled: false, Connected: false, LastConnectedAt: null, LastMessageAt: null, LastError: null };
+    try {
+        await loadIntegrations();
+        const relay = elements.get('integration-webhook-relay').innerHTML;
+        assert.match(relay, /Disabled/);
+        assert.match(relay, /scheduled polling remains available/);
+        assert.doesNotMatch(relay, /Relay WebSocket/);
+    } finally {
+        webhookRelayResponse = previousRelayResponse;
+    }
+});
+
+test('disabling the relay switches webhook connections to polling and hides their mode selector', async () => {
+    const previousRelayResponse = webhookRelayResponse;
+    const connection = integrationConnections[0];
+    const previousMode = connection.SyncMode;
+    webhookRelayResponse = { ...webhookRelayResponse, Enabled: true, Configured: true, CanToggle: true };
+    connection.SyncMode = 'Webhook';
+    try {
+        await loadIntegrations();
+        setupIntegrations();
+        const panel = elements.get('integration-settings-pane');
+        await panel.dispatch('change', {
+            target: {
+                dataset: { integrationRelayEnabled: 'true' },
+                checked: false
+            }
+        });
+
+        assert.equal(connection.SyncMode, 'Polling');
+        const markup = elements.get('integration-connections').innerHTML;
+        const connectionMarkup = markup.match(/<article class="integration-connection" data-connection-id="connection-1">[\s\S]*?<\/article>/)?.[0] || '';
+        assert.ok(connectionMarkup);
+        assert.match(connectionMarkup, /integration-webhook-indicator/);
+        assert.doesNotMatch(connectionMarkup, /data-integration-sync-mode/);
+        assert.match(connectionMarkup, /data-integration-polling="connection-1"/);
+        assert.doesNotMatch(connectionMarkup, /integration-provider-setup/);
+    } finally {
+        connection.SyncMode = previousMode;
+        webhookRelayResponse = previousRelayResponse;
+    }
+});
+
+test('provider setup rejects a local relay address instead of presenting it for registration', async () => {
+    const previousRelayResponse = webhookRelayResponse;
+    const connection = integrationConnections[0];
+    const previousMode = connection.SyncMode;
+    webhookRelayResponse = {
+        ...webhookRelayResponse,
+        Configured: true,
+        Enabled: true,
+        RelayPublicBaseUrl: 'http://127.0.0.1:58081'
+    };
+    try {
+        connection.SyncMode = 'Webhook';
+        await loadIntegrations();
+        const connections = elements.get('integration-connections').innerHTML;
+        assert.match(connections, /configured relay address is local-only/);
+        assert.doesNotMatch(connections, /127\.0\.0\.1:58081\/webhooks\/snaptrade/);
+    } finally {
+        connection.SyncMode = previousMode;
+        webhookRelayResponse = previousRelayResponse;
+    }
+});
+
+test('an integration exposes one automatic update mode and hides and disables polling controls for webhooks', async () => {
+    const connection = integrationConnections[0];
+    const previousMode = connection.SyncMode;
+    try {
+        connection.SyncMode = 'Webhook';
+        await loadIntegrations();
+        const markup = elements.get('integration-connections').innerHTML;
+        assert.match(markup, /data-integration-sync-mode="connection-1"/);
+        assert.match(markup, /value="Polling"/);
+        assert.match(markup, /value="Webhook" selected/);
+        assert.match(markup, /class="integration-provider-setup"/);
+        assert.match(markup, /https:\/\/relay\.example\.com\/webhooks\/snaptrade/);
+        assert.match(markup, /data-integration-copy-webhook="https:\/\/relay\.example\.com\/webhooks\/snaptrade"/);
+        assert.match(markup, /class="integration-polling-controls" hidden aria-hidden="true"/);
+        assert.match(markup, /data-integration-polling="connection-1"[^>]+disabled/);
+        assert.match(markup, /data-integration-market-hours="connection-1"[^>]+disabled/);
+    } finally {
+        connection.SyncMode = previousMode;
+    }
+});
+
+test('sync mode select uses the established dark form-control treatment', async () => {
+    const stylesheet = await readFile(new URL('../../style.css', import.meta.url), 'utf8');
+    const rule = stylesheet.match(/\.integration-sync-mode-control \.integration-select\s*\{([^}]*)\}/)?.[1] || '';
+
+    assert.match(rule, /background:\s*rgba\(2,\s*6,\s*23,\s*0\.65\)/);
+    assert.match(rule, /border:\s*1px solid/);
+    assert.match(rule, /color:\s*var\(--text-main\)/);
+    assert.match(rule, /-webkit-appearance:\s*none/);
+});
+
+test('connected webhook capability uses a compact title indicator while the catalog keeps its pill', async () => {
+    const stylesheet = await readFile(new URL('../../style.css', import.meta.url), 'utf8');
+    const rule = stylesheet.match(/\.integration-connection-copy \.integration-webhook-indicator\s*\{([^}]*)\}/)?.[1] || '';
+
+    assert.match(rule, /border-radius:\s*50%/);
+    assert.match(rule, /width:\s*1rem/);
+    assert.match(rule, /height:\s*1rem/);
+    assert.match(rule, /box-shadow:/);
+});
+
+test('provider webhook URL copies from its setup control', async () => {
+    const connection = integrationConnections[0];
+    const previousMode = connection.SyncMode;
+    const navigatorObject = globalThis.navigator;
+    const previousClipboard = Object.getOwnPropertyDescriptor(navigatorObject, 'clipboard');
+    let copiedValue = '';
+    Object.defineProperty(navigatorObject, 'clipboard', {
+        configurable: true,
+        value: { writeText: async value => { copiedValue = value; } }
+    });
+
+    try {
+        connection.SyncMode = 'Webhook';
+        await loadIntegrations();
+        setupIntegrations();
+        const panel = elements.get('integration-settings-pane');
+        const copyButton = {
+            dataset: { integrationCopyWebhook: 'https://relay.example.com/webhooks/snaptrade' },
+            disabled: false,
+            hasAttribute() { return false; },
+            closest() { return this; }
+        };
+        await panel.dispatch('click', { target: copyButton });
+        assert.equal(copiedValue, 'https://relay.example.com/webhooks/snaptrade');
+    } finally {
+        connection.SyncMode = previousMode;
+        if (previousClipboard) Object.defineProperty(navigatorObject, 'clipboard', previousClipboard);
+        else delete navigatorObject.clipboard;
+    }
+});
+
+test('relay settings and relay-to-api diagnostics are exposed through the integrations UI', async () => {
+    fetchRequests.length = 0;
+    await loadIntegrations();
+    setupIntegrations();
+    const panel = elements.get('integration-settings-pane');
+
+    await panel.dispatch('change', {
+        target: {
+            dataset: { integrationRelayEnabled: 'true' },
+            checked: false
+        }
+    });
+    const settingsRequest = fetchRequests.find(item =>
+        item.url.endsWith('/integrations/webhook-relay/settings'));
+    assert.ok(settingsRequest);
+    assert.deepEqual(JSON.parse(settingsRequest.options.body), { Enabled: false });
+
+    webhookRelayResponse = { ...webhookRelayResponse, Enabled: true, Configured: true, CanToggle: true, CanTest: true };
+    await loadIntegrations();
+    const testButton = {
+        dataset: {},
+        disabled: false,
+        innerHTML: 'Test relay → API',
+        classList: { add() {}, remove() {} },
+        setAttribute() {},
+        removeAttribute() {},
+        hasAttribute(attribute) {
+            return attribute === 'data-integration-relay-test';
+        },
+        closest() {
+            return this;
+        }
+    };
+    await panel.dispatch('click', { target: testButton });
+    assert.equal(fetchRequests.some(request => request.url.endsWith('/integrations/webhook-relay/test')), true);
+    assert.match(elements.get('integration-webhook-relay').innerHTML, /Relay test passed./);
 });
 
 test('integration wizard opens as an accessible modal and advances a wizard step', async () => {

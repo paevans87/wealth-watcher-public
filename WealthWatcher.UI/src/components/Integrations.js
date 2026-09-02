@@ -35,6 +35,9 @@ let currentStep = 1;
 let refreshDashboardData = async () => {};
 let lastWizardTrigger = null;
 let integrationLoadState = { status: 'idle', error: null };
+let webhookRelayStatus = null;
+let webhookRelayLoadState = { status: 'idle', error: null };
+let webhookRelayTestState = { status: 'idle', result: null, error: null };
 let lastIntegrationLoadOptions = {};
 
 async function request(path, options = {}) {
@@ -61,6 +64,8 @@ function isDemoProviderOperation(path, options = {}) {
     if (!isDemoMode) return false;
     const method = String(options.method || 'GET').toUpperCase();
     const normalizedPath = String(path || '').split('?')[0];
+    if (normalizedPath === '/integrations/webhook-relay/settings' ||
+        normalizedPath === '/integrations/webhook-relay/test') return false;
     return method !== 'GET' && (normalizedPath === '/integrations/settings' || normalizedPath.startsWith('/integrations/'));
 }
 
@@ -79,6 +84,169 @@ function descriptorFor(connection) {
 
 function statusLabel(status) {
     return String(status || '').replaceAll(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function formatRelayTimestamp(value) {
+    if (!value) return 'Never';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Unavailable';
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function relayState(status) {
+    if (status?.Configured === false || !status?.Enabled) return { label: 'Disabled', className: 'is-disabled' };
+    if (status.Connected) return { label: 'Connected', className: 'is-connected' };
+    return { label: 'Configured · offline', className: 'is-disconnected' };
+}
+
+function connectionSyncMode(connection) {
+    return String(connection?.SyncMode || '').toLowerCase() === 'webhook' ? 'Webhook' : 'Polling';
+}
+
+function isWebhookConfigured(status) {
+    return status?.Configured === true || status?.Enabled === true;
+}
+
+function relayPublicBaseUrl(status) {
+    return String(status?.RelayPublicBaseUrl || '').trim().replace(/\/+$/, '');
+}
+
+function webhookEndpoint(status, providerKey) {
+    const configuredBase = relayPublicBaseUrl(status);
+    const base = configuredBase || 'https://<relay-host>';
+    return `${base}/webhooks/${encodeURIComponent(providerKey)}`;
+}
+
+function isLocalRelayAddress(value) {
+    try {
+        const hostname = new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+        return hostname === 'localhost' || hostname === '::1' ||
+            /^127(?:\.\d{1,3}){3}$/.test(hostname);
+    } catch {
+        return false;
+    }
+}
+
+function isSecureRelayAddress(value) {
+    try {
+        return new URL(value).protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
+function renderProviderWebhookSetup(descriptor) {
+    if (descriptor?.SupportsWebhooks !== true || webhookRelayLoadState.status !== 'ready') return '';
+
+    const providerName = descriptor.DisplayName || descriptor.Key;
+    const status = webhookRelayStatus || {};
+    if (!isWebhookConfigured(status)) {
+        return `<div class="integration-provider-setup is-unavailable">
+            <strong>${escapeHtml(providerName)} provider setup</strong>
+            <p>Configure the optional webhook relay deployment to generate the ${escapeHtml(providerName)} relay webhook URL.</p>
+        </div>`;
+    }
+
+    const publicBaseUrl = relayPublicBaseUrl(status);
+    if (!publicBaseUrl) {
+        return `<div class="integration-provider-setup is-warning">
+            <strong>${escapeHtml(providerName)} provider setup</strong>
+            <p>Set <code>WEBHOOK_RELAY_PUBLIC_BASE_URL</code> to the relay's externally reachable HTTPS address. Provider events must target the relay, not the Wealth Watcher API.</p>
+        </div>`;
+    }
+
+    const endpoint = webhookEndpoint(status, descriptor.Key);
+    const localAddress = isLocalRelayAddress(publicBaseUrl);
+    if (localAddress || !isSecureRelayAddress(publicBaseUrl)) {
+        return `<div class="integration-provider-setup is-warning">
+            <strong>${escapeHtml(providerName)} provider setup</strong>
+            <p>${localAddress
+                ? 'The configured relay address is local-only and cannot receive provider events. Set WEBHOOK_RELAY_PUBLIC_BASE_URL to your public HTTPS relay or ngrok URL.'
+                : 'Provider webhooks require an externally reachable HTTPS relay address. Set WEBHOOK_RELAY_PUBLIC_BASE_URL to the public relay URL; do not use the Wealth Watcher API URL.'}</p>
+        </div>`;
+    }
+
+    return `<div class="integration-provider-setup">
+        <strong>${escapeHtml(providerName)} provider setup</strong>
+        <p>Register this relay webhook URL with ${escapeHtml(providerName)} and select Webhook for this connection.</p>
+        <button type="button" class="integration-provider-webhook-url" data-integration-copy-webhook="${escapeHtml(endpoint)}" aria-label="Copy ${escapeHtml(providerName)} webhook URL" title="Copy webhook URL"><code>${escapeHtml(endpoint)}</code></button>
+    </div>`;
+}
+
+async function copyWebhookUrl(value) {
+    const webhookUrl = String(value || '').trim();
+    if (!webhookUrl) return;
+
+    try {
+        if (globalThis.navigator?.clipboard?.writeText) {
+            await globalThis.navigator.clipboard.writeText(webhookUrl);
+        } else {
+            const textArea = document.createElement('textarea');
+            textArea.value = webhookUrl;
+            textArea.setAttribute('readonly', '');
+            textArea.setAttribute('aria-hidden', 'true');
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            try {
+                textArea.focus?.();
+                textArea.select?.();
+                if (document.execCommand?.('copy') !== true) throw new Error('The browser did not copy the webhook URL.');
+            } finally {
+                textArea.remove?.();
+            }
+        }
+
+        showToast({
+            title: 'Webhook URL copied',
+            message: 'The relay webhook URL is now on your clipboard.',
+            type: 'success',
+            key: 'integration-webhook-copy'
+        });
+    } catch (error) {
+        showToast({
+            title: 'Unable to copy webhook URL',
+            message: 'Copy the URL manually from the provider setup box.',
+            type: 'error',
+            key: 'integration-webhook-copy'
+        });
+    }
+}
+
+function renderPollingControls(connection, descriptor, pollingSelected) {
+    const disabledAttribute = pollingSelected ? '' : ' disabled';
+    const controls = `<label class="integration-polling-control">
+                        <span>Poll every</span>
+                        <input class="integration-number-input" type="number" min="${escapeHtml(descriptor?.MinimumPollingIntervalMinutes || 1)}" step="1" value="${escapeHtml(connection.PollingIntervalMinutes)}" data-integration-polling="${escapeHtml(connection.Id)}" aria-label="Polling interval for ${escapeHtml(connection.DisplayName)}"${disabledAttribute}>
+                        <span>minutes</span>
+                    </label>
+                    ${renderFeatureToggle({
+                        id: `integration-market-hours-${connection.Id}`,
+                        label: 'Only poll during market times',
+                        className: 'integration-market-hours-toggle',
+                        title: pollingSelected ? 'Skip scheduled polling outside the configured market hours' : 'Market-hours gating only applies to scheduled polling',
+                        inputAttributes: {
+                            'data-integration-market-hours': connection.Id,
+                            checked: connection.OnlyPollDuringMarketTimes === true,
+                            disabled: !pollingSelected
+                        }
+                    })}`;
+
+    return pollingSelected
+        ? controls
+        : `<div class="integration-polling-controls" hidden aria-hidden="true">${controls}</div>`;
+}
+
+function renderWebhookCapability(descriptor) {
+    return descriptor?.SupportsWebhooks === true
+        ? '<span class="integration-capability-badge">Webhook-capable</span>'
+        : '';
+}
+
+function renderConnectionWebhookIndicator(descriptor) {
+    return descriptor?.SupportsWebhooks === true
+        ? '<span class="integration-webhook-indicator" role="img" aria-label="Webhook Capable" title="Webhook Capable">w</span>'
+        : '';
 }
 
 function isSnapTrade(connection) {
@@ -142,6 +310,79 @@ function renderMarketHours() {
             </div>
         </form>
     </details>`;
+}
+
+function renderWebhookRelay() {
+    const target = document.getElementById('integration-webhook-relay');
+    if (!target) return;
+
+    if (webhookRelayLoadState.status === 'loading' || webhookRelayLoadState.status === 'idle') {
+        target.innerHTML = `<section class="integration-relay-card" aria-labelledby="integration-webhook-relay-title">
+            <div class="integration-relay-header">
+                <div class="integration-relay-copy"><strong id="integration-webhook-relay-title">Webhook relay</strong><p>Optional near-real-time refreshes for providers that support signed webhooks.</p></div>
+                <span class="integration-relay-state is-loading" role="status">Checking status…</span>
+            </div>
+        </section>`;
+        return;
+    }
+
+    if (webhookRelayLoadState.status === 'error') {
+        target.innerHTML = `<section class="integration-relay-card" aria-labelledby="integration-webhook-relay-title">
+            <div class="integration-relay-header">
+                <div class="integration-relay-copy"><strong id="integration-webhook-relay-title">Webhook relay</strong><p>Optional near-real-time refreshes for providers that support signed webhooks.</p></div>
+                <span class="integration-relay-state is-error" role="status">Status unavailable</span>
+            </div>
+            <p class="integration-relay-message error">${escapeHtml(webhookRelayLoadState.error?.message || 'The API did not return relay status.')}</p>
+            <div class="integration-relay-actions"><span>Check the deployment configuration and API connection, then retry.</span><button type="button" class="action-btn" data-integration-relay-refresh>Refresh status</button></div>
+        </section>`;
+        return;
+    }
+
+    const status = webhookRelayStatus || {};
+    const state = relayState(status);
+    const configured = isWebhookConfigured(status);
+    const enabled = status.Enabled === true;
+    const canToggle = configured && status.CanToggle !== false;
+    const canTest = enabled && status.CanTest !== false;
+    const testMessage = webhookRelayTestState.status === 'success'
+        ? webhookRelayTestState.result?.Message || 'Relay test passed.'
+        : webhookRelayTestState.status === 'error'
+            ? webhookRelayTestState.result?.Message || webhookRelayTestState.error?.message || 'Relay test failed.'
+            : '';
+    const testMessageClass = webhookRelayTestState.status === 'success' ? 'success' : 'error';
+    const relayToggle = configured ? renderFeatureToggle({
+        id: 'webhook-relay-enabled',
+        label: 'Enabled',
+        className: 'integration-relay-enabled-toggle',
+        title: canToggle ? 'Enable or disable webhook delivery for this deployment' : 'Relay availability is controlled by deployment configuration',
+        inputAttributes: {
+            'data-integration-relay-enabled': 'true',
+            checked: enabled,
+            disabled: !canToggle
+        }
+    }) : '';
+    const relayTestButton = `<button type="button" class="action-btn" data-integration-relay-test${canTest ? '' : ' disabled'}>Test relay → API</button>`;
+
+    target.innerHTML = `<section class="integration-relay-card" aria-labelledby="integration-webhook-relay-title">
+        <div class="integration-relay-header">
+            <div class="integration-relay-copy"><strong id="integration-webhook-relay-title">Webhook relay</strong><p>Optional near-real-time refreshes for providers that support signed webhooks.</p></div>
+            <div class="integration-relay-status">
+                <span class="integration-relay-state ${state.className}" role="status">${state.label}</span>
+                ${relayToggle}
+            </div>
+        </div>
+        <div class="integration-relay-metrics">
+            <div><span>Relay connection</span><strong>${!configured ? 'Not configured' : !enabled ? 'Disabled' : (status.Connected ? 'Connected' : 'Waiting for connection')}</strong></div>
+            <div><span>Last connection</span><strong>${escapeHtml(formatRelayTimestamp(status.LastConnectedAt))}</strong></div>
+            <div><span>Last webhook</span><strong>${escapeHtml(formatRelayTimestamp(status.LastMessageAt))}</strong></div>
+            ${configured ? `<div><span>Last relay test</span><strong>${escapeHtml(formatRelayTimestamp(status.LastTestAt))}</strong></div>` : ''}
+            ${configured && status.RelayUrl ? `<div class="integration-relay-url"><span>Relay WebSocket</span><code>${escapeHtml(status.RelayUrl)}</code></div>` : ''}
+        </div>
+        <p class="integration-relay-note">Provider-specific webhook registration details appear with each webhook-capable connection below. Provider events must be sent to the relay, never directly to the API; scheduled polling remains available independently.</p>
+        ${status.LastError ? `<p class="integration-relay-message error">${escapeHtml(status.LastError)}</p>` : ''}
+        ${testMessage ? `<p class="integration-relay-message ${testMessageClass}" role="status">${escapeHtml(testMessage)}</p>` : ''}
+        <div class="integration-relay-actions"><span>Use the switch to control webhook delivery; connections fall back to scheduled polling when it is disabled.</span><div class="integration-relay-buttons">${relayTestButton}<button type="button" class="action-btn" data-integration-relay-refresh>Refresh status</button></div></div>
+    </section>`;
 }
 
 function allocationRoles(connection) {
@@ -231,40 +472,40 @@ function renderConnections() {
 
     target.innerHTML = connections.map(connection => {
         const descriptor = descriptorFor(connection);
+        const syncMode = connectionSyncMode(connection);
+        const webhookSupported = descriptor?.SupportsWebhooks === true;
+        const webhookRelayEnabled = webhookRelayStatus?.Enabled === true;
+        const webhookSelected = webhookSupported && webhookRelayEnabled && syncMode === 'Webhook';
+        const pollingSelected = !webhookSelected;
+        const syncModeControl = webhookSupported && webhookRelayEnabled ? `<label class="integration-sync-mode-control">
+                        <select class="integration-select" data-integration-sync-mode="${escapeHtml(connection.Id)}" aria-label="Update mode for ${escapeHtml(connection.DisplayName)}">
+                            <option value="Polling"${pollingSelected ? ' selected' : ''}>Scheduled polling</option>
+                            <option value="Webhook"${webhookSelected ? ' selected' : ''}>Webhook</option>
+                        </select>
+                    </label>` : '';
         const accountSummary = connection.Accounts?.length
             ? `${connection.Accounts.filter(account => isAccountAllocationComplete(account, connection)).length}/${connection.Accounts.length} accounts allocated`
             : 'No accounts discovered';
         return `
             <article class="integration-connection" data-connection-id="${escapeHtml(connection.Id)}">
                 <div class="integration-connection-copy">
-                    <strong>${escapeHtml(connection.DisplayName)}</strong>
-                    <span>${escapeHtml(descriptor?.DisplayName || connection.ProviderKey)} · ${escapeHtml(statusLabel(connection.Status))}</span>
+                    <strong>${renderConnectionWebhookIndicator(descriptor)}${escapeHtml(connection.DisplayName)}</strong>
+                    <span class="integration-connection-provider">${escapeHtml(descriptor?.DisplayName || connection.ProviderKey)} · ${escapeHtml(statusLabel(connection.Status))}</span>
                     <small>${escapeHtml(accountSummary)}${connection.LastError ? ` · ${escapeHtml(connection.LastError)}` : ''}</small>
+                    ${webhookSelected ? renderProviderWebhookSetup(descriptor) : ''}
                 </div>
                 <div class="integration-connection-controls">
-                    <label class="integration-polling-control">
-                        <span>Poll every</span>
-                        <input class="integration-number-input" type="number" min="${escapeHtml(descriptor?.MinimumPollingIntervalMinutes || 1)}" step="1" value="${escapeHtml(connection.PollingIntervalMinutes)}" data-integration-polling="${escapeHtml(connection.Id)}" aria-label="Polling interval for ${escapeHtml(connection.DisplayName)}">
-                        <span>minutes</span>
-                    </label>
+                    ${syncModeControl}
+                    ${renderPollingControls(connection, descriptor, pollingSelected)}
                     ${renderFeatureToggle({
                         id: `integration-enabled-${connection.Id}`,
                         label: 'Enabled',
                         className: 'integration-enabled-toggle',
-                        title: 'Enable or disable scheduled polling',
+                        title: 'Enable or disable automatic updates for this connection',
                         inputAttributes: {
                             'data-integration-enabled': connection.Id,
-                            checked: connection.Enabled
-                        }
-                    })}
-                    ${renderFeatureToggle({
-                        id: `integration-market-hours-${connection.Id}`,
-                        label: 'Only poll during market times',
-                        className: 'integration-market-hours-toggle',
-                        title: 'Skip scheduled polling outside the configured market hours',
-                        inputAttributes: {
-                            'data-integration-market-hours': connection.Id,
-                            checked: connection.OnlyPollDuringMarketTimes === true
+                            checked: connection.Enabled,
+                            disabled: false
                         }
                     })}
                     <div class="integration-connection-actions">
@@ -293,7 +534,7 @@ function renderCatalog() {
         const instanceCount = connections.filter(connection => connection.ProviderKey === descriptor.Key).length;
         return `<article class="integration-partner">
             <div>
-                <strong>${escapeHtml(descriptor.DisplayName)}</strong>
+                <strong>${escapeHtml(descriptor.DisplayName)}${renderWebhookCapability(descriptor)}</strong>
                 <p>${escapeHtml(descriptor.Description)}</p>
             </div>
             <button type="button" class="action-btn" data-integration-enable="${escapeHtml(descriptor.Key)}">${instanceCount ? 'Add another' : 'Enable'}</button>
@@ -383,7 +624,10 @@ function renderWizardBody() {
             ${accounts.length ? accounts.map(account => renderAccountAllocation(account, connection)).join('') : '<p class="integration-empty">No accounts were discovered.</p>'}
             <div class="integration-wizard-actions"><button type="button" class="action-btn" data-integration-back="4">Back</button>${accounts.length ? '<button type="button" class="action-btn primary" data-integration-finish>Finish setup</button>' : ''}</div>`;
     } else {
-        target.innerHTML = `<h5>Integration ready</h5><p>${escapeHtml(connection.DisplayName)} is configured and will poll every ${connection.PollingIntervalMinutes} minutes.</p><button type="button" class="action-btn primary" data-integration-close>Done</button>`;
+        const deliveryDescription = connectionSyncMode(connection) === 'Webhook'
+            ? 'receive updates through webhook events'
+            : `poll every ${connection.PollingIntervalMinutes} minutes`;
+        target.innerHTML = `<h5>Integration ready</h5><p>${escapeHtml(connection.DisplayName)} is configured to ${deliveryDescription}.</p><button type="button" class="action-btn primary" data-integration-close>Done</button>`;
     }
 
     if (!wasOpen) document.getElementById('integration-wizard-close')?.focus?.();
@@ -612,6 +856,7 @@ function accountAllocationNeedsSave(account, connection, role) {
 
 async function refresh({ includeCatalog = true, includeAssets = true } = {}) {
     integrationLoadState = { status: 'loading', error: null };
+    const relayStatusTask = loadWebhookRelayStatus();
     renderConnections();
     try {
         const [nextCatalog, nextConnections, nextAssets, nextMarketHours] = await Promise.all([
@@ -631,16 +876,104 @@ async function refresh({ includeCatalog = true, includeAssets = true } = {}) {
         if (includeAssets) store.state.assets = nextAssets;
         store.state.integrationCatalog = catalog;
         store.state.integrations = connections;
+        await relayStatusTask;
         integrationLoadState = { status: 'ready', error: null };
         renderMarketHours();
         renderCatalog();
         renderConnections();
+        renderWebhookRelay();
         renderWizardBody();
     } catch (error) {
         integrationLoadState = { status: 'error', error };
         renderConnections();
+        renderWebhookRelay();
         throw error;
     }
+}
+
+async function loadWebhookRelayStatus() {
+    webhookRelayLoadState = { status: 'loading', error: null };
+    renderWebhookRelay();
+    try {
+        const nextStatus = await integrationApi.webhookRelayStatus();
+        if (!nextStatus || typeof nextStatus !== 'object') throw new Error('The webhook relay status response was invalid.');
+        webhookRelayStatus = nextStatus;
+        webhookRelayLoadState = { status: 'ready', error: null };
+    } catch (error) {
+        webhookRelayStatus = null;
+        webhookRelayLoadState = { status: 'error', error };
+    }
+    renderWebhookRelay();
+    return webhookRelayStatus;
+}
+
+async function updateWebhookRelayEnabled(enabled) {
+    try {
+        const nextStatus = await integrationApi.updateWebhookRelaySettings({ Enabled: enabled });
+        if (!nextStatus || typeof nextStatus !== 'object')
+            throw new Error('The webhook relay settings response was invalid.');
+        webhookRelayStatus = nextStatus;
+        webhookRelayTestState = { status: 'idle', result: null, error: null };
+        await refresh({ includeCatalog: false, includeAssets: false });
+        showToast({
+            title: enabled ? 'Webhook relay enabled' : 'Webhook relay disabled',
+            message: enabled
+                ? 'Webhook-capable connections can now receive relay updates.'
+                : 'Webhook connections were switched to scheduled polling.',
+            type: 'success',
+            key: 'integration-relay-settings'
+        });
+    } catch (error) {
+        if (!error?.demoOnly) {
+            showToast({
+                title: 'Unable to update webhook relay',
+                message: error.message,
+                type: 'error',
+                key: 'integration-relay-settings'
+            });
+        }
+        await loadWebhookRelayStatus();
+    }
+}
+
+async function testWebhookRelay() {
+    webhookRelayTestState = { status: 'loading', result: null, error: null };
+    renderWebhookRelay();
+    try {
+        const result = await integrationApi.webhookRelayTest();
+        webhookRelayTestState = {
+            status: result?.Succeeded ? 'success' : 'error',
+            result: result || { Message: 'The relay test response was invalid.' },
+            error: null
+        };
+        if (result?.Succeeded) {
+            showToast({
+                title: 'Relay test passed',
+                message: result.Message || 'The relay delivered a test event to the API.',
+                type: 'success',
+                key: 'integration-relay-test'
+            });
+        } else {
+            showToast({
+                title: 'Relay test failed',
+                message: result?.Message || 'The relay did not complete the diagnostic test.',
+                type: 'error',
+                key: 'integration-relay-test'
+            });
+        }
+    } catch (error) {
+        webhookRelayTestState = { status: 'error', result: null, error };
+        if (!error?.demoOnly) {
+            showToast({
+                title: 'Relay test failed',
+                message: error.message,
+                type: 'error',
+                key: 'integration-relay-test'
+            });
+        }
+    }
+    renderWebhookRelay();
+    return webhookRelayTestState.result;
 }
 
 function showMessage(message, success = false) {
@@ -907,6 +1240,7 @@ export async function loadIntegrations(options = {}) {
         await refresh(options);
     } catch (error) {
         renderConnections();
+        renderWebhookRelay();
     }
 }
 
@@ -927,6 +1261,15 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
         if (!button) return;
         try {
             if (button.disabled) return;
+            if (button.hasAttribute?.('data-integration-relay-refresh')) {
+                return withBusyButton(button, 'Refreshing…', loadWebhookRelayStatus);
+            }
+            if (button.hasAttribute?.('data-integration-relay-test')) {
+                return withBusyButton(button, 'Testing…', testWebhookRelay);
+            }
+            if (button.dataset.integrationCopyWebhook) {
+                return copyWebhookUrl(button.dataset.integrationCopyWebhook);
+            }
             if (button.hasAttribute?.('data-integration-retry')) {
                 return loadIntegrations(lastIntegrationLoadOptions);
             }
@@ -1055,10 +1398,14 @@ export function setupIntegrations({ refresh: dashboardRefresh } = {}) {
         } else if (input.dataset.integrationPolling) {
             const minutes = Number(input.value);
             if (Number.isInteger(minutes) && minutes > 0) await updateConnection(input.dataset.integrationPolling, { PollingIntervalMinutes: minutes });
+        } else if (input.dataset.integrationSyncMode) {
+            await updateConnection(input.dataset.integrationSyncMode, { SyncMode: input.value });
         } else if (input.dataset.integrationEnabled) {
             await updateConnection(input.dataset.integrationEnabled, { Enabled: input.checked });
         } else if (input.dataset.integrationMarketHours) {
             await updateConnection(input.dataset.integrationMarketHours, { OnlyPollDuringMarketTimes: input.checked });
+        } else if (input.dataset.integrationRelayEnabled) {
+            await updateWebhookRelayEnabled(input.checked);
         }
     });
 }

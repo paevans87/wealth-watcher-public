@@ -15,6 +15,12 @@ public class AppPreference
     public string MilestoneJson { get; set; } = MilestoneSettingsPolicy.DefaultJson;
 
     /// <summary>
+    /// The user-facing relay switch. Null preserves the deployment default for
+    /// databases created before the relay setting existed.
+    /// </summary>
+    public bool? WebhookRelayEnabled { get; set; }
+
+    /// <summary>
     /// The optional versioned budget document. It is intentionally nullable so
     /// databases that only contain legacy BudgetLines remain valid and can be
     /// read without a data migration.

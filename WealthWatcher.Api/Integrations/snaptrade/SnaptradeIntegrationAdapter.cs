@@ -39,6 +39,7 @@ public sealed class SnaptradeIntegrationAdapter : IIntegrationAdapter
         DisplayName = "SnapTrade",
         Description = "Read account balances and positions from connected investment providers.",
         Kind = IntegrationKind.Investment,
+        SupportsWebhooks = true,
         DefaultPollingIntervalMinutes = 180,
         MinimumPollingIntervalMinutes = 5,
         CredentialFields =

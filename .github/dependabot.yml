@@ -6,6 +6,8 @@ updates:
     directories:
       - "/WealthWatcher.Api"
       - "/WealthWatcher.Api.Tests"
+      - "/WealthWatcher.WebhookRelay"
+      - "/WealthWatcher.WebhookRelay.Tests"
     target-branch: "main"
     schedule:
       interval: "weekly"
@@ -73,6 +75,20 @@ updates:
     open-pull-requests-limit: 3
     groups:
       ui-container-images:
+        applies-to: "version-updates"
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/WealthWatcher.WebhookRelay"
+    target-branch: "main"
+    schedule:
+      interval: "monthly"
+      time: "09:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 3
+    groups:
+      relay-container-images:
         applies-to: "version-updates"
         patterns:
           - "*"

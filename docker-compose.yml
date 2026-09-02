@@ -32,6 +32,12 @@ services:
       CredentialKeyPath: /app/config/keys
       Cors__AllowedOrigins__0: ${CORS_ALLOWED_ORIGIN_0:-http://localhost:8182}
       Cors__AllowedOrigins__1: ${CORS_ALLOWED_ORIGIN_1:-http://127.0.0.1:8182}
+      WebhookRelay__Enabled: ${WEBHOOK_RELAY_ENABLED:-false}
+      WebhookRelay__Url: ${WEBHOOK_RELAY_URL:-}
+      WebhookRelay__HttpUrl: ${WEBHOOK_RELAY_HTTP_URL:-}
+      WebhookRelay__InstallationId: ${WEBHOOK_RELAY_INSTALLATION_ID:-}
+      WebhookRelay__Token: ${WEBHOOK_RELAY_TOKEN:-}
+      WebhookRelay__PublicBaseUrl: ${WEBHOOK_RELAY_PUBLIC_BASE_URL:-}
     volumes:
       - ${CONFIG_PATH:-./config}:/app/config # Persists local data-protection keys for encrypted integration credentials
     ports:

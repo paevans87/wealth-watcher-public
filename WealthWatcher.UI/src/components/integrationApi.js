@@ -7,6 +7,9 @@ export function createIntegrationApi(request) {
     return {
         catalog: () => call('/integrations/catalog'),
         connections: () => call('/integrations'),
+        webhookRelayStatus: () => call('/integrations/webhook-relay/status'),
+        updateWebhookRelaySettings: body => call('/integrations/webhook-relay/settings', { method: 'PUT', body: JSON.stringify(body) }),
+        webhookRelayTest: () => call('/integrations/webhook-relay/test', { method: 'POST' }),
         assets: () => call('/assets'),
         settings: () => call('/integrations/settings'),
         enable: providerKey => call(`/integrations/${encodeURIComponent(providerKey)}`, { method: 'POST', body: '{}' }),

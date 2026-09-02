@@ -18,7 +18,7 @@ Each release should include:
 - a reviewed `docs/release-notes/vMAJOR.MINOR.PATCH.md` source note;
 - the exact Git tag and source archive;
 - SHA-256 checksums for the source archive and any published release artefacts;
-- the API and web container image digests for tagged releases; and
+- the API, web, and optional webhook-relay container image digests for tagged releases; and
 - an SBOM for the application dependency graph.
 
 The project owner retains responsibility for dependency, security, provider-integration, and release decisions.
@@ -43,7 +43,7 @@ The UI build converts the validated current note into bundled `release.json` met
 
 ## Container images and local Docker deployment
 
-Successful pushes to `main` and version tags publish the API and web container images to the public GitHub Container Registry packages associated with this repository. The images contain application code only; deployment configuration, database data, Data Protection keys, and provider credentials remain local to each installation.
+Successful pushes to `main` and version tags publish the API, web, and optional webhook-relay container images to the public GitHub Container Registry packages associated with this repository. The images contain application code only; deployment configuration, database data, Data Protection keys, and provider credentials remain local to each installation.
 
 The image tags follow this policy:
 
@@ -52,7 +52,7 @@ The image tags follow this policy:
 - `sha-<full-commit-sha>` identifies an immutable source commit and is suitable for rollback or reproducible deployment.
 - `vMAJOR.MINOR.PATCH` identifies a tagged application release.
 
-The Git tag and source archive remain the release identity. Image digests should be recorded for tagged releases and may be used instead of tags by installations requiring stronger deployment pinning. The Compose file continues to support local builds by default; installations can opt into the published images through `API_IMAGE` and `WEB_IMAGE` configuration.
+The Git tag and source archive remain the release identity. Image digests should be recorded for tagged releases and may be used instead of tags by installations requiring stronger deployment pinning. The main Compose file continues to support local builds by default; installations can opt into the published API/web images through `API_IMAGE` and `WEB_IMAGE`, and can run the independently configured relay through `docker-compose.relay.yml` and `RELAY_IMAGE`.
 
 ## UI package
 

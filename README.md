@@ -14,6 +14,7 @@ New here? Start with the [Getting Started guide](docs/GETTING_STARTED.md), or [t
 - Shows historical values, calendar views, forecasts, FIRE progress, and budgets.
 - Stores integration credentials encrypted with ASP.NET Core Data Protection.
 - Supports optional Trading 212 and SnapTrade integrations.
+- Supports an optional, separately deployed webhook relay for near-real-time provider refreshes.
 - Keeps the primary financial database local to the deployment; provider traffic is outbound only when configured.
 
 Forecasts are illustrative estimates based on the inputs and assumptions shown in the application. Wealth Watcher is not financial advice.
@@ -76,11 +77,12 @@ The `CONFIG_PATH` directory contains the Data Protection key ring used to decryp
 
 ### Use published container images
 
-Successful pushes to `main` and version tags publish the API and web images to GitHub Container Registry:
+Successful pushes to `main` and version tags publish the API, web, and optional relay images to GitHub Container Registry:
 
 ```text
 ghcr.io/paevans87/wealth-watcher-public-api
 ghcr.io/paevans87/wealth-watcher-public-web
+ghcr.io/paevans87/wealth-watcher-public-webhook-relay
 ```
 
 The Compose file defaults to local builds. To use the published `main` images instead, set these optional values in `.env`:
@@ -98,6 +100,54 @@ docker compose up -d --no-build --remove-orphans
 ```
 
 For a reproducible deployment, use an immutable `sha-<commit>` tag or a release tag such as `v0.4.0` instead of `main`. The database image remains the official PostgreSQL image and its data remains in the persistent Compose volume.
+
+### Optional webhook relay image
+
+Webhook delivery is intentionally separate from the private application stack. Successful pushes also publish:
+
+```text
+ghcr.io/paevans87/wealth-watcher-public-webhook-relay
+```
+
+The relay accepts provider webhooks on a public HTTPS endpoint, stores them in a local SQLite queue, and forwards them over an outbound WebSocket connection to a configured Wealth Watcher API. The API does not need a public hostname or inbound port. Leave `WEBHOOK_RELAY_ENABLED=false` to keep webhook support disabled.
+
+To run the optional relay as its own container, set these private values in `.env` (or supply equivalent environment variables):
+
+```dotenv
+RELAY_INSTALLATION_ID=replace-with-a-private-api-relay-pairing-id
+RELAY_TOKEN=replace-with-a-long-random-secret
+SNAPTRADE_CONSUMER_KEY=replace-with-the-same-snaptrade-consumer-key-used-by-the-api
+RELAY_BIND_ADDRESS=0.0.0.0
+RELAY_PORT=8080
+```
+
+Then configure the API in the main Compose stack:
+
+```dotenv
+WEBHOOK_RELAY_ENABLED=true
+WEBHOOK_RELAY_URL=wss://relay.example.com/ws
+# Optional API-to-relay diagnostic endpoint; derived from WEBHOOK_RELAY_URL when omitted.
+# WEBHOOK_RELAY_HTTP_URL=https://relay.example.com
+WEBHOOK_RELAY_INSTALLATION_ID=replace-with-a-private-api-relay-pairing-id
+WEBHOOK_RELAY_TOKEN=replace-with-a-long-random-secret
+WEBHOOK_RELAY_PUBLIC_BASE_URL=https://relay.example.com
+```
+
+Start the relay independently with the published image:
+
+```powershell
+$env:RELAY_IMAGE='ghcr.io/paevans87/wealth-watcher-public-webhook-relay:main'
+docker compose -f docker-compose.relay.yml pull
+docker compose -f docker-compose.relay.yml up -d
+```
+
+Register this provider-facing relay URL with SnapTrade through its webhook configuration. It must point to the relay's public HTTPS endpoint, never to the Wealth Watcher API:
+
+```text
+https://relay.example.com/webhooks/snaptrade
+```
+
+Put the relay behind HTTPS/WSS termination and keep `relay-data` private. Each self-hosted Wealth Watcher deployment has one relay and its public host identifies that deployment; a separate deployment uses a separate relay URL. The API/relay pairing id and token are private connection settings and are not part of provider webhook URLs. The relay configuration contains the pairing token and provider verification secret. The Integrations screen can enable or disable webhook delivery and run a relay-to-API diagnostic; the deployment flag remains the hard off switch. Each connection chooses exactly one automatic update mode—scheduled polling or webhook delivery—while explicit manual sync remains available. The API's existing polling worker remains enabled as a fallback and reconciliation mechanism for polling-mode connections.
 
 ### Release notes and updates
 
@@ -145,7 +195,7 @@ npm run build --prefix WealthWatcher.UI
 docker compose config --quiet
 ```
 
-The public pull-request workflow repeats the API and UI checks and validates both Docker builds. Successful pushes to `main` and version tags also publish the application images described above.
+The public pull-request workflow repeats the API, relay, and UI checks and validates all three Docker builds. Successful pushes to `main` and version tags also publish the application images described above, including the optional relay image.
 
 ## Contributing
 

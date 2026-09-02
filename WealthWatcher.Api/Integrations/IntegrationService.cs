@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using WealthWatcher.Api.Caching;
@@ -17,6 +18,7 @@ public sealed class IntegrationService(
     IWealthCacheInvalidator? invalidator = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SyncLocks = new();
 
     public IReadOnlyList<IntegrationDescriptor> GetCatalog() =>
         registry.All.Select(adapter => adapter.Descriptor).OrderBy(descriptor => descriptor.DisplayName).ToList();
@@ -60,6 +62,7 @@ public sealed class IntegrationService(
             Kind = adapter.Descriptor.Kind,
             DisplayName = name,
             Status = IntegrationConnectionStatus.NeedsCredentials,
+            SyncMode = IntegrationSyncMode.Polling,
             PollingIntervalMinutes = adapter.Descriptor.DefaultPollingIntervalMinutes,
             OptionsJson = JsonSerializer.Serialize(
                 adapter.Descriptor.OptionFields
@@ -282,6 +285,19 @@ public sealed class IntegrationService(
             if (duplicateName)
                 throw new ArgumentException($"An instance named '{displayName}' already exists for {adapter.Descriptor.DisplayName}.");
             connection.DisplayName = displayName;
+        }
+
+        if (update.SyncMode is not null)
+        {
+            if (!TryParseSyncMode(update.SyncMode, out var syncMode))
+                throw new ArgumentException("Sync mode must be either Polling or Webhook.");
+            if (syncMode == IntegrationSyncMode.Webhook && !adapter.Descriptor.SupportsWebhooks)
+            {
+                throw new ArgumentException(
+                    $"{adapter.Descriptor.DisplayName} does not support webhook-driven updates.");
+            }
+
+            connection.SyncMode = syncMode;
         }
 
         if (update.PollingIntervalMinutes.HasValue)
@@ -558,9 +574,28 @@ public sealed class IntegrationService(
         return ToResponse(account);
     }
 
-    public async Task<IntegrationSyncResponse?> SyncAsync(
+    /// <summary>
+    /// Synchronises one integration connection immediately.
+    /// </summary>
+    public async Task<IntegrationSyncResponse?> SyncConnectionAsync(
         Guid connectionId,
         CancellationToken cancellationToken = default)
+    {
+        var syncLock = SyncLocks.GetOrAdd(connectionId, _ => new SemaphoreSlim(1, 1));
+        await syncLock.WaitAsync(cancellationToken);
+        try
+        {
+            return await SyncConnectionCoreAsync(connectionId, cancellationToken);
+        }
+        finally
+        {
+            syncLock.Release();
+        }
+    }
+
+    private async Task<IntegrationSyncResponse?> SyncConnectionCoreAsync(
+        Guid connectionId,
+        CancellationToken cancellationToken)
     {
         var connection = await db.IntegrationConnections
             .Include(candidate => candidate.IntegrationProvider)
@@ -788,7 +823,9 @@ public sealed class IntegrationService(
         var now = timeProvider.GetUtcNow();
         var query = db.IntegrationConnections
             .AsNoTracking()
-            .Where(connection => connection.Enabled && connection.Status == IntegrationConnectionStatus.Active);
+            .Where(connection => connection.Enabled &&
+                                 connection.Status == IntegrationConnectionStatus.Active &&
+                                 connection.SyncMode == IntegrationSyncMode.Polling);
         var connections = await query.ToListAsync(cancellationToken);
         var marketHours = !ignoreSchedule && connections.Any(connection => connection.OnlyPollDuringMarketTimes)
             ? await integrationSettings.GetMarketHoursAsync(cancellationToken)
@@ -804,7 +841,7 @@ public sealed class IntegrationService(
         var results = new List<IntegrationSyncResponse>();
         foreach (var id in ids)
         {
-            var result = await SyncAsync(id, cancellationToken);
+            var result = await SyncConnectionAsync(id, cancellationToken);
             if (result is not null)
                 results.Add(result);
         }
@@ -812,9 +849,35 @@ public sealed class IntegrationService(
         return results;
     }
 
+    /// <summary>
+    /// Retains the existing explicit-sync API while routing all work through the
+    /// single-connection synchronization method used by polling and webhooks.
+    /// </summary>
+    public Task<IntegrationSyncResponse?> SyncAsync(
+        Guid connectionId,
+        CancellationToken cancellationToken = default) =>
+        SyncConnectionAsync(connectionId, cancellationToken);
+
     private static bool IsPollingDue(IntegrationConnection connection, DateTimeOffset now) =>
         connection.LastSyncedAt is null ||
         connection.LastSyncedAt <= now.AddMinutes(-connection.PollingIntervalMinutes);
+
+    private static bool TryParseSyncMode(string value, out IntegrationSyncMode mode)
+    {
+        if (Enum.TryParse(value, ignoreCase: true, out mode) &&
+            Enum.IsDefined(mode))
+            return true;
+
+        if (int.TryParse(value, out var numeric) &&
+            Enum.IsDefined(typeof(IntegrationSyncMode), numeric))
+        {
+            mode = (IntegrationSyncMode)numeric;
+            return true;
+        }
+
+        mode = default;
+        return false;
+    }
 
     private async Task<IntegrationConnection?> LoadConnectionAsync(
         Guid connectionId,
@@ -899,6 +962,7 @@ public sealed class IntegrationService(
         DisplayName = connection.DisplayName,
         Enabled = connection.Enabled,
         Status = connection.Status.ToString(),
+        SyncMode = connection.SyncMode.ToString(),
         PollingIntervalMinutes = connection.PollingIntervalMinutes,
         OnlyPollDuringMarketTimes = connection.OnlyPollDuringMarketTimes,
         LastTestedAt = connection.LastTestedAt,
@@ -1051,6 +1115,7 @@ public sealed class IntegrationConnectionUpdate
 {
     public string? DisplayName { get; init; }
     public bool? Enabled { get; init; }
+    public string? SyncMode { get; init; }
     public int? PollingIntervalMinutes { get; init; }
     public bool? OnlyPollDuringMarketTimes { get; init; }
     public Dictionary<string, string>? Options { get; init; }
@@ -1064,6 +1129,7 @@ public sealed class IntegrationConnectionResponse
     public string DisplayName { get; init; } = string.Empty;
     public bool Enabled { get; init; }
     public string Status { get; init; } = string.Empty;
+    public string SyncMode { get; init; } = nameof(IntegrationSyncMode.Polling);
     public int PollingIntervalMinutes { get; init; }
     public bool OnlyPollDuringMarketTimes { get; init; }
     public bool HasCredentials { get; init; }

@@ -177,6 +177,7 @@ public class WealthDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Kind).HasConversion<int>().IsRequired();
             entity.Property(e => e.Status).HasConversion<int>().IsRequired();
+            entity.Property(e => e.SyncMode).HasConversion<int>().IsRequired();
             entity.Property(e => e.DisplayName).IsRequired();
             entity.Property(e => e.OptionsJson).IsRequired();
             entity.Property(e => e.CredentialsCiphertext).IsRequired();

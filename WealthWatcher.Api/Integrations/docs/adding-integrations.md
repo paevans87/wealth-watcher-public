@@ -32,6 +32,10 @@ Every outbound provider request must pass through the shared `IProviderRateLimit
 
 The provider’s rate-limit policy belongs beside its adapter. Include the provider-wide bucket and any documented endpoint or account buckets when calling `WaitAsync`. Call `Observe` with the response as well, so `429` responses and reset headers can pause the shared buckets.
 
+## Webhook capability
+
+Set `IntegrationDescriptor.SupportsWebhooks` to `true` only when the provider has a signed webhook contract and a stable identifier that can resolve an existing local account or connection. Webhook handlers belong in `WealthWatcher.WebhookRelay` behind `IWebhookProviderHandler`; the API receives the generic `WebhookEnvelope` and must call `IntegrationService.SyncConnectionAsync` rather than importing provider payload values directly. Providers without a relay handler or stable mapping should leave the capability disabled and continue using polling. Each saved connection has one automatic `SyncMode` (`Polling` or `Webhook`); scheduled polling and webhook dispatch must never both trigger the same connection.
+
 The current provider documentation is the source of truth for the numbers and scopes:
 
 - [Trading 212 rate limiting](https://docs.trading212.com/api/section/rate-limiting) — limits are per account and endpoints publish their specific limits in the API reference.
